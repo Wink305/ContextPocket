@@ -1,0 +1,115 @@
+<!--
+  ContextPocket · GitHub Social Banner (1280×640)
+  用于 README 顶部或社交分享卡
+
+  布局：
+  - 左侧：放大版 logo（带文字标题）
+  - 右侧：Tagline + 三个特性点
+-->
+<svg viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket · Cross-agent dev-context sync</title>
+
+  <!-- 背景 -->
+  <rect width="1280" height="640" fill="#FAFAF7" />
+
+  <!-- 装饰：右上方一组小针脚（呼应 logo） -->
+  <g fill="#0F172A" opacity="0.15">
+    <circle cx="1100" cy="80" r="3" />
+    <circle cx="1140" cy="100" r="3" />
+    <circle cx="1180" cy="80" r="3" />
+    <circle cx="1100" cy="560" r="3" />
+    <circle cx="1140" cy="540" r="3" />
+    <circle cx="1180" cy="560" r="3" />
+  </g>
+
+  <!-- 左侧 logo（放大版） -->
+  <g transform="translate(120, 140)">
+    <!-- 翻盖 -->
+    <path d="M 42 90 Q 120 78 198 90"
+          fill="none"
+          stroke="#0F172A"
+          stroke-width="9"
+          stroke-linecap="round" />
+    <!-- 口袋本体 -->
+    <path d="M 48 90
+             Q 42 84 48 84
+             Q 192 81 192 90
+             L 180 198
+             Q 180 210 168 210
+             L 72 210
+             Q 60 210 60 198 Z"
+          fill="#FFFFFF"
+          stroke="#0F172A"
+          stroke-width="9"
+          stroke-linejoin="round" />
+    <!-- 针脚 -->
+    <g fill="#0F172A">
+      <circle cx="55" cy="108" r="3" />
+      <circle cx="53" cy="132" r="3" />
+      <circle cx="55" cy="156" r="3" />
+      <circle cx="57" cy="180" r="3" />
+      <circle cx="184" cy="108" r="3" />
+      <circle cx="186" cy="132" r="3" />
+      <circle cx="184" cy="156" r="3" />
+      <circle cx="182" cy="180" r="3" />
+      <circle cx="90" cy="204" r="3" />
+      <circle cx="120" cy="207" r="3" />
+      <circle cx="150" cy="204" r="3" />
+    </g>
+    <!-- 卡片 1 -->
+    <rect x="72" y="114" width="39" height="72" rx="4"
+          fill="#FFFFFF" stroke="#0F172A" stroke-width="7" stroke-linejoin="round" />
+    <!-- 卡片 2 + 折角 -->
+    <path d="M 108 96 L 150 96 L 150 186 L 108 186 Z"
+          fill="#FFFFFF" stroke="#0F172A" stroke-width="7" stroke-linejoin="round" />
+    <path d="M 150 96 L 132 114 L 150 114 Z"
+          fill="#F59E0B" stroke="#0F172A" stroke-width="7" stroke-linejoin="round" />
+    <!-- 卡片 3 -->
+    <rect x="156" y="132" width="24" height="54" rx="4"
+          fill="#FFFFFF" stroke="#0F172A" stroke-width="7" stroke-linejoin="round" />
+  </g>
+
+  <!-- 右侧标题 -->
+  <g transform="translate(440, 200)">
+    <text x="0" y="0"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+          font-size="84"
+          font-weight="800"
+          fill="#0F172A"
+          letter-spacing="-2">ContextPocket</text>
+
+    <text x="0" y="60"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+          font-size="32"
+          font-weight="500"
+          fill="#475569">Cross-agent dev-context sync</text>
+
+    <text x="0" y="180"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+          font-size="26"
+          font-weight="500"
+          fill="#0F172A">把每次开发对话自动记进项目里</text>
+    <text x="0" y="220"
+          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+          font-size="26"
+          font-weight="500"
+          fill="#0F172A">切换 Agent / 换模型也不丢上下文</text>
+  </g>
+
+  <!-- 底部小标签 -->
+  <g transform="translate(440, 540)">
+    <rect x="0" y="-20" width="120" height="32" rx="16" fill="#0F172A" />
+    <text x="60" y="2"
+          font-family="-apple-system, BlinkMacSystemFont, system-ui, sans-serif"
+          font-size="16"
+          font-weight="600"
+          fill="#FFFFFF"
+          text-anchor="middle">v1.0.0</text>
+
+    <text x="140" y="2"
+          font-family="-apple-system, BlinkMacSystemFont, system-ui, sans-serif"
+          font-size="16"
+          font-weight="500"
+          fill="#64748B">MIT · Agent-agnostic · Markdown-first</text>
+  </g>
+</svg>

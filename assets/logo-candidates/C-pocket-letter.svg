@@ -1,0 +1,25 @@
+<!--
+  ContextPocket · Logo 候选 C · "字母 C + 内部气泡"
+
+  设计意图：
+  - 一个粗壮的字母 C（开口向右）
+  - 开口处嵌入一个对话气泡 → "C for Context"，"气泡"象征对话
+  - 整体像翻开的小册子/口袋
+  - 单深色，极简
+
+  不含：渐变、复杂细节
+-->
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- 字母 C：本体内圆环，开口在右侧 -->
+  <path d="M48 16
+           A22 22 0 1 0 48 48
+           L40 42
+           A14 14 0 1 1 40 22 Z"
+        fill="#0F172A" />
+
+  <!-- 内部对话气泡：在 C 的"肚子"里，像被装进口袋的对话 -->
+  <rect x="20" y="27" width="14" height="10" rx="3" fill="#F59E0B" />
+  <path d="M24 37 L24 41 L29 37 Z" fill="#F59E0B" />
+</svg>

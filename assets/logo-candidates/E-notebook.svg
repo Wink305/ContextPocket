@@ -1,0 +1,74 @@
+<!--
+  ContextPocket · Logo 候选 E · "手绘翻开小本子"
+
+  风格：像翻开的小笔记本 / 个人日记
+  特色细节：本子左侧的"装订线" —— 一根曲线穿过，像被缝起来的小册子
+
+  设计元素：
+  - 翻开的两页纸（左右两半略不对称，手绘感）
+  - 中间是脊背（装订线）
+  - 左侧装订处一排"针脚/装订环"
+  - 右上角贴了一个小标签（琥珀色）—— 第二记忆点
+  - 页面内有几道"对话行"
+
+  颜色：#0F172A (深) + #F59E0B (琥珀标签) + 白
+-->
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- ★ 特色 #1：翻开的两页（左侧、右侧，略带弧度像翻开的纸） -->
+  <!-- 左页 -->
+  <path d="M 12 20
+           Q 38 16 40 22
+           L 40 68
+           Q 38 74 12 70 Z"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="3"
+        stroke-linejoin="round" />
+
+  <!-- 右页 -->
+  <path d="M 68 20
+           Q 42 16 40 22
+           L 40 68
+           Q 42 74 68 70 Z"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="3"
+        stroke-linejoin="round" />
+
+  <!-- 中脊（一条曲线穿过） -->
+  <path d="M 40 22 Q 38 45 40 68"
+        fill="none"
+        stroke="#0F172A"
+        stroke-width="2"
+        stroke-linecap="round" />
+
+  <!-- ★ 特色 #2：左侧装订针脚（一排小圆点像缝线） -->
+  <g fill="#0F172A">
+    <circle cx="20" cy="28" r="0.9" />
+    <circle cx="19" cy="38" r="0.9" />
+    <circle cx="19" cy="48" r="0.9" />
+    <circle cx="20" cy="58" r="0.9" />
+  </g>
+
+  <!-- 页面"对话行" - 左页 -->
+  <line x1="24" y1="32" x2="34" y2="32" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="24" y1="40" x2="32" y2="40" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="24" y1="48" x2="34" y2="48" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- 页面"对话行" - 右页 -->
+  <line x1="46" y1="32" x2="58" y2="32" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="46" y1="40" x2="54" y2="40" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" />
+
+  <!-- ★ 特色 #3：右上角琥珀色标签（像便利贴/书签） -->
+  <path d="M 52 14
+           L 64 14
+           L 64 26
+           L 58 22
+           L 52 26 Z"
+        fill="#F59E0B"
+        stroke="#0F172A"
+        stroke-width="2"
+        stroke-linejoin="round" />
+</svg>

@@ -1,0 +1,86 @@
+<!--
+  ContextPocket · Logo 候选 D · "手绘针脚口袋"
+
+  风格：手绘皮夹 / 邮差包
+  特色细节：口袋边缘的缝线（针脚）—— 这是独一无二的"记忆点"
+
+  设计元素：
+  - 圆角口袋外形，路径略带不规则（手抖感）
+  - 顶部翻盖线（一条弧线）
+  - 边缘一圈小圆点：缝纫针脚
+  - 内部 3 张错位卡片
+  - 中间卡片带折角（琥珀色填充）—— 第二记忆点
+
+  颜色：#0F172A (深) + #F59E0B (琥珀点缀) + 白
+-->
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- 口袋翻盖（顶部弧线，像翻盖皮夹） -->
+  <path d="M 14 30 Q 40 26 66 30"
+        fill="none"
+        stroke="#0F172A"
+        stroke-width="3"
+        stroke-linecap="round" />
+
+  <!-- 口袋本体（圆角矩形，略带手抖） -->
+  <path d="M 16 30
+           Q 14 28 16 28
+           Q 64 27 64 30
+           L 60 66
+           Q 60 70 56 70
+           L 24 70
+           Q 20 70 20 66 Z"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="3"
+        stroke-linejoin="round" />
+
+  <!-- ★ 特色 #1：口袋边缘的缝针脚（小圆点排列，不规则间距） -->
+  <g fill="#0F172A">
+    <!-- 左侧针脚 -->
+    <circle cx="18.5" cy="36" r="1" />
+    <circle cx="17.8" cy="44" r="1" />
+    <circle cx="18.5" cy="52" r="1" />
+    <circle cx="19.2" cy="60" r="1" />
+    <!-- 右侧针脚 -->
+    <circle cx="61.5" cy="36" r="1" />
+    <circle cx="62.2" cy="44" r="1" />
+    <circle cx="61.5" cy="52" r="1" />
+    <circle cx="60.8" cy="60" r="1" />
+    <!-- 底部针脚 -->
+    <circle cx="30" cy="68" r="1" />
+    <circle cx="40" cy="69" r="1" />
+    <circle cx="50" cy="68" r="1" />
+  </g>
+
+  <!-- 卡片 1 - 最左、稍短 -->
+  <rect x="24" y="38" width="13" height="24" rx="1.5"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="2.5"
+        stroke-linejoin="round" />
+
+  <!-- 卡片 2 - 中、最高 + 折角 -->
+  <path d="M 36 32
+           L 50 32
+           L 50 62
+           L 36 62 Z"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="2.5"
+        stroke-linejoin="round" />
+  <!-- ★ 特色 #2：折角（琥珀色填充，像翻开的一页） -->
+  <path d="M 50 32 L 44 38 L 50 38 Z"
+        fill="#F59E0B"
+        stroke="#0F172A"
+        stroke-width="2.5"
+        stroke-linejoin="round" />
+
+  <!-- 卡片 3 - 最右、稍低 -->
+  <rect x="52" y="44" width="8" height="18" rx="1.5"
+        fill="#FFFFFF"
+        stroke="#0F172A"
+        stroke-width="2.5"
+        stroke-linejoin="round" />
+</svg>

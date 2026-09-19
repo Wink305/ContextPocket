@@ -1,0 +1,16 @@
+<!--
+  ContextPocket · Logo · favicon 简化版（基于候选 A）
+  16x16 viewBox，专为浏览器标签页/小尺寸图标优化
+
+  设计：去掉 3 张卡片的细节，只保留口袋外形 + 1 张金色横条（代表"有一条记忆被收藏"）
+-->
+<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- 口袋外形（圆角倒梯形） -->
+  <path d="M2 4 L14 4 Q14.5 4 14.4 4.5 L11.5 14 Q11.4 14.5 11 14.5 L5 14.5 Q4.6 14.5 4.5 14 L1.6 4.5 Q1.5 4 2 4 Z"
+        fill="#0F172A" />
+
+  <!-- 一条金色横条（代表"已存一条记忆"） -->
+  <rect x="5" y="7" width="6" height="1.5" rx="0.3" fill="#F59E0B" />
+</svg>

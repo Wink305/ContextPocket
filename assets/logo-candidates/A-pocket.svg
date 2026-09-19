@@ -1,0 +1,23 @@
+<!--
+  ContextPocket · Logo 候选 A · "口袋 + 错位卡片"
+
+  设计意图：
+  - 倒梯形口袋（皮夹/信封感） → 持久、便携、可随手取用
+  - 3 张错位堆叠卡片 → 多轮对话自然累积，不强行对齐
+  - 一张琥珀色 + 两张白 → 第一条记忆是"挑出来"的
+  - 单深色 (#0F172A) + 1 个暖色 (#F59E0B) → 工具风，避开渐变
+
+  不含：渐变、光晕、对称花纹、霓虹、emoji 风
+-->
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- 口袋本体：圆角倒梯形（像皮夹外轮廓） -->
+  <path d="M10 16 L54 16 Q56 16 55.5 18 L46 54 Q45.5 56 43.5 56 L20.5 56 Q18.5 56 18 54 L8.5 18 Q8 16 10 16 Z"
+        fill="#0F172A" />
+
+  <!-- 三张错位卡片，象征多轮对话自然堆叠 -->
+  <rect x="18" y="24" width="22" height="5" rx="1" fill="#F59E0B" />
+  <rect x="20" y="34" width="26" height="5" rx="1" fill="#FFFFFF" />
+  <rect x="16" y="44" width="24" height="5" rx="1" fill="#FFFFFF" />
+</svg>

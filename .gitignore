@@ -1,0 +1,51 @@
+# ContextPocket 自身的开发文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# Node.js（如果以后加 JS 工具）
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Python（如果以后加 Python 工具）
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# 构建产物
+dist/
+build/
+out/
+*.log
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# E2E 测试现场（每次跑测生成，不进 git）
+.e2e-test/
+.e2e-verify-test/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 注意：ContextPocket 本身是 skill 元数据，不应该忽略。
+# 但是项目使用方在自己的项目里使用本 skill 时，会自动添加：
+#   ContextPocket/
+# 到他们自己的 .gitignore（由 /openpocket 在 step 1 完成）。

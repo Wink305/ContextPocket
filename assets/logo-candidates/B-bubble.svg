@@ -1,0 +1,35 @@
+<!--
+  ContextPocket · Logo 候选 B · "双气泡折叠"
+
+  设计意图：
+  - 两个对话气泡错位重叠 → "对话 → 沉淀"
+  - 后面的气泡露出边缘像"副本/快照"被存下
+  - 单色描边 + 实心对比 → 极简工具风
+
+  不含：渐变、光晕、过度装饰
+-->
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- 后置气泡（描边，象征"被持久化的副本"） -->
+  <rect x="14" y="14" width="36" height="24" rx="6"
+        fill="none" stroke="#0F172A" stroke-width="3" />
+
+  <!-- 前置气泡（实心，代表"当前对话"） -->
+  <path d="M10 30
+           Q10 26 14 26
+           L42 26
+           Q46 26 46 30
+           L46 44
+           Q46 48 42 48
+           L24 48
+           L18 54
+           L18 48
+           L14 48
+           Q10 48 10 44 Z"
+        fill="#0F172A" />
+
+  <!-- 气泡内的小标记：像"对话行" -->
+  <rect x="16" y="34" width="14" height="3" rx="1.5" fill="#FFFFFF" />
+  <rect x="16" y="40" width="20" height="3" rx="1.5" fill="#FFFFFF" />
+</svg>

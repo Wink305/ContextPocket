@@ -1,0 +1,29 @@
+<!--
+  ContextPocket · Favicon (16×16 简化版)
+  基于主 logo 简化，专为浏览器标签页/小尺寸优化
+
+  简化策略：
+  - 去掉针脚（小尺寸下糊）
+  - 保留口袋外形 + 1 张带折角的卡片
+  - 单一焦点，2 色
+-->
+<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ContextPocket">
+  <title>ContextPocket</title>
+
+  <!-- 口袋本体（实心深色） -->
+  <path d="M 3 4 Q 3 3 4 3 L 12 3 Q 13 3 13 4 L 12 14 Q 12 15 11 15 L 5 15 Q 4 15 4 14 Z"
+        fill="#0F172A" />
+
+  <!-- 顶部翻盖（弧线） -->
+  <path d="M 3 4 Q 8 2.5 13 4"
+        fill="none"
+        stroke="#0F172A"
+        stroke-width="0.6"
+        stroke-linecap="round" />
+
+  <!-- 中间卡片（带折角，琥珀色） -->
+  <path d="M 5.5 5 L 11 5 L 11 13 L 5.5 13 Z"
+        fill="#FFFFFF" />
+  <path d="M 11 5 L 8.5 7.5 L 11 7.5 Z"
+        fill="#F59E0B" />
+</svg>
