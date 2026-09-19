@@ -40,14 +40,21 @@ Three modes available — auto-detected, no extra config needed.
 | **CLI mode** | Node.js 14+ (zero extra deps) | ⭐⭐⭐⭐ 9.5/10 | Most developers |
 | **Skill-only** | Nothing, just the folder | ⭐⭐⭐⭐ 8/10 | Compatibility fallback |
 
-Drop the folder into your agent's skill directory:
+Drop the folder into your agent's skill directory. Clone first if needed:
+
+```bash
+git clone https://github.com/Wink305/ContextPocket.git
+cd ContextPocket
+```
+
+Then pick one:
 
 ```bash
 # MiniMax Code / Claude Code / similar
-~/.minimax/skills/context-pocket/
+cp -r . ~/.minimax/skills/context-pocket/
 
 # Cursor / Continue / IDE plugins
-~/.cursor/skills/context-pocket/
+cp -r . ~/.cursor/skills/context-pocket/
 ```
 
 **For MCP mode:** add this to your MCP config:

@@ -40,14 +40,21 @@
 | **CLI 模式** | Node.js 14+（零额外依赖） | ⭐⭐⭐⭐ 9.5/10 | 绝大多数开发者 |
 | **纯 Skill 模式** | 无，只需要文件夹 | ⭐⭐⭐⭐ 8/10 | 兼容兜底 |
 
-把这个文件夹放到你的 Agent 能加载 skill 的目录：
+把这个文件夹放到你的 Agent 能加载 skill 的目录。先克隆再操作：
+
+```bash
+git clone https://github.com/Wink305/ContextPocket.git
+cd ContextPocket
+```
+
+然后选一种方式安装：
 
 ```bash
 # MiniMax Code / Claude Code / 类似工具的 skills 目录
-~/.minimax/skills/context-pocket/
+cp -r . ~/.minimax/skills/context-pocket/
 
 # 或者 Cursor / Continue 等 IDE 插件目录
-~/.cursor/skills/context-pocket/
+cp -r . ~/.cursor/skills/context-pocket/
 ```
 
 **MCP 模式配置**：在你的 MCP 配置文件里添加：
