@@ -12,7 +12,7 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 
-# Node.js（如果以后加 JS 工具）
+# Node.js（本项目零依赖：package-lock.json 只记录根包本身，不进版本库）
 node_modules/
 npm-debug.log*
 yarn-debug.log*

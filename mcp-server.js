@@ -16,13 +16,17 @@
  */
 
 const path = require('path');
-const { findPocketDir, readConfig, getProjectRoot } = require('./lib/core');
+const fs = require('fs');
+const { findPocketDir, readConfig, stripPlaceholders, toTId, intOption } = require('./lib/core');
+const { POCKET_DIR_NAME } = require('./lib/constants');
 const { parseAll } = require('./lib/parser');
 const { verify } = require('./lib/validator');
 const {
   appendLogBlock,
+  amendLogBlock,
   addRequirement,
   addDecision,
+  addAbsoluteEntry,
   generateHandoff,
   archiveLog,
   updateState,
@@ -30,18 +34,21 @@ const {
   updateCodeMap,
 } = require('./lib/writer');
 const { bootstrap } = require('./lib/bootstrap');
-const { recall, diff, search, why, checkConflicts } = require('./lib/query');
-const { runMigration, listMigrations, detectFormatVersion } = require('./lib/migrate');
+const { recall, diff, searchAny, why, checkConflicts } = require('./lib/query');
+const { runMigration, listMigrations } = require('./lib/migrate');
+const { repairLogIds } = require('./lib/repair');
+const { describeWhen, describeWhenLine } = require('./lib/when');
 const { installPreCommitHook, uninstallPreCommitHook } = require('./lib/hooks');
 const { sync: syncPocket } = require('./lib/sync');
-const { buildIndex, searchWithIndex } = require('./lib/indexer');
+const { buildIndex } = require('./lib/indexer');
 const { distill } = require('./lib/distill');
 const { importSession } = require('./lib/importer');
+const { sectionFields, turnFields, hasAnySection, textOption, toList } = require('./lib/fields');
+const { afterWrite } = require('./lib/lifecycle');
 const {
   getHubDir,
   getHubFile,
   registerProject,
-  touchProject,
   removeProject,
   listProjects,
   setGlobalPref,
@@ -49,46 +56,65 @@ const {
 } = require('./lib/userhub');
 
 // ============================================================
-// MCP stdio transport
+// 版本
 // ============================================================
 
-let buffer = Buffer.alloc(0);
+// package.json 是版本的唯一来源（lib/version.js），CLI 的 --version 读同一处。
+const { pkgVersion } = require('./lib/version');
+const SERVER_VERSION = pkgVersion().version;
 
+// ============================================================
+// MCP stdio transport
+// ============================================================//
+// MCP 的 stdio 传输是"换行分隔的 JSON-RPC"：每条消息一行、内部不得有裸换行，
+// 行与行之间没有 Content-Length 头（那是 LSP 的 base protocol）。
+// 规范原文：「Messages are delimited by newlines, and MUST NOT contain
+// embedded newlines.」之前这里按 Content-Length 解析，真实客户端（Claude
+// Desktop / Cursor / Qoder 等）发来的 initialize 行永远匹配不到头部，
+// 于是握手无响应、工具列表为空 —— MCP 模式整体不可用。
+
+let pending = '';
+
+process.stdin.setEncoding('utf-8');
 process.stdin.on('data', (chunk) => {
-  buffer = Buffer.concat([buffer, chunk]);
-  processBuffer();
+  pending += chunk;
+  let idx;
+  while ((idx = pending.indexOf('\n')) !== -1) {
+    const line = pending.slice(0, idx);
+    pending = pending.slice(idx + 1);
+    handleLine(line);
+  }
 });
 
-function processBuffer() {
-  while (true) {
-    // MCP 规范：Content-Length 按 UTF-8 字节计 → 头部解析必须按字节，
-    // 不能把 buffer 当 JS 字符串处理（中文/emoji 字节数 > 字符数）。
-    const headerMatch = buffer.toString('latin1').match(/Content-Length:\s*(\d+)\r\n\r\n/i);
-    if (!headerMatch) break;
+process.stdin.on('end', () => {
+  // 处理最后没有换行符的一行
+  if (pending.trim()) handleLine(pending);
+  pending = '';
+});
 
-    const contentLength = parseInt(headerMatch[1], 10);
-    const headerByteLen = Buffer.byteLength(headerMatch[0], 'latin1');
-    const bodyStart = headerMatch.index + headerByteLen;
-    const bodyEnd = bodyStart + contentLength;
+function handleLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return;
 
-    if (buffer.length < bodyEnd) break;
-
-    const body = buffer.slice(bodyStart, bodyStart + contentLength).toString('utf-8');
-    buffer = buffer.slice(bodyEnd);
-
-    try {
-      const message = JSON.parse(body);
-      handleMessage(message);
-    } catch (e) {
-      sendError(null, -32700, 'Parse error: ' + e.message);
-    }
+  let message;
+  try {
+    message = JSON.parse(trimmed);
+  } catch (e) {
+    sendError(null, -32700, 'Parse error: ' + e.message);
+    return;
   }
+
+  // JSON-RPC 批量：规范允许数组，逐个处理
+  if (Array.isArray(message)) {
+    for (const m of message) handleMessage(m);
+    return;
+  }
+  handleMessage(message);
 }
 
 function sendMessage(message) {
-  const body = JSON.stringify(message);
-  const header = `Content-Length: ${Buffer.byteLength(body, 'utf-8')}\r\n\r\n`;
-  process.stdout.write(header + body);
+  // 单行写出：JSON.stringify 不会产出裸换行，天然满足分帧要求
+  process.stdout.write(JSON.stringify(message) + '\n');
 }
 
 function sendResponse(id, result) {
@@ -103,22 +129,27 @@ function sendError(id, code, message) {
 // 消息处理
 // ============================================================
 
+// 从新到老：客户端协商时优先落在它请求的版本上
+const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
+
 function handleMessage(msg) {
-  if (msg.jsonrpc !== '2.0') {
-    sendError(msg.id || null, -32600, 'Invalid Request: jsonrpc version mismatch');
+  if (!msg || typeof msg !== 'object' || msg.jsonrpc !== '2.0') {
+    sendError((msg && msg.id) || null, -32600, 'Invalid Request: jsonrpc version mismatch');
     return;
   }
 
-  if (msg.id === undefined) {
-    if (msg.method === 'notifications/initialized') {
-      // 客户端初始化完成，不用做什么
-    }
+  // 通知（无 id）不应有回应
+  if (msg.id === undefined || msg.id === null) {
     return;
   }
 
   switch (msg.method) {
     case 'initialize':
       handleInitialize(msg.id, msg.params || {});
+      break;
+    case 'ping':
+      sendResponse(msg.id, {});
       break;
     case 'tools/list':
       handleToolsList(msg.id);
@@ -132,15 +163,24 @@ function handleMessage(msg) {
 }
 
 function handleInitialize(id, params) {
+  const requested = params.protocolVersion;
+  const negotiated = SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
+    ? requested
+    : LATEST_PROTOCOL_VERSION;
+
   sendResponse(id, {
-    protocolVersion: '2024-11-05',
+    protocolVersion: negotiated,
     capabilities: {
-      tools: {},
+      tools: { listChanged: false },
     },
     serverInfo: {
       name: 'context-pocket',
-      version: '1.0.0',
+      version: SERVER_VERSION,
     },
+    instructions:
+      'ContextPocket project memory. Start with context_pocket_status to see what the pocket '
+      + 'holds, context_pocket_recall to fetch a specific T-block, and context_pocket_log_append '
+      + 'to record a turn. Never hand-edit the markdown files.',
   });
 }
 
@@ -152,7 +192,7 @@ const TOOLS = [
   // --- Setup ---
   {
     name: 'context_pocket_bootstrap',
-    description: 'Initialize ContextPocket/ directory with template files. Auto-detects project type. Run this first to set up a new project.',
+    description: 'Initialize ContextPocket/ with template files (10 core in full mode, 5 in lite). Auto-detects project type. Idempotent: if ContextPocket/ already exists nothing is overwritten — it reports that and recording continues. Side effect worth naming: by default the project is also added to the user-level hub (~/.contextpocket/hub.json), so pass noHub=true for throwaway directories, script runs and CI projects that should leave nothing in your home.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -177,6 +217,11 @@ const TOOLS = [
           description: 'true = ignore ContextPocket/ in .gitignore (default); false = commit ContextPocket/ to sync across machines via git',
           default: true,
         },
+        noHub: {
+          type: 'boolean',
+          description: 'Do not register this project in the user hub (~/.contextpocket/hub.json). Default false = register it, which is what `hub list` and the MCP server\'s project resolution rely on.',
+          default: false,
+        },
       },
     },
   },
@@ -191,7 +236,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_verify',
-    description: 'Run health check on ContextPocket. Checks file existence, ID continuity, references, code map drift. Pass drift=true to enable AOCI-style cognition drift detection (log.md vs working tree).',
+    description: 'Run health check on ContextPocket. 15 checks by default: file existence, T/R/ADR id continuity, T-block section format, reference integrity, index consistency, 🔒 integrity, code map drift, handoff staleness, header T agreement, implausible IDs, log size vs archive_at, format-version lag, the credential/PII scan, and attachment existence (a `### Attachments` line naming a file that is not on disk is an error — template placeholders, URLs, absolute paths, `../` paths and entries already written as `[missing: T<n> <file>]` are skipped, and `log-archive.md` is scanned too). The scan grades by what a leak costs: vendor-shaped keys (sk-ant-, AKIA-, ghp_, private-key blocks, JWT) come back as errors, which block the pre-commit hook and make archive/migrate refuse; personal data (ID numbers, card numbers, phone numbers, `password: xxxx`) is warning-only and never blocks. Findings are masked (first 6 chars + length) — never quote a value you find here into the next T-block. Set "- secret_scan: false" in config.md to disable. Pass drift=true to enable the two tree-scanning drift checks: log-cognition-drift (paths referenced in recent T-blocks vs working tree) and code-newer-than-log (files whose mtime is later than the last record — the missed-log net for projects without git). Both report warnings/info only, never errors.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -202,12 +247,17 @@ const TOOLS = [
         },
         drift: {
           type: 'boolean',
-          description: 'Enable cognition drift check: compares files referenced in recent T-blocks against the working tree. Slower (walks the project tree).',
+          description: 'Enable the two tree-scanning drift checks: log-cognition-drift (paths in recent T-blocks vs working tree) and code-newer-than-log (files modified after the last record). Slower (walks the project tree).',
           default: false,
+        },
+        driftLastN: {
+          type: 'number',
+          description: 'When drift=true, how many recent T-blocks to compare (default: 5). Same window as CLI `verify --drift-last-n`; the older name lastN is still accepted.',
+          default: 5,
         },
         lastN: {
           type: 'number',
-          description: 'When drift=true, how many recent T-blocks to compare (default: 5)',
+          description: 'Deprecated alias for driftLastN in this tool (in context_pocket_sync lastN means something else).',
           default: 5,
         },
       },
@@ -215,7 +265,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_recall',
-    description: 'Show full details of a specific T-block (gist, tags, all sections).',
+    description: 'Show full details of a specific T-block (gist, tags, all sections). Archived turns (log-archive.md) are included and marked *(archived)*.',
     inputSchema: {
       type: 'object',
       required: ['tId'],
@@ -247,7 +297,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_search',
-    description: 'Search all T-blocks by keyword. Searches gist and all section content.',
+    description: 'Keyword search over the whole history: T-blocks (gist + every section, archived turns included), ADRs, requirements and preferences. Indexed and scanned searches return the same matches in the same order; page with limit/offset.',
     inputSchema: {
       type: 'object',
       required: ['keyword'],
@@ -256,12 +306,27 @@ const TOOLS = [
           type: 'string',
           description: 'Keyword to search for',
         },
+        limit: {
+          type: 'number',
+          description: 'Maximum matches to return (default 50; 0 = every match). CLI equivalent: --limit',
+          default: 50,
+        },
+        offset: {
+          type: 'number',
+          description: 'Matches to skip before returning, for paging (CLI equivalent: --offset)',
+          default: 0,
+        },
+        noIndex: {
+          type: 'boolean',
+          description: 'Skip the cached inverted index and scan the markdown (CLI equivalent: --no-index). Use to cross-check index freshness.',
+          default: false,
+        },
       },
     },
   },
   {
     name: 'context_pocket_why',
-    description: 'Reverse lookup: which T-blocks mentioned this file path? Inspired by ThoughtDAG why_file/why_check. Searches Action/Changes/Pitfalls/Notes/Commits/User sections. Returns most recent first.',
+    description: 'Reverse lookup: which T-blocks mentioned this file path? Inspired by ThoughtDAG why_file/why_check. Searches every section of every turn, archived turns included. Each hit carries evidence: "changed" when the path is in that turn\'s Action section, "mentioned" when it only appears elsewhere (Uncertain / Attachments / Conflicts / Pitfalls) — which is NOT a record of changing the file. "changed" hits come first, then "mentioned", newest first inside each group.',
     inputSchema: {
       type: 'object',
       required: ['filePath'],
@@ -288,7 +353,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_sync',
-    description: 'Git safety net: detect staged file changes that were NOT recorded in recent T-blocks ("agent forgot to log"), and optionally auto-record them as a [auto] T-block. Use auto=true to fill the gap.',
+    description: 'Git safety net: detect staged file changes that were NOT recorded in recent T-blocks ("agent forgot to log"), and optionally auto-record them as a [auto] T-block. Coverage counts strong evidence only: the path must appear in a recent turn\'s Action section. Files mentioned solely in other sections come back as unrecorded with mentionedIn[] naming the turn/section, so you can log amend that turn instead of writing an [auto] block. Use auto=true to fill the gap.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -327,6 +392,13 @@ const TOOLS = [
           items: { type: 'string' },
           description: 'Tags for this turn (e.g. 需求变更, 代码逻辑, Bug)',
         },
+        author: {
+          type: 'string',
+          description: 'Who is recording this turn (CLI equivalent: --author) — your own agent id, '
+            + 'not the user. Several agents share one ContextPocket/, so this is what makes two '
+            + 'people\'s turns distinguishable after the fact; it lands in the block\'s ### Author '
+            + 'section. Do not invent a value: omit it and the block simply has no author.',
+        },
         user: {
           type: 'string',
           description: 'User\'s request text',
@@ -339,18 +411,146 @@ const TOOLS = [
           type: 'string',
           description: 'Decisions or constraints from this turn',
         },
+        commits: {
+          type: 'string',
+          description: 'Commit hashes created this turn (CLI equivalent: --commits)',
+        },
+        conflicts: {
+          type: 'string',
+          description: 'Conflicts with earlier decisions/preferences (CLI equivalent: --conflicts)',
+        },
+        attachments: {
+          type: 'string',
+          description: 'Attached files, stored under assets/ (CLI equivalent: --attachments)',
+        },
+        uncertain: {
+          type: 'string',
+          description: 'Points still needing user confirmation (CLI equivalent: --uncertain)',
+        },
         pitfalls: {
           type: 'string',
-          description: 'Pitfalls discovered',
+          description: 'Pitfalls discovered (alias: pitfall)',
+        },
+        pitfall: {
+          type: 'string',
+          description: 'Alias of pitfalls',
         },
         preferences: {
           type: 'string',
           description: 'User preferences noted',
         },
+        when: {
+          type: 'string',
+          description: 'When this turn happened (CLI equivalent: --when). Omit it to record the '
+            + 'moment you are writing — that is the only time the tool can know for sure. '
+            + 'Pass a value only when the user stated a different time: a range '
+            + '("2026-10-03 09:00 → 11:30"), a single date ("2026-10-03"), or their verbatim '
+            + 'words ("上周三下午"), which are stored as-is and never computed into a timestamp. '
+            + 'Written as a --- WHEN: --- line in format v2 pockets. In a v1 pocket the line is '
+            + 'not written (the block is still recorded) and the result text says why — run '
+            + 'context_pocket_migrate { to: "latest" } first if the time matters.',
+        },
         verify: {
           type: 'boolean',
           description: 'Run verify after appending',
           default: true,
+        },
+        conflictCheck: {
+          type: 'boolean',
+          description: 'Before writing, run the six-dimension conflict scan as if this block were '
+            + 'already in log.md, and record whatever it newly finds in this block\'s Conflicts '
+            + 'section with an [auto] prefix (CLI equivalent: --no-conflict-check to disable). '
+            + 'Default true — an unrecorded conflict is invisible, since log.md is the only truth. '
+            + 'It never blocks the write; findings are reported back so you can react.',
+          default: true,
+        },
+      },
+    },
+  },
+  {
+    name: 'context_pocket_log_amend',
+    description: 'Fill in sections that are MISSING from an already-written T-block (e.g. a turn appended without `user`). Never overwrites existing content. Use this to resolve "missing User/Action section" errors from context_pocket_verify.',
+    inputSchema: {
+      type: 'object',
+      required: ['tId'],
+      properties: {
+        tId: {
+          type: 'integer',
+          description: 'T-number of the block to amend (e.g. 7)',
+        },
+        author: {
+          type: 'string',
+          description: 'Fill a MISSING ### Author section (who recorded the turn). Like every other '
+            + 'amend field, it never overwrites an author already on that block.',
+        },
+        user: {
+          type: 'string',
+          description: "The user's original request for that turn",
+        },
+        action: {
+          type: 'string',
+          description: 'What was done in that turn',
+        },
+        commits: {
+          type: 'string',
+          description: 'Commit hashes from that turn (comma-separated; CLI equivalent: --commits)',
+        },
+        decisions: {
+          type: 'string',
+          description: 'Decisions or constraints from that turn',
+        },
+        pitfalls: {
+          type: 'string',
+          description: 'Pitfalls from that turn (alias: pitfall)',
+        },
+        pitfall: {
+          type: 'string',
+          description: 'Alias of pitfalls',
+        },
+        preferences: {
+          type: 'string',
+          description: 'Preferences from that turn',
+        },
+        conflicts: {
+          type: 'string',
+          description: 'Conflicts from that turn',
+        },
+        uncertain: {
+          type: 'string',
+          description: 'Uncertain items from that turn',
+        },
+        attachments: {
+          type: 'string',
+          description: 'Attachment references from that turn',
+        },
+        when: {
+          type: 'string',
+          description: 'Time for that turn, same forms as context_pocket_log_append '
+            + '(CLI equivalent: --when). Added only if the block has no time line, or replaces a '
+            + 'day-only line left by the v1→v2 migration. A timestamp recorded at the time is '
+            + 'history — amend refuses to overwrite it; record a correction as a new T<n>-fix turn.',
+        },
+      },
+    },
+  },
+  {
+    name: 'context_pocket_absolute_add',
+    description: 'Append a 🔒 red-line entry to absolute.md — verbatim, never compressed, never archived. Use ONLY for architecture / tech / code constraints a future agent must not violate (e.g. "never use ORM", "do NOT change the /api/v1 response shape"). NOT for schedule or scope emphasis.',
+    inputSchema: {
+      type: 'object',
+      required: ['text'],
+      properties: {
+        text: {
+          type: 'string',
+          description: "The user's requirement, saved verbatim",
+        },
+        gist: {
+          type: 'string',
+          description: 'Short summary used for conflict keyword matching (default: first sentence of text)',
+        },
+        tId: {
+          type: 'integer',
+          description: 'Associate with a specific T-number (default: latest T)',
         },
       },
     },
@@ -453,7 +653,11 @@ const TOOLS = [
         },
         pitfall: {
           type: 'string',
-          description: 'Pitfall to append',
+          description: 'Pitfall to append (alias: pitfalls)',
+        },
+        pitfalls: {
+          type: 'string',
+          description: 'Alias of pitfall',
         },
       },
     },
@@ -493,8 +697,7 @@ const TOOLS = [
       properties: {
         keepLast: {
           type: 'integer',
-          description: 'Keep latest N T-blocks in log.md',
-          default: 20,
+          description: 'Keep latest N T-blocks in log.md (default: config.md recent_keep)',
         },
         dryRun: {
           type: 'boolean',
@@ -506,13 +709,13 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_migrate',
-    description: 'Migrate ContextPocket data format to a new version. Auto-backs up before migrating. Rolls back on failure.',
+    description: 'Migrate ContextPocket data format along the registered one-hop steps (v1 → v2 → v3 in a single call). Backs up first, verifies before each hop, bumps the format stamp after each, and restores the backup if any hop or the final check fails — never half-migrated. Use list=true to see the registry and the computed path, dryRun=true for the full plan without writing.',
     inputSchema: {
       type: 'object',
       properties: {
         to: {
           type: 'string',
-          description: 'Target version (default: latest)',
+          description: 'Target version, e.g. "v2" or "2"; "latest" (default) = newest version reachable in the registry',
         },
         dryRun: {
           type: 'boolean',
@@ -527,10 +730,33 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'context_pocket_repair',
+    description: 'Renumber T-blocks whose T-ids collide after two agents wrote to the same turn number. The write lock lives in os.tmpdir() (lib/io.js) so it only protects one machine: two clones can both compute latestT+1 and both write T9, and log.md ends up with two `## T9` blocks. verify detects that as an ERROR (its fix line names this tool), and hand-editing the markdown is what the skill forbids, so repair is the way out: the colliding block and every block after it shift up one, so ids stay increasing with file order (log.md is append-only). References are the honest part: a body line saying `T9` may have meant either block, so by default they are LISTED, not rewritten — add applyRefs=true to substitute every stale ref by the same mapping (applied simultaneously, so a T9→T10 / T10→T11 cascade does not move one ref twice). A reference has to be a STANDALONE `T<n>`: `GPT4`, `RTX4090`, `UTF8` are words that merely contain the shape and are never matched. Attachment file names (`T04-diagram.png`, `assets/T04-x.png`) are a third category and are NEVER rewritten, applyRefs included — renaming is two halves (`mv` the file, then edit the text), and doing only the second half manufactures a broken link plus lost zero-padding, so the tool just lists them in `fileNames` with the exact `mv` command for you to run. Derived counters (the `· T<n>` header line of state/requirements/decisions/preferences/code-map/handoff, and index.md) are realigned automatically. log-archive.md is reported only, never modified — it declares itself read-only. The renumbering itself is recorded as a new [auto] T-block so the pocket states that the tool moved numbers. Rolls back everything if verify ends up worse or duplicates remain. dryRun=true returns the plan without writing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dryRun: {
+          type: 'boolean',
+          description: 'Show the renumber plan and the stale references without touching files',
+          default: false,
+        },
+        applyRefs: {
+          type: 'boolean',
+          description: 'Rewrite stale standalone `T<n>` references in the pocket too. Default false: they are listed so a reader decides which of the two colliding blocks each one meant. This never renames attachment files or rewrites their names in the text — those arrive separately in `fileNames` with an `mv` command.',
+          default: false,
+        },
+        author: {
+          type: 'string',
+          description: 'Sign the record block (who ran the repair). Omit it and the record block simply has no author.',
+        },
+      },
+    },
+  },
   // --- Git Hooks ---
   {
     name: 'context_pocket_install_hook',
-    description: 'Install a git pre-commit hook (v2: two-step). Step 1 runs context-pocket sync --auto to auto-fill missed T-blocks from staged changes. Step 2 runs context-pocket verify --quiet; blocks commit only if verify finds errors (warnings allow). Upgrades v1 hook automatically.',
+    description: 'Install a git pre-commit hook (v3: three-step). Step 0 skips the checks when the repo has no ContextPocket/ directory, so installing the hook before bootstrap never blocks every commit. Step 1 runs context-pocket sync --auto to auto-fill missed T-blocks from staged changes. Step 2 runs context-pocket verify --quiet; blocks commit only if verify finds errors (warnings allow). Upgrades an older hook automatically.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -569,6 +795,10 @@ const TOOLS = [
           type: 'boolean',
           description: 'Report counts only, do not write the digest file',
           default: false,
+        },
+        recentKeep: {
+          type: 'number',
+          description: 'How many recent T-blocks in log.md count as "new" and are skipped (default: recent_keep from config.md)',
         },
       },
     },
@@ -684,6 +914,12 @@ function handleToolsCall(id, params) {
       case 'context_pocket_log_append':
         result = toolLogAppend(args || {});
         break;
+      case 'context_pocket_log_amend':
+        result = toolLogAmend(args || {});
+        break;
+      case 'context_pocket_absolute_add':
+        result = toolAbsoluteAdd(args || {});
+        break;
       case 'context_pocket_req_add':
         result = toolReqAdd(args || {});
         break;
@@ -709,6 +945,9 @@ function handleToolsCall(id, params) {
         break;
       case 'context_pocket_migrate':
         result = toolMigrate(args || {});
+        break;
+      case 'context_pocket_repair':
+        result = toolRepair(args || {});
         break;
 
       // Git Hooks
@@ -770,6 +1009,37 @@ function getPocketDir() {
 
 function toolBootstrap(args) {
   const projectDir = process.cwd();
+  // noHub=true 关掉唯一那个写到用户家目录的副作用（~/.contextpocket/hub.json）
+  const noHub = !!args.noHub;
+
+  // 与 CLI 同规则：已有 ContextPocket/ 是"早就在记了"，不是失败。激活是全自动的，
+  // 把它报成错误会让 agent 以为不能继续记录。lib/bootstrap 的拒绝覆盖保护原样保留。
+  const existingPocket = path.join(projectDir, POCKET_DIR_NAME);
+  if (fs.existsSync(existingPocket) && fs.statSync(existingPocket).isDirectory()) {
+    let hubRegistered = false;
+    if (!noHub) {
+      try {
+        registerProject(projectDir, {});
+        hubRegistered = true;
+      } catch (e) { /* hub 不可用不影响 */ }
+    }
+    return {
+      content: [{
+        type: 'text',
+        text: (() => {
+          const lines = [
+            'ℹ️ **ContextPocket/ already exists** — nothing to create, keep recording.',
+            '',
+            `- **Path:** ${existingPocket}`,
+            '- **Next:** read `index.md` + `state.md` to pick up where the last session left off.',
+          ];
+          if (noHub) lines.push(`- **Hub:** skipped (noHub) — nothing was written to ${getHubFile()}`);
+          else if (hubRegistered) lines.push(`- **Hub:** registered in ${getHubFile()}`);
+          return lines.join('\n');
+        })(),
+      }],
+    };
+  }
 
   const result = bootstrap(projectDir, {
     projectType: args.projectType,
@@ -800,17 +1070,31 @@ function toolBootstrap(args) {
   }
   lines.push('');
 
-  // 注册到用户级 hub（best-effort，失败不影响 bootstrap）
-  try {
-    registerProject(projectDir, {
-      projectType: result.projectType,
-      mode: result.mode,
-      latestT: 0,
-    });
-    lines.push(`- **Hub:** registered in ${getHubFile()}`);
+  // 初始化里"没做成但不致命"的部分必须交给调用方（agent），否则它以为模板内容本来如此
+  if (result.warnings && result.warnings.length > 0) {
+    lines.push(`⚠ **${result.warnings.length} warning(s) during initialization:**`);
+    for (const w of result.warnings) {
+      lines.push(`- ${w}`);
+    }
     lines.push('');
-  } catch (e) {
-    // hub 不可用（只读 home 等）→ 静默跳过
+  }
+
+  // 注册到用户级 hub（best-effort，失败不影响 bootstrap）
+  if (noHub) {
+    lines.push(`- **Hub:** skipped (noHub) — nothing was written to ${getHubFile()}`);
+    lines.push('');
+  } else {
+    try {
+      registerProject(projectDir, {
+        projectType: result.projectType,
+        mode: result.mode,
+        latestT: 0,
+      });
+      lines.push(`- **Hub:** registered in ${getHubFile()}`);
+      lines.push('');
+    } catch (e) {
+      // hub 不可用（只读 home 等）→ 静默跳过
+    }
   }
 
   lines.push('**Next steps:**');
@@ -834,7 +1118,11 @@ function toolStatus() {
   lines.push('**ContextPocket Status**');
   lines.push('');
   lines.push(`- **Latest:** T${data.log.latestT}`);
-  lines.push(`- **Log:** ${data.log.blocks.length} T-blocks${data.index.hasArchive ? ' (+ archive)' : ''}`);
+  // 归档不会自己发生，所以阈值要在状态里说出口，否则 log.md 无声长到几千行
+  const archiveAt = Number(config.archive_at);
+  const due = Number.isFinite(archiveAt) && archiveAt > 0 && data.log.lineCount >= archiveAt;
+  lines.push(`- **Log:** ${data.log.blocks.length} T-blocks${data.index.hasArchive ? ' (+ archive)' : ''}`
+    + (due ? ` — ⚠ ${data.log.lineCount}/${archiveAt} lines, archive is due (\`context_pocket_archive\`)` : ''));
   lines.push(`- **Requirements:** ${data.requirements.openCount} open / ${data.requirements.doneCount} done / ${data.requirements.cancelledCount} cancelled`);
   if (data.requirements.uncertainCount > 0) {
     lines.push(`  - ❓ ${data.requirements.uncertainCount} uncertain`);
@@ -843,10 +1131,13 @@ function toolStatus() {
   lines.push(`- **Absolute:** ${data.absolute.count} entries`);
   lines.push(`- **Mode:** ${config.mode} · language: ${config.language}`);
 
-  if (data.state.nextSteps.length > 0) {
+  // 过滤 state.md 里的模板占位符（bootstrap 预填、尚未填写），
+  // 否则一个刚初始化的项目会显示成"有下一步"，内容却是 <2-3 lines: ...>
+  const nextSteps = stripPlaceholders(data.state.nextSteps);
+  if (nextSteps.length > 0) {
     lines.push('');
     lines.push('**Next Steps:**');
-    for (const step of data.state.nextSteps.slice(0, 5)) {
+    for (const step of nextSteps.slice(0, 5)) {
       lines.push(`- ${step}`);
     }
   }
@@ -859,7 +1150,9 @@ function toolStatus() {
 function toolVerify(args) {
   const pocketDir = getPocketDir();
   const drift = !!args.drift;
-  const lastN = args.lastN || 5;
+  // 回看窗口与 CLI 同名：`verify --drift-last-n` ⇄ `driftLastN`。旧名 lastN 继续认，
+  // 但它在 context_pocket_sync 里指的是另一件事（同步看几轮），所以以 driftLastN 为准
+  const lastN = intOption(args.driftLastN !== undefined ? args.driftLastN : args.lastN, 5);
   const result = verify(pocketDir, { drift, lastN });
   const { results, errorCount, warningCount, infoCount } = result;
   const quiet = args.quiet || false;
@@ -913,16 +1206,17 @@ function toolVerify(args) {
 
 function toolRecall(args) {
   const pocketDir = getPocketDir();
-  const tId = args.tId;
+  // 与 CLI 同一份归一：裸 parseInt 会把 "abc" 变成 NaN 再当合法编号传给 recall
+  const tId = toTId(args.tId);
 
-  if (!tId) {
+  if (Number.isNaN(tId)) {
     return {
-      content: [{ type: 'text', text: '❌ Error: tId is required' }],
+      content: [{ type: 'text', text: '❌ Error: tId is required (positive integer, e.g. 7 or "T7")' }],
       isError: true,
     };
   }
 
-  const result = recall(pocketDir, parseInt(tId, 10));
+  const result = recall(pocketDir, tId);
   if (!result) {
     return {
       content: [{ type: 'text', text: `❌ Error: T${tId} not found` }],
@@ -931,12 +1225,15 @@ function toolRecall(args) {
   }
 
   const lines = [];
-  lines.push(`## T${result.id} · ${result.gist}`);
+  lines.push(`## T${result.id} · ${result.gist}${result.archived ? ' *(archived)*' : ''}`);
   if (result.tags && result.tags.length > 0) {
     lines.push(result.tags.map(t => `[${t}]`).join(' '));
   }
   if (result.session) {
     lines.push(`*Session: ${result.session}*`);
+  }
+  if (result.when) {
+    lines.push(`*When: ${describeWhen(result.when)}*`);
   }
   lines.push('');
 
@@ -962,17 +1259,17 @@ function toolRecall(args) {
 
 function toolDiff(args) {
   const pocketDir = getPocketDir();
-  const tA = args.tA;
-  const tB = args.tB;
+  const tA = toTId(args.tA);
+  const tB = toTId(args.tB);
 
-  if (!tA || !tB) {
+  if (Number.isNaN(tA) || Number.isNaN(tB)) {
     return {
-      content: [{ type: 'text', text: '❌ Error: both tA and tB are required' }],
+      content: [{ type: 'text', text: '❌ Error: both tA and tB are required (positive integers)' }],
       isError: true,
     };
   }
 
-  const result = diff(pocketDir, parseInt(tA, 10), parseInt(tB, 10));
+  const result = diff(pocketDir, tA, tB);
 
   const lines = [];
   lines.push(`## Diff: T${result.tA} → T${result.tB}`);
@@ -1044,15 +1341,21 @@ function toolSearch(args) {
   }
 
   // 优先倒排索引（覆盖 T-block + ADR + R + prefs，历史增长后依然即时）；
-  // 索引不可用时回退全量扫描
-  let results = searchWithIndex(pocketDir, keyword);
-  if (results === null) {
-    results = search(pocketDir, keyword);
-  }
+  // 缓存缺失 / 坏 JSON / INDEX_VERSION 对不上 / 签名过期都是当场重建然后继续走索引，
+  // 只有连重建都做不成才是全量扫描；noIndex:true 是显式要这一次不信缓存。
+  // 与 CLI 的 --no-index 同一份逻辑，两条路径的命中与排序相同，所以 limit/offset 翻的是同一份结果。
+  const { results, total, hasMore, offset, limit } = searchAny(pocketDir, keyword, {
+    useIndex: args.noIndex !== true,
+    limit: args.limit,
+    offset: args.offset,
+  });
 
   const lines = [];
+  const shown = limit !== null && results.length < total
+    ? ` · showing ${offset + 1}–${offset + results.length}`
+    : '';
   lines.push(`## Search: "${keyword}"`);
-  lines.push(`${results.length} match${results.length !== 1 ? 'es' : ''} found`);
+  lines.push(`${total} match${total !== 1 ? 'es' : ''} found${shown}`);
   lines.push('');
 
   if (results.length === 0) {
@@ -1081,10 +1384,16 @@ function toolSearch(args) {
         const tagsStr = r.tags && r.tags.length > 0
           ? ' ' + r.tags.map(t => `[${t}]`).join('')
           : '';
-        lines.push(`- **T${r.id}**${tagsStr}: ${r.gist}`);
+        lines.push(`- **T${r.id}**${tagsStr}: ${r.gist}${r.archived ? ' *(archived)*' : ''}`);
         printHighlights(r);
       }
     }
+  }
+
+  // 截断必须可见：否则调用方以为"就这些"，而真实总数在 total 里
+  if (hasMore) {
+    lines.push('');
+    lines.push(`_${total - offset - results.length} more — next page: {"offset": ${offset + results.length}}; all of them: {"limit": 0}_`);
   }
 
   return {
@@ -1103,12 +1412,14 @@ function toolWhy(args) {
     };
   }
 
-  const limit = args.limit || 10;
+  // 与 CLI 的 why 同一条归一：limit=0 不该被当成"没给"而变回默认值
+  const limit = Math.max(1, intOption(args.limit, 10));
   const results = why(pocketDir, filePath, { limit });
 
   const lines = [];
+  const changedN = results.filter(r => r.evidence === 'changed').length;
   lines.push(`## Why: "${filePath}"`);
-  lines.push(`${results.length} T-block${results.length !== 1 ? 's' : ''} referenced this file`);
+  lines.push(`${results.length} T-block${results.length !== 1 ? 's' : ''} referenced this file (${changedN} changed it, ${results.length - changedN} only mentioned it)`);
   lines.push('');
 
   if (results.length === 0) {
@@ -1118,13 +1429,16 @@ function toolWhy(args) {
       const tagsStr = r.tags.length > 0
         ? ' ' + r.tags.map(t => `[${t}]`).join('')
         : '';
-      lines.push(`- **T${r.id}**${tagsStr}: ${r.gist}`);
-      if (r.references.length > 0) {
-        for (const ref of r.references.slice(0, 3)) {
-          const snippet = ref.text.length > 80 ? ref.text.slice(0, 80) + '...' : ref.text;
-          lines.push(`  - *[${ref.section}]* ${snippet}`);
-        }
+      const badge = r.evidence === 'changed' ? '**[changed]**' : '**[mentioned only]**';
+      lines.push(`- **T${r.id}** ${badge}${tagsStr}: ${r.gist}${r.archived ? ' *(archived)*' : ''}`);
+      for (const ref of r.references.slice(0, 3)) {
+        const snippet = ref.text.length > 80 ? ref.text.slice(0, 80) + '...' : ref.text;
+        lines.push(`  - *[${ref.section}]* ${snippet}`);
       }
+    }
+    if (changedN === 0) {
+      lines.push('');
+      lines.push('> ⚠️ No T-block records *changing* this file — every hit above only mentions it (Attachments / Uncertain / Conflicts / Pitfalls …). Treat the "why" as unresolved.');
     }
   }
 
@@ -1175,7 +1489,7 @@ function toolSync(args) {
   const pocketDir = getPocketDir();
   const auto = !!args.auto;
   const dryRun = !!args.dryRun;
-  const lastN = args.lastN || 5;
+  const lastN = intOption(args.lastN, 5);
 
   const result = syncPocket(pocketDir, { auto, dryRun, lastN });
 
@@ -1198,11 +1512,18 @@ function toolSync(args) {
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 
-  const files = result.unrecorded.map(c => `- ${c.path}`).join('\n');
+  const files = result.unrecorded.map(c => {
+    if (!c.mentionedIn || c.mentionedIn.length === 0) return `- ${c.path}`;
+    const where = c.mentionedIn.map(m => `T${m.tId}/${m.section}`).join(', ');
+    return `- ${c.path} — *only mentioned in ${where}, never in Action*`;
+  }).join('\n');
+  const mentionHint = result.mentionedOnly && result.mentionedOnly.length
+    ? '\n\n> ℹ️ ' + result.mentionedOnly.length + ' of these already appear in another section of a recent T-block. If you really changed them, prefer `log amend T<n> --action "…"` over an [auto] block — the turn exists, only its Action section is incomplete.'
+    : '';
 
   if (result.dryRun) {
     lines.push(`📋 **Plan (dry-run):** ${result.unrecorded.length} staged file(s) not recorded in recent T-blocks:`);
-    lines.push(files);
+    lines.push(files + mentionHint);
     lines.push('');
     lines.push(`Would auto-record T${result.nextT} with tag \[auto\]. *(dry-run: no files modified)*`);
     return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -1210,7 +1531,7 @@ function toolSync(args) {
 
   if (result.auto && result.filled) {
     lines.push(`✅ **Auto-recorded:** added T${result.tId} [auto] covering ${result.unrecorded.length} staged file(s):`);
-    lines.push(files);
+    lines.push(files + mentionHint);
     lines.push('');
     lines.push('Review the auto T-block and expand with real details if needed.');
     return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -1218,7 +1539,7 @@ function toolSync(args) {
 
   // report-only
   lines.push(`⚠️ **Unrecorded staged changes:** ${result.unrecorded.length} file(s) not covered by recent T-blocks:`);
-  lines.push(files);
+  lines.push(files + mentionHint);
   lines.push('');
   lines.push('Call again with `auto: true` to auto-record, or record manually.');
   return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -1229,32 +1550,45 @@ function toolSync(args) {
 function toolLogAppend(args) {
   const pocketDir = getPocketDir();
 
-  if (!args.gist) {
+  // gist 会落在块头 `## T7 · <gist> · [标签]` 上：只收文本，`{ gist: true }` 与没传同罪
+  const gist = textOption(args, 'gist');
+  if (!gist) {
     return {
       content: [{ type: 'text', text: '❌ Error: gist is required' }],
       isError: true,
     };
   }
 
-  const result = appendLogBlock(pocketDir, {
-    gist: args.gist,
-    tags: args.tags || [],
-    user: args.user ? [args.user] : [],
-    action: args.action ? [args.action] : [],
-    decisions: args.decisions ? [args.decisions] : [],
-    pitfalls: args.pitfalls ? [args.pitfalls] : [],
-    preferences: args.preferences ? [args.preferences] : [],
-  });
+  // 字段形状与 CLI 入口共用一份定义（lib/fields.js），见该文件头的原因说明
+  const fields = turnFields(args);
+  // 写时冲突闸默认开，与 CLI 的 --no-conflict-check 同一语义
+  if (args.conflictCheck === false) fields.conflictCheck = false;
+  const result = appendLogBlock(pocketDir, fields);
 
   // 副作用：更新 hub 活跃信息 + 刷新搜索索引（都 best-effort，不阻断记录）
-  try {
-    touchProject(getProjectRoot(pocketDir), { latestT: result.tId, gist: args.gist });
-  } catch (e) { /* hub 不可用 */ }
-  try {
-    buildIndex(pocketDir, {});
-  } catch (e) { /* 索引在下次 search 时懒刷新 */ }
+  afterWrite(pocketDir, { latestT: result.tId, gist });
 
-  let output = `✅ **T${result.tId} added:** ${args.gist}`;
+  let output = `✅ **T${result.tId} added:** ${gist}`;
+  const whenLine = describeWhenLine(result.when);
+  if (whenLine) {
+    // 把这一轮真正记下的时间回给 Agent：它下一步就该确认这个时间对不对。
+    // 与 CLI 同一句话（lib/when.js 的 describeWhenLine），两个入口不该各说一套
+    output += `\n⏱ ${whenLine}`;
+  }
+  if (result.whenSkipped) {
+    // Agent 给了 when，却因为 pocket 停在 v1 没落盘；不说就等于把话吞了
+    output += `\n⚠️ ${result.whenSkipped}`;
+  }
+  // 检出的冲突已经写进本块的 Conflicts 节；Agent 必须当场看到，否则下一轮还会撞同一次
+  if (result.conflictsWritten > 0) {
+    output += `\n⚔️ ${result.conflictsWritten} conflict(s) recorded in T${result.tId}'s Conflicts section:`;
+    for (const f of result.autoConflicts.filter((x) => x.severity === 'critical' || x.severity === 'warning')) {
+      output += `\n- [${f.severity}] ${f.message}`;
+    }
+  }
+  if (result.conflictCheckError) {
+    output += `\n⚠️ This turn was NOT conflict-checked: ${result.conflictCheckError}`;
+  }
 
   if (args.verify !== false) {
     const verifyResult = verify(pocketDir);
@@ -1268,10 +1602,85 @@ function toolLogAppend(args) {
   };
 }
 
-function toolReqAdd(args) {
+function toolLogAmend(args) {
   const pocketDir = getPocketDir();
 
-  if (!args.text) {
+  const tId = toTId(args.tId);
+  if (Number.isNaN(tId)) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: tId (integer) is required' }],
+      isError: true,
+    };
+  }
+
+  const payload = sectionFields(args);
+
+  if (!hasAnySection(payload)) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: pass at least one section to fill' }],
+      isError: true,
+    };
+  }
+
+  const result = amendLogBlock(pocketDir, tId, payload);
+
+  if (!result.success) {
+    return {
+      content: [{ type: 'text', text: `❌ Error: ${result.error}` }],
+      isError: true,
+    };
+  }
+
+  afterWrite(pocketDir);
+
+  let output;
+  if (result.unchanged && !result.when) {
+    output = `ℹ️ **T${tId} unchanged** — those sections already exist and are never overwritten.`;
+  } else if (result.unchanged) {
+    output = `ℹ️ **T${tId} unchanged**`;
+  } else {
+    output = `✅ **T${tId} amended** — filled: ${result.filled.join(', ')}`;
+  }
+  if (result.when) {
+    output += `\n⏱ ${result.when}`;
+  }
+  if (result.skipped.length > 0) {
+    output += `\n\nAlready present, left untouched: ${result.skipped.join(', ')}`;
+  }
+
+  return { content: [{ type: 'text', text: output }] };
+}
+
+function toolAbsoluteAdd(args) {
+  const pocketDir = getPocketDir();
+
+  const text = textOption(args, 'text');
+  if (!text) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: text is required' }],
+      isError: true,
+    };
+  }
+
+  const result = addAbsoluteEntry(pocketDir, {
+    text,
+    gist: textOption(args, 'gist'),
+    createdAt: intOption(args.tId, undefined),
+  });
+
+  return {
+    content: [{
+      type: 'text',
+      text: `✅ **🔒 Added to absolute.md** (${result.count} entries) · T${result.tId}\n\n` +
+            'Never compressed, never archived. Treat as binding for future turns.',
+    }],
+  };
+}
+
+function toolReqAdd(args) {
+  const pocketDir = getPocketDir();
+  const text = textOption(args, 'text');
+  if (!text) {
     return {
       content: [{ type: 'text', text: '❌ Error: text is required' }],
       isError: true,
@@ -1279,23 +1688,26 @@ function toolReqAdd(args) {
   }
 
   const result = addRequirement(pocketDir, {
-    text: args.text,
-    tags: args.tags || [],
-    status: args.status || 'Open',
+    text,
+    // tags/impl 走 toList：MCP 传数组，`true`/空串这类缺值形状一律归成 []，
+    // status 走 textOption：它会变成 requirements.md 里的 `## <status>` 分组标题
+    tags: toList(args.tags),
+    status: textOption(args, 'status') || 'Open',
     uncertain: !!args.uncertain,
-    impl: args.impl || [],
+    impl: toList(args.impl),
   });
 
   const prefix = args.uncertain ? '❓ ' : '';
   return {
-    content: [{ type: 'text', text: `✅ **${prefix}R${result.rId} added:** ${args.text}` }],
+    content: [{ type: 'text', text: `✅ **${prefix}R${result.rId} added:** ${text}` }],
   };
 }
 
 function toolDecisionAdd(args) {
   const pocketDir = getPocketDir();
+  const title = textOption(args, 'title');
 
-  if (!args.title) {
+  if (!title) {
     return {
       content: [{ type: 'text', text: '❌ Error: title is required' }],
       isError: true,
@@ -1303,16 +1715,17 @@ function toolDecisionAdd(args) {
   }
 
   const result = addDecision(pocketDir, {
-    title: args.title,
-    context: args.context || '',
-    options: args.options || '',
-    decision: args.decision || '',
-    consequences: args.consequences || '',
-    supersedes: args.supersedes || 'none',
+    title,
+    // 五节都会原样进 decisions.md：`{ context: true }` 落盘就是 `- Context: true`
+    context: textOption(args, 'context') || '',
+    options: textOption(args, 'options') || '',
+    decision: textOption(args, 'decision') || '',
+    consequences: textOption(args, 'consequences') || '',
+    supersedes: textOption(args, 'supersedes') || 'none',
   });
 
   return {
-    content: [{ type: 'text', text: `✅ **ADR-${result.adrId} added:** ${args.title}` }],
+    content: [{ type: 'text', text: `✅ **ADR-${result.adrId} added:** ${title}` }],
   };
 }
 
@@ -1332,11 +1745,24 @@ function toolHandoff() {
 
 function toolStateUpdate(args) {
   const pocketDir = getPocketDir();
+
+  // 与 CLI 对齐：一个字段都没给就直接报错，而不是"成功"地什么都不改。
+  // 三个字段都只收文本 —— `{ summary: true }` 会在 state.md 里留下一行 `- true`。
+  const summary = textOption(args, 'summary');
+  const nextStep = textOption(args, 'nextStep');
+  const pitfall = textOption(args, 'pitfall', 'pitfalls');
+  if (summary === undefined && nextStep === undefined && pitfall === undefined) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: pass at least one of summary / nextStep / pitfall (each needs a value)' }],
+      isError: true,
+    };
+  }
+
   const result = updateState(pocketDir, {
-    summary: args.summary,
+    summary,
     appendSummary: !!args.appendSummary,
-    nextStep: args.nextStep,
-    pitfall: args.pitfall,
+    nextStep,
+    pitfall,
   });
 
   const lines = [];
@@ -1352,22 +1778,24 @@ function toolStateUpdate(args) {
 function toolPreferencesUpdate(args) {
   const pocketDir = getPocketDir();
 
-  if (!args.key) {
+  const key = textOption(args, 'key');
+  const value = textOption(args, 'value');
+  if (!key) {
     return {
       content: [{ type: 'text', text: '❌ Error: key is required' }],
       isError: true,
     };
   }
-  if (args.value === undefined) {
+  if (value === undefined) {
     return {
-      content: [{ type: 'text', text: '❌ Error: value is required' }],
+      content: [{ type: 'text', text: '❌ Error: value is required (an empty or boolean value writes a meaningless line)' }],
       isError: true,
     };
   }
 
   const result = updatePreferences(pocketDir, {
-    key: args.key,
-    value: args.value,
+    key,
+    value,
   });
 
   const action = result.isNew ? 'added' : 'updated';
@@ -1410,7 +1838,7 @@ function toolCodeMapUpdate() {
 function toolArchive(args) {
   const pocketDir = getPocketDir();
   const result = archiveLog(pocketDir, {
-    keepLast: args.keepLast || 20,
+    keepLast: intOption(args.keepLast),
     dryRun: !!args.dryRun,
   });
 
@@ -1444,15 +1872,91 @@ function toolArchive(args) {
   }
 
   // 归档改变了 T-block 分布 → 静默刷新索引（best-effort）
-  if (!args.dryRun) {
-    try {
-      buildIndex(pocketDir, {});
-    } catch (e) { /* 索引在下次 search 时懒刷新 */ }
-  }
+  afterWrite(pocketDir, { index: !args.dryRun });
 
   return {
     content: [{ type: 'text', text: lines.join('\n') }],
   };
+}
+
+function toolRepair(args) {
+  const pocketDir = getPocketDir();
+  const result = repairLogIds(pocketDir, {
+    dryRun: !!args.dryRun,
+    applyRefs: !!args.applyRefs,
+    author: args.author,
+  });
+
+  const lines = [];
+
+  if (!result.success) {
+    lines.push(`❌ **Repair failed:** ${result.error}`);
+    if (result.renumbered && result.renumbered.length > 0) {
+      lines.push('');
+      lines.push('*(rolled back — nothing was changed)*');
+    }
+    return { content: [{ type: 'text', text: lines.join('\n') }], isError: true };
+  }
+
+  if (!result.changed) {
+    lines.push(`✅ **Nothing to repair:** ${result.message}`);
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+
+  // 编号变了 → 派生索引必须重建（旧索引里的 T 号已经指错块）
+  if (!result.dryRun) afterWrite(pocketDir, { latestT: result.latestTAfter, index: true });
+
+  lines.push(result.dryRun
+    ? `📋 **Repair plan (dry-run):** ${result.message}`
+    : `✅ **Repair completed:** ${result.message}`);
+  lines.push('');
+  lines.push('**Renumbered:**');
+  for (const c of result.renumbered) {
+    lines.push(`- T${c.from} → T${c.to} (log.md:${c.line}) ${c.heading}`);
+  }
+
+  if (result.references.length > 0) {
+    const shown = result.references.slice(0, 20);
+    lines.push('');
+    lines.push(result.applyRefs
+      ? `**References rewritten (${result.references.length}):**`
+      : `**References still naming an old T-id (${result.references.length}; NOT rewritten — pass applyRefs=true after you decide which block each one meant):**`);
+    for (const r of shown) {
+      lines.push(`- ${r.file}:${r.line} T${r.from} → T${r.to} ${r.text.slice(0, 90)}`);
+    }
+    if (result.references.length > shown.length) {
+      lines.push(`- … +${result.references.length - shown.length} more`);
+    }
+  }
+
+  const fileNames = result.fileNames || [];
+  if (fileNames.length > 0) {
+    lines.push('');
+    lines.push(`**Attachment file names still carry an old id (${fileNames.length}) — never rewritten:** renaming means \`mv\` on the file, and repair does not move history. `
+      + 'Run the mv, then `verify` to confirm the links hold.');
+    for (const f of fileNames.slice(0, 20)) {
+      lines.push(`- ${f.file}:${f.line} ${f.command}`);
+    }
+    if (fileNames.length > 20) lines.push(`- … +${fileNames.length - 20} more`);
+  }
+
+  if (result.stillShadowed && result.stillShadowed.length > 0) {
+    lines.push('');
+    lines.push(`⚠️ T${result.stillShadowed.join(', T')} also exist in log-archive.md: recall/search shows the log.md block and hides the archived one. `
+      + 'The archive declares itself read-only, so repair does not renumber it.');
+  }
+
+  if (result.recordTId) {
+    lines.push('');
+    lines.push(`📝 Record block: T${result.recordTId} — the pocket itself now states that the tool moved these numbers.`);
+  }
+
+  if (result.dryRun) {
+    lines.push('');
+    lines.push('*(dry-run: no files were modified)*');
+  }
+
+  return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
 
 function toolMigrate(args) {
@@ -1464,7 +1968,14 @@ function toolMigrate(args) {
     lines.push('## ContextPocket · Migration');
     lines.push(`- **Current version:** ${info.currentVersion || '(unknown)'}`);
     lines.push(`- **Target version:** ${info.targetVersion}`);
+    lines.push(`- **Latest registered:** ${info.latestVersion}`);
     lines.push(`- **Status:** ${info.isLatest ? 'up to date' : 'upgrade available'}`);
+
+    if (info.error) {
+      lines.push('');
+      lines.push(`❌ **${info.error}**`);
+      return { content: [{ type: 'text', text: lines.join('\n') }], isError: true };
+    }
 
     if (info.path.length > 0 && !info.isLatest) {
       lines.push('');
@@ -1472,6 +1983,12 @@ function toolMigrate(args) {
       for (const step of info.path) {
         lines.push(`- ${step.from} → ${step.to}: ${step.name}`);
       }
+    }
+
+    lines.push('');
+    lines.push('**Registered steps:**');
+    for (const s of info.available) {
+      lines.push(`- ${s.from} → ${s.to}: ${s.name}${s.hasRun ? '' : ' (builtin)'}`);
     }
 
     return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -1494,9 +2011,9 @@ function toolMigrate(args) {
     lines.push('📋 **Migration plan (dry-run)**');
     lines.push(`- From: ${result.fromVersion}`);
     lines.push(`- To: ${result.toVersion}`);
-    lines.push(`- Steps: ${result.planned.length}`);
-    for (const step of result.planned) {
-      lines.push(`  - ${step.from} → ${step.to}: ${step.name}`);
+    lines.push(`- Steps: ${result.planned.length}${result.planned.length > 1 ? ' (multi-hop, all-or-nothing)' : ''}`);
+    for (const [i, step] of result.planned.entries()) {
+      lines.push(`  ${i + 1}. ${step.from} → ${step.to}: ${step.name}`);
     }
     lines.push('');
     lines.push('*(dry-run: no files were modified)*');
@@ -1504,7 +2021,12 @@ function toolMigrate(args) {
     lines.push('✅ **Migration complete!**');
     lines.push(`- From: ${result.fromVersion} → To: ${result.toVersion}`);
     lines.push(`- Steps executed: ${result.steps.length}`);
+    for (const [i, step] of result.steps.entries()) {
+      lines.push(`  ${i + 1}. ${step.from} → ${step.to}: ${step.name}`);
+    }
     lines.push(`- Backup: ${result.backupPath}`);
+    lines.push('');
+    lines.push('*A failed hop rolls the whole pocket back and deletes that backup.*');
   }
 
   return {
@@ -1524,15 +2046,23 @@ function toolInstallHook() {
   } else if (result.action === 'appended') {
     lines.push('✅ **Pre-commit hook appended to existing hook**');
   } else if (result.action === 'upgraded') {
-    lines.push('✅ **Pre-commit hook upgraded to v2 (sync + verify)**');
+    lines.push('✅ **Pre-commit hook upgraded to v3 (pocket lookup + sync + verify)**');
   } else if (result.action === 'already-installed') {
     lines.push('ℹ️ **Pre-commit hook already installed**');
   }
   lines.push(`- Hook path: ${result.hookPath}`);
   lines.push('');
   lines.push('Before each commit the hook will:');
-  lines.push('1. `context_pocket_sync` (auto) — record staged files missed in recent T-blocks');
-  lines.push('2. `context_pocket_verify` — block on errors, allow warnings');
+  lines.push('1. check a `ContextPocket/` exists here — if not it prints a hint and skips (an');
+  lines.push('   un-bootstrapped repo never gets its commits blocked)');
+  lines.push('2. `context_pocket_sync` (auto) — record staged files missed in recent T-blocks');
+  lines.push('3. `context_pocket_verify` — block on errors, allow warnings');
+  if (!findPocketDir(projectDir)) {
+    lines.push('');
+    lines.push(
+      `⚠️  No \`${POCKET_DIR_NAME}/\` in this project yet — the hook will skip every commit until you run \`context_pocket_bootstrap\`.`
+    );
+  }
 
   return {
     content: [{ type: 'text', text: lines.join('\n') }],
@@ -1572,11 +2102,12 @@ function toolIndex(args) {
   const result = buildIndex(pocketDir, { rebuild: !!args.rebuild });
 
   const lines = [];
-  lines.push(`✅ **Search index ${result.rebuilt ? 'built' : 'refreshed'}**`);
+  lines.push(`✅ **Search index ${result.unchanged ? 'already up to date' : result.rebuilt ? 'built' : 'refreshed'}**`);
   lines.push(`- Docs indexed: ${result.docsCount} (T-blocks + ADRs + reqs + prefs)`);
   lines.push(`- Terms: ${result.termsCount}`);
   if (!result.rebuilt) {
     lines.push(`- Delta: +${result.added} added · ~${result.updated} updated · -${result.removed} removed · ${result.reused} reused`);
+    lines.push(`- Re-tokenized: ${result.retokenized} of ${result.docsCount} docs`);
   }
   lines.push(`- Took: ${result.tookMs}ms`);
   lines.push(`- File: ${path.relative(process.cwd(), result.path) || result.path}`);
@@ -1592,15 +2123,16 @@ function toolIndex(args) {
 function toolDistill(args) {
   const pocketDir = getPocketDir();
   const dryRun = !!args.dryRun;
+  const recentKeep = intOption(args.recentKeep, undefined);
 
-  const result = distill(pocketDir, { dryRun });
+  const result = distill(pocketDir, { dryRun, recentKeep });
 
   const lines = [];
 
   if (result.nothing) {
     lines.push('ℹ️ **Nothing to distill yet:**');
     lines.push('- No log-archive.md and no old turns in log.md.');
-    lines.push('- Distill becomes useful after /archive moves old T-blocks out.');
+    lines.push('- Distill becomes useful once archiving has moved old T-blocks out (context_pocket_archive).');
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 
@@ -1642,8 +2174,8 @@ function toolImport(args) {
   const result = importSession(pocketDir, {
     file: args.file,
     source: args.source || 'auto',
-    limit: args.limit ? parseInt(args.limit, 10) : 100,
-    truncate: args.truncate ? parseInt(args.truncate, 10) : 400,
+    limit: intOption(args.limit, 100),
+    truncate: intOption(args.truncate, 400),
     dryRun: !!args.dryRun,
   });
 
@@ -1685,8 +2217,13 @@ function toolHub(args) {
   const lines = [];
 
   if (action === 'pref') {
+    // key / value 都只收文本（schema 写的就是 type: 'string'）：`{ value: true }` 存进
+    // hub.json 后，下一个项目会把它当字符串 "true" 读出来用
+    const key = textOption(args, 'key');
+    const value = textOption(args, 'value');
+
     // 无 key → 列出全部全局偏好
-    if (!args.key) {
+    if (!key) {
       const prefs = getGlobalPref() || {};
       const entries = Object.entries(prefs);
       lines.push(`## Global preferences · ${getHubFile()}`);
@@ -1701,18 +2238,26 @@ function toolHub(args) {
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
+    // 给了 value 却不是文本（true / 空串）：不能悄悄降级成"读取"，那会让人以为写进去了
+    if (args.value !== undefined && value === undefined) {
+      return {
+        content: [{ type: 'text', text: '❌ Error: value was given without a value — nothing was stored' }],
+        isError: true,
+      };
+    }
+
     // key + value → 设置；仅 key → 读取
-    if (args.value === undefined) {
-      const v = getGlobalPref(args.key);
+    if (value === undefined) {
+      const v = getGlobalPref(key);
       lines.push(v === null
-        ? `(no global pref "${args.key}")`
-        : `- ${args.key}: ${v}`);
+        ? `(no global pref "${key}")`
+        : `- ${key}: ${v}`);
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
-    const r = setGlobalPref(args.key, args.value);
+    const r = setGlobalPref(key, value);
     lines.push(`✅ **Global preference ${r.isNew ? 'added' : 'updated'}:**`);
-    lines.push(`- ${args.key}: ${args.value}`);
+    lines.push(`- ${key}: ${value}`);
     lines.push(`- Stored in: ${getHubFile()}`);
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   }

@@ -3,15 +3,16 @@ name: ContextPocket
 description: >
   Persist complete per-turn dev context into <project-root>/ContextPocket/ so any AI agent
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
-  and preferences. Supports cross-agent handoff, model switches, and long-running projects.
-version: 1.0.0
+  and preferences — activates on its own, with no commands for the user to type or remember.
+  Supports cross-agent handoff, model switches, and long-running projects.
+version: 1.1.0
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
 
 # ContextPocket — cross-agent dev-context sync
 
-> **Skill format**: v1 · **For**: AI coding agents (MiniMax Code, Claude Code, Cursor, etc.) · **See**: README.md for human-facing overview
+> **Skill format**: v1 — this document's own layout version. Not the data format: `ContextPocket/readme.md` says `format: v2` for newly created pockets, and v1 folders upgrade with `context-pocket migrate --to latest` ([docs/MIGRATION.md](./docs/MIGRATION.md)). · **For**: AI coding agents (MiniMax Code, Claude Code, Cursor, etc.) · **See**: README.md for human-facing overview
 >
 > This `SKILL.md` is the daily-read **main file**. Two companion files split off the bulk:
 > - [`SKILL-advanced.md`](./SKILL-advanced.md) — Bootstrapping, Project type templates, Archiving, Edge cases（含版本迁移）。Open when you hit a template / project type / archive question.
@@ -29,8 +30,8 @@ ContextPocket does NOT store secrets, credentials, or production data — it sto
 - **What NOT to record:** tokens, secrets, production data, build artifacts, transient logs.
 - **Who reads it:** any AI agent in the project, including future model switches. Markdown is the only truth source so it's agent-agnostic.
 - **When a model switches** (e.g. Sonnet → Opus, or different vendor): the new model has zero conversation memory. It **MUST** re-read `ContextPocket/` before touching the project. This is the only way cross-model continuity works.
-- **Search auto-uses the index** (`ContextPocket/assets/search-index.json`). The index is a derivable cache — you can delete it at any time and `context-pocket index --rebuild` (CLI) or `context_pocket_index` (MCP) will rebuild it. Search without `--no-index` / without `context_pocket_search_no_index` falls back to a slower full scan if the index is missing.
-- **User-level hub** (`~/.contextpocket/` or `$CONTEXTPOCKET_HOME/hub/`): a tiny cross-project registry that records which projects have ContextPocket + global preferences. **All hub operations are best-effort**: a hub failure (network, missing dir) must never block / break ContextPocket writes in the project itself. Each project's `ContextPocket/` is always self-sufficient.
+- **Search auto-uses the index** (`ContextPocket/assets/search-index.json`). The index is a derivable cache — you can delete it at any time and `context-pocket index --rebuild` (CLI) or `context_pocket_index` (MCP) will rebuild it. A search with no index (missing, corrupt, stale, or written by an older index format) **rebuilds it on the spot and still answers from it**; it only falls back to a full scan when even that fails. `--no-index` (MCP `noIndex: true`) is the deliberate scan — same matches, same order. On `log append` / `log amend` the same flag means the other end of the cache: skip the *refresh* after that write — the next search rebuilds it and finds the turn anyway, so bulk re-logging loops can use it safely.
+- **User-level hub** (`~/.contextpocket/hub.json`, or `$CONTEXTPOCKET_HOME/hub.json` where `CONTEXTPOCKET_HOME` is the *directory* that holds it): a tiny cross-project registry that records which projects have ContextPocket + global preferences. **All hub operations are best-effort**: a hub failure (network, missing dir) must never block / break ContextPocket writes in the project itself. Each project's `ContextPocket/` is always self-sufficient. `bootstrap` is the only command that writes there; `noHub: true` (CLI `--no-hub`) skips that one write — use it for throwaway/temporary directories and CI runs, and leave it off for projects the user actually works in, since `hub list` and MCP project resolution rely on the entry.
 
 ---
 
@@ -41,12 +42,13 @@ The Skill auto-detects which mode is available and falls back gracefully. Always
 ### Mode 1: MCP mode (best reliability)
 - Configure your agent to load `mcp-server.js` from the Skill directory.
 - All writes go through MCP tools (`context_pocket_*`). Never manually edit markdown files.
-- Tools cover: `log_append`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `verify`, `check_conflicts`, `search`, `search_no_index`, `index`, `distill`, `import`, `hub`.
+- Tools cover: `bootstrap`, `status`, `verify`, `sync`, `log_append`, `log_amend`, `absolute_add`, `recall`, `diff`, `search`, `why`, `check_conflicts`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `migrate`, `repair`, `install_hook`, `uninstall_hook`, `index`, `distill`, `import`, `hub` (27 tools).
+- `search` takes a `noIndex` boolean — there is **no** separate `search_no_index` tool.
 
 ### Mode 2: CLI mode (good reliability)
 - Script path: `<skill-dir>/bin/context-pocket.js`
 - Invoke: `node <skill-dir>/bin/context-pocket.js <command> --dir <project-root>`
-- All commands are subcommands (`log append`, `state update`, etc.). Use `--json` for machine-readable output. Use `--no-index` on `search` to skip the index cache.
+- All commands are subcommands (`log append`, `state update`, etc.). Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 27 the MCP server registers). Use `--no-index` on `search` to skip the index cache.
 
 ### Mode 3: Pure skill mode (compatibility fallback)
 - Manually write the markdown files following the rules in **Per-turn rules** + **Pre-reply safety hook**.
@@ -57,72 +59,48 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 
 ---
 
-## Commands
+## Quick responses (triggered by intent — no slash commands)
 
-> **Full command list** (all 19 commands + `/help` menu + smart language routing). Each command name maps 1:1 to a CLI subcommand and an MCP tool.
+> **There are no ContextPocket slash commands.** Users talk to the agent in natural language; the agent infers intent and calls the right tool. This is deliberate: short command names like `/verify`, `/import`, `/diff`, `/search` collide with agent built-ins, and forcing users to memorize a command table is friction with no payoff.
+>
+> **Rule: never tell the user to "type /xxx".** If the user asks how to use this skill, answer inline. If they say `/openpocket` or any other slash name out of habit, treat it as the nearest intent below and just do it.
 
-### `/openpocket`
-Enable auto-save for this project. Idempotent. Creates `ContextPocket/` from `templates/` (see `SKILL-advanced.md` Bootstrapping for the copy strategy; full templates in `SKILL-reference.md`). Detects existing format version and prompts for migration if needed.
+| What the user says (any phrasing) | What the agent does | One-line reply |
+|---|---|---|
+| First time in a project · "开始记一下" · "给我建个记录" · "接手这个项目" | `bootstrap` (idempotent) | `✅ ContextPocket ready, auto-recording on` |
+| "现在什么情况" · "进度到哪了" · "什么状态" | `status` | one-line summary |
+| "这条记成红线" · "绝不能改 X" · "这个必须保留" | `absolute add` | `✅ written to absolute.md — never compressed` |
+| "交接一下" · "我要换模型了" · "把这个交给别人" | `handoff` | `✅ handoff.md generated` |
+| "查一下有没有漏" · "提交前检查一下" · "健康吗" | `verify` | pass / or a list of issues **each with a runnable fix command** |
+| "代码是不是改了没记" · "没进 git 的项目也能查漏了吗" | `verify` with `drift: true` (`--drift`) | warning naming the files whose mtime is later than the last record (works without git; never blocks a commit) |
+| "补一下 T7" · "刚才漏了用户那句话" | `log amend` | `✅ T7 filled: User` |
+| "这文件谁改的" · "为什么长这样" | `why <path>` | matching turns, split by evidence: `[changed]` (in that turn's Action) vs `[mentioned only]` (Uncertain / Attachments / Conflicts — talked about, not modified) |
+| "上次那个 bug 怎么修的" · "搜一下 X" | `search <kw>` | matching T-blocks |
+| "T7 当时说了什么" · "回看一下那轮" | `recall T<n>` | the full T-block |
+| "T5 到 T9 变了啥" | `diff Ta Tb` | the delta |
+| "有什么待确认的" · "有没有我不确定的" | read `❓` lines directly (no tool) | the list, then "逐条确认吗?" |
+| "有没有前后矛盾" | `check-conflicts` | severity-ranked result |
+| "log.md 里有两个 T9" · "两个 Agent 写的号撞了" · "合并之后编号乱了" | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
+| "git 有没有漏记的" | `sync` (`--auto` to write) | "补了 N 个" |
+| "把旧会话导进来" | `import` | "导入了 N 轮" |
+| "把旧的提炼一下" | `distill` | report written; **agent then judges + merges by hand** |
+| "导出给同事" | agent writes the snapshot file itself (no tool) | the file path |
+| "重新开始" | `archive --keep-last N`, then rebuild | **confirm with the user first** |
+| "这玩意儿怎么用" | answer inline from this table + `docs/FAQ.md` — **never** reply "see README.md" |
 
-### `/putintopocket`
-Manually record one substantive turn (use when /openpocket is not active). Triggers a single log append + code-map refresh.
+> Bare names above are the CLI subcommand (`context-pocket <name>`) and the MCP tool (`context_pocket_<name>`) for the same capability. Prefer MCP > CLI > pure-skill, per Execution modes.
 
-### `/sync` (Git safety net + manual catch-up)
-- **Git safety net**: in MCP/CLI mode, commit pending ContextPocket changes so they survive a session crash.
-- **Manual catch-up**: in Pure Skill mode, use this when you suspect a turn was missed. It walks recent conversation windows and backfills missing T-blocks.
+### Activation
 
-### `/statuspocket`
-One-line health summary (T range, R counts, ADR count, last verification, search index mtime).
+No command to run. Activation is automatic:
 
-### `/diff <Ta> <Tb>` (what changed between two turns, read-only)
-Diffs requirements / state / decisions between two T-ids. Useful before applying an old handoff.
-
-### `/recall <Tn>` (fetch one turn, read-only)
-Returns the full T-block. Use to revisit a specific turn's decisions and pitfalls without reading the whole log.
-
-### `/questions` (collect all open ❓ items)
-Lists every `❓` line across `requirements.md`, `state.md`, and recent T-blocks. Always ask the user to confirm before acting on these.
-
-### `/check-conflicts`
-Scans all 6 conflict dimensions (stack / requirement / ADR / naming / deployment / API). Reports ⚠️ items, marks old entries `(superseded by T<n>)`, prompts user for adjudication.
-
-### `/handoff`
-Generates `handoff.md` (concise summary for the next agent / model). Use before model switch, end of session, or before a long absence.
-
-### `/verify` (pre-handoff health check)
-Validates file integrity (T-number continuity, references valid, file size sane) before a formal handoff. Returns ⚠️ list.
-
-### `/searchpocket <keyword>`
-Full-text + tag search. Auto-uses `assets/search-index.json` if present (rebuilt lazily). Use `--no-index` (CLI) or `context_pocket_search_no_index` (MCP) to force a slow full scan.
-
-### `/digest` (distill old content back into the living docs)
-Run on `log-archive.md` (or any markdown inside `ContextPocket/`) to generate a **read-only** distill report (`ContextPocket/.distill-report.md`). The agent then:
-1. Reads the report section by section.
-2. Judges each item against current requirements / decisions / pitfalls.
-3. **Manually merges** the keepers into `state.md` / `requirements.md` / `decisions.md` / `absolute.md`.
-4. Deletes the report when done.
-
-**Hard rule**: the distill command only writes the report. It never touches the live docs. The agent does the merging.
-
-### `/import <session.jsonl>` (backfill past agent conversations)
-Import a JSONL session log (claude-code / codex auto-detected by file shape). Dry-run by default; `--apply` to write. Imported T-blocks are tagged `[imported]` so future agents know the provenance. Run after `/openpocket` if you want this turn recorded too.
-
-### `/exportpocket`
-Generates a single `pocket-snapshot-<date>.md` (concatenation of all current files). Keep latest 3; older ones auto-removed on next `/exportpocket`.
-
-### `/resetpocket`
-**Destructive.** Wipes `ContextPocket/` after user confirmation. Does NOT touch the project source. Use only when starting fresh.
-
-### `/help` (分类菜单导航 — 像 CLI 分层帮助)
-Main menu + category navigation, like a CLI's `--help` with sub-menus.
-
-The default reply is the **main menu** (ASCII frame with the 8 categories). Agent also accepts natural language: "怎么用"→`/help`、`"还有什么功能"`→`/help all`、`"出问题了"`→`/help 8`、`"T 编号是什么"`→`/help 6` 等。**Never** respond with "see README.md" — 始终内联回答。
-
-`/help` 的回复由 Agent 根据上面"主菜单 / 分类简要说明 / 完整命令列表 / 单命令详细说明"的规则**内联生成**，直接引用本文件 **Commands** 区（`### /openpocket` …）与 `docs/FAQ.md` 的对应条目即可，不要再外跳到其他模板文件。
+- **Project has no `ContextPocket/`** → offer to `bootstrap` on the first substantive turn.
+- **Project already has `ContextPocket/`** → read `index.md` + `state.md` before doing anything, then keep recording. This is the model-switch path (see Cross-agent handoff).
+- **Both** → say it in one line, then get to work. Never make setup a prerequisite for answering the user.
 
 ---
 
-## Per-turn rules (after `/openpocket`)
+## Per-turn rules (once ContextPocket is active)
 
 > **⚠️ Pure Skill Mode Enforcement — READ BEFORE EVERY TURN**
 >
@@ -132,6 +110,8 @@ The default reply is the **main menu** (ASCII frame with the 8 categories). Agen
 
 **In MCP mode:** use MCP tools for ALL writes. Never manually edit markdown files.
 - Append log → `context_pocket_log_append`
+- Fill a half-written turn → `context_pocket_log_amend`
+- Add 🔒 red line → `context_pocket_absolute_add`
 - Add requirement → `context_pocket_req_add`
 - Add decision → `context_pocket_decision_add`
 - Generate handoff → `context_pocket_handoff`
@@ -144,7 +124,7 @@ The default reply is the **main menu** (ASCII frame with the 8 categories). Agen
 **In CLI mode:** use CLI commands for ALL writes. Never manually edit markdown files.
 - Script path: `<skill-dir>/bin/context-pocket.js`
 - Invoke: `node <skill-dir>/bin/context-pocket.js <command> --dir <project-root>`
-- `log append` / `req add` / `decision add` / `handoff` / `state update` / `preferences update` / `code-map update` / `archive` / `verify`
+- `log append` / `log amend` / `absolute add` / `req add` / `decision add` / `handoff` / `state update` / `preferences update` / `code-map update` / `archive` / `verify`
 
 **In pure skill mode:** manually write files following all rules below. This is the baseline.
 
@@ -161,7 +141,7 @@ The default reply is the **main menu** (ASCII frame with the 8 categories). Agen
 **NOT substantive** (skip append):
 - Pure acknowledgment: "好的" / "继续" / "ok" / "嗯" / "yes" / "go ahead"
 - Repeating a previous question
-- Meta-conversation about ContextPocket itself (e.g. "how do I use /putintopocket")
+- Meta-conversation about ContextPocket itself (e.g. "这玩意儿怎么用")
 
 If the turn is NOT substantive → do nothing to ContextPocket files, consume no T-number. Move on.
 
@@ -182,13 +162,18 @@ Token 不够时从 P6 往下降级，**P0 永远不能跳过**。
 ### Steps
 
 1. **Conflict check** (before writing): compare this turn's info against current `requirements.md` / `state.md` / `decisions.md` / recent T-blocks for directional contradictions. If found → plan a `### Conflicts` section + mark old items `(superseded by T<n>)` + one-line user reminder.
-   - **In CLI/MCP mode:** after writing, run `context-pocket check-conflicts` (or `context_pocket_check_conflicts`) to scan all 6 dimensions.
+   - **In CLI/MCP mode the scan is part of the write**: `log append` runs the same 6-dimension check on the block it is about to save and writes what this turn **newly** collides with into that block's `### Conflicts`, prefixed `[auto]` (MCP: same, unless you pass `conflictCheck: false`). So do **not** copy those findings in yourself — they would be recorded twice. Do add what only a reader can see (API-shape changes, business-semantic contradictions) via `--conflicts`; your own lines stay first, verbatim.
+   - `context-pocket check-conflicts` / `context_pocket_check_conflicts` is still the command for the **whole-pocket** picture (existing contradictions, not just this turn's). And if an append answers `conflictCheckSkipped` or a `conflictCheckError` (`⚠️ 本轮没做冲突检查…`), that turn went in unchecked — run the scan then, and tell the user it was not the tool that checked it.
 2. **Append** one complete block to `log.md` (P0). **MUST be done before the reply is sent.**
    - **Write ONLY this turn's content.** Omit every empty subsection (no attachments this turn → no `### Attachments`; no commits → no `### Commits`; etc.). **Never carry over the previous block's sections, filenames, or ❓/🔒 items into the new block** — a stray section from the prior block is a bug, not style.
    - Insert session divider if the date changed.
    - Save attachments → `assets/`. Reference in block.
-   - Action bullets must specify file paths + operation type.
+   - **Action bullet format: `<操作> <文件路径> — <做了什么>`** (em-dash separator). Example: `修改 src/auth/session.ts — 修复登录 500 的空指针`
+     - This format is not cosmetic. `context-pocket sync` (the git safety net) and `context-pocket why` read file paths out of Action lines: a path in **Action** is strong evidence that this turn touched that file. Files the parser cannot see there are treated as **unrecorded**, so every commit re-creates a redundant `[auto]` T-block.
+     - One bullet may name several files: `新增 src/a.ts、src/b.ts — 补齐导出`. The parser also picks up bare paths anywhere in an Action line, so prose like `新增 src/login.ts 并改了 config.js` still counts as covered.
+     - A path that only appears **outside** Action (`### Decisions` / `### Uncertain` / `### Attachments` / `### Conflicts` …) is weak evidence: `sync` still counts the file as unrecorded, and `why` labels that turn `[mentioned only]` instead of `[changed]`. So never rely on another section to record an edit — if you changed it, name it in Action; if you only plan to, `### Uncertain` is the right place (and `sync` will point you at it so you can `log amend` that turn instead of accepting an `[auto]` block).
    - Record commits in `### Commits` if any.
+   - **Sign the turn when more than one agent writes into this pocket**: `log append --author "agent-A"` (MCP: `author`) puts the writer in a `### Author` section. If nobody told you who is recording, omit it — the tool never guesses a name, and an unsigned block is not a defect. `log amend <T> --author` can only add the section where it is missing; it will not replace an author already on that block.
 3. **Update** files in priority order (P1→P6):
    - **Read old content before overwriting.** Preserve still-valid entries.
    - `code-map.md`: update Structure (add/remove/modify entries, `reqs:` links), Recently Changed, Key Relationships.
@@ -206,6 +191,9 @@ Token 不够时从 P6 往下降级，**P0 永远不能跳过**。
    - **Do NOT prompt** for pure schedule / scope / process emphasis, e.g. "must ship by Friday", "this is urgent", "prioritize this feature". These are time/scope, not architectural red-lines → record normally in log/state, no 🔒 prompt.
    - When in doubt about category, **ask the user to confirm whether it's a red-line** rather than auto-prompting.
    - On `yes` → append 🔒 to `absolute.md` (verbatim).
+     - **In CLI mode:** `context-pocket absolute add --text "<user's words>" [--gist "<short>"]`
+     - **In MCP mode:** `context_pocket_absolute_add`
+     - **In pure skill mode:** write the `## 🔒 T<n> · <gist>` block into `absolute.md` directly.
    - **Never auto-mark.**
 5. **Quiet**: respect `config.md quiet` — true = max one short confirmation line; false = brief per-file report.
 
@@ -236,13 +224,18 @@ Because every command above relies on the agent following this prose, the bigges
 2. **Does code-map need it?** files created/modified/deleted this turn?
    - Yes → **MUST** update `code-map.md` now, not "later".
 3. **Are the priority files consistent?** state / requirements / decisions / index reflect this turn?
-   - Yes → done. **No / unsure → do it, don't skip.** If genuinely token-starved, keep P0 (`log.md`) and defer the rest, then recommend `/sync`.
+   - Yes → done. **No / unsure → do it, don't skip.** If genuinely token-starved, keep P0 (`log.md`) and defer the rest, then tell the user "这轮只记了一半，回头补齐" — and actually fill it in on the next turn.
 
 **MUST-rules:**
 - When in doubt, **write**. An over-recorded block is cheap; a missing turn is a broken handoff.
-- If a turn clearly couldn't be recorded, tell the user in the Quiet line: `"(ContextPocket 本轮未记全，稍后可 /sync)"`.
+- **Always pass the user's own words when appending.** `log append` without `--user` produces a T-block that `verify` reports as an ERROR, and the pre-commit hook blocks commits on errors. In MCP mode, pass `user`. If a turn was already appended without it, fix it immediately with `log amend <Tn> --user "..."` / `context_pocket_log_amend` — never leave it, and never hand-edit `log.md`.
+- **Pass `--when` only when the user said a different time.** In v2 pockets `log append` stamps the moment you record (`--- WHEN: 2026-10-03 14:47 ---`, `recall` shows it, `--json` returns the verbatim line). If the turn actually happened earlier, pass `--when "2026-10-03 09:00 → 11:30"` (MCP: `when`). Only a day is known → `--when "2026-10-03"` (stores `(day)`, never a fake `00:00`). The user's own words → `--when "上周三下午"` (stored verbatim, never computed). Nothing known → omit the flag; the tool will not guess, and it will not invent a time from file mtimes. Never hand-edit the line: `log amend <T> --when` adds a missing one or replaces a day-only one, and refuses to overwrite a moment that was already recorded — for that, append `## T<n>-fix`. A `format: v1` folder gets no time line at all until the user runs `context-pocket migrate --to latest` (`verify` says so in one WARNING, and the hook never blocks on it); if you passed `--when` there anyway, the T-block is still recorded (log is P0) and the tool answers with the reason — `whenSkipped` in `--json` — so read it instead of assuming the time landed.
+- If a turn clearly couldn't be recorded, say so in one line: `"这轮 ContextPocket 只记了一半，下一轮我补齐"` — then do it.
 - **The agent MUST NOT respond to the next user message until missing T-blocks are appended.**
 - **The agent MUST append at least the T-block (P0) even if token budget is nearly exhausted.** Defer P1-P6 if needed, but P0 is non-negotiable.
+- **Never record a credential verbatim — including in a 🔒 entry.** When the user pastes an error containing a key/token, `verify` reports it as an ERROR (`secret-leak`), the pre-commit hook then blocks the commit, and `archive`/`migrate` refuse to run while any error exists. Quote the sentence around it and leave the value out ("报错原文：401 using <Anthropic key，已略> 调用失败"). This deliberately does *not* apply to `absolute add`: a 🔒 entry is by definition the user's exact words, so the tool never rewrites text — a pocket that is *supposed* to hold such a string (a key-rotation runbook) sets `- secret_scan: false` in `config.md` instead. Scan output only ever shows a masked prefix (`sk-ant…(30 chars)`) because your own tool output gets copied into the next T-block.
+- **Never do arithmetic on the user's numbers.** You don't have the full picture, so a stated quantity is data you record, not a counter you maintain. When the user says "本地起 3 个 worker" and later "其中一个改成 5 个", `state.md` gets the new sentence quoted in `log.md` and the *stated* value written — never `3 - 1 + 5 = 7`. Same for counts of endpoints, tests, deps, or TODOs: only update a number when the user states a number. Deductions ("he said two of the three are done, so one is left") belong in `### Uncertain`, phrased as an inference, not in `state.md`.
+- **Never archive on your own initiative.** `archive_at` is a *warning* threshold, not a trigger: `status` says "archive is due" and `verify` emits a `log-size` warning once `log.md` passes it. When you see it, tell the user in one line and offer `archive`; moving history is their call (the tool refuses to archive while `verify` has errors, and rolls back if the post-archive check fails).
 - This hook makes auto-save **explicit** rather than purely memory-based — the agent re-checks itself instead of trusting it "remembered".
 
 ---
@@ -266,8 +259,8 @@ A **model switch** is a handoff: the new model has no conversation memory and mu
   4. **First read: `code-map.md`** (understands what the project is and where everything is).
   5. Then `state.md` (current situation + how to run + environment + **pitfalls — read these carefully**).
   6. Then `requirements.md` + `preferences.md` + `decisions.md` (what to do, how the user wants it, what's locked in).
-  7. Open `log.md` / `handoff.md` for recent history. Use `/searchpocket <词>` / `/recall T<n>` / `/diff Ta Tb` to find specifics.
+  7. Open `log.md` / `handoff.md` for recent history. Use `search` / `recall T<n>` / `diff Ta Tb` to find specifics.
   8. Open `assets/` for referenced files.
-  9. **Before acting on any ❓ item → ask user to confirm** (`/questions` lists them all).
-  10. If agent supports ContextPocket → `/openpocket` to enable auto-save; run `/verify` before a formal handoff.
+  9. **Before acting on any ❓ item → ask user to confirm** (the agent reads the `❓` lines directly).
+  10. Say in one line that ContextPocket is active and recording, then continue the work. Run `verify` before any formal handoff.
 - **Serial handoff only.**

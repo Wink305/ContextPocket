@@ -1,0 +1,25 @@
+# ContextPocket reads and writes Markdown with LF only, and its parser treats LF as the
+# single supported line ending. Normalize the whole repo to LF so a Windows checkout gets
+# byte-identical files to a POSIX checkout (otherwise log.md / templates / SKILL docs
+# differ per platform and `verify` noise follows).
+* text=auto eol=lf
+
+# Explicit overrides for the file types this tool actually parses and rewrites.
+*.js text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.svg text eol=lf
+*.sh text eol=lf
+
+# The Git pre-commit hook is a /bin/sh script with a shebang: it must stay LF or git will
+# refuse to run it ("no such file or directory" from the CRLF shebang line).
+scripts/pre-commit text eol=lf
+
+# Never normalize or text-diff real binary artifacts.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

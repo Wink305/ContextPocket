@@ -1,0 +1,50 @@
+{
+  "name": "context-pocket",
+  "version": "1.1.0",
+  "description": "Zero-dependency CLI + MCP server that auto-records every AI coding conversation turn into a project-local ContextPocket/ folder of plain Markdown, so any agent or model can pick the context back up in seconds.",
+  "keywords": [
+    "context",
+    "memory",
+    "handoff",
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "agent",
+    "cli",
+    "markdown",
+    "zero-dependency",
+    "no-dependencies",
+    "session-log",
+    "claude-code",
+    "cursor"
+  ],
+  "license": "MIT",
+  "author": "ContextPocket Contributors",
+  "bin": {
+    "context-pocket": "bin/context-pocket.js",
+    "context-pocket-mcp": "mcp-server.js"
+  },
+  "main": "lib/core.js",
+  "engines": {
+    "node": ">=14"
+  },
+  "scripts": {
+    "test": "node tests/run.js",
+    "lint": "node -e \"var fs=require('fs'),path=require('path'),cp=require('child_process'),skip={'node_modules':1,'dist':1,'build':1,'coverage':1};function walk(d){var out=[];fs.readdirSync(d,{withFileTypes:true}).forEach(function(e){if(skip[e.name]||e.name.charAt(0)==='.')return;var p=path.join(d,e.name);if(e.isDirectory()){out=out.concat(walk(p));}else if(e.name.endsWith('.js')){out.push(p);}});return out;}var files=walk('.');if(files.length===0){throw new Error('lint: no .js file found');}files.forEach(function(p){cp.execFileSync(process.execPath,['--check',p],{stdio:'inherit'});});console.log('lint ok: syntax-checked '+files.length+' js file(s)');\"",
+    "smoke": "node mcp-smoke.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/",
+    "assets/",
+    "docs/",
+    "scripts/",
+    "mcp-server.js",
+    "SKILL*.md",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ]
+}

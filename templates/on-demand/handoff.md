@@ -1,5 +1,5 @@
 # Handoff · T<n> · <date>
-> ⚠️ STALE if log.md's latest T > T<n>. Regenerate with /handoff before relying on this.
+> ⚠️ STALE if log.md's latest T > T<n>. Regenerate the handoff before relying on this.
 
 ## Project Identity
 <readme.md identity line>
@@ -16,8 +16,8 @@
 ## Next Steps
 <from state.md>
 
-## Code Map (top-level only; full detail in code-map.md)
-- <file> → <role>
+## Code Map (top 3 levels; full detail in code-map.md)
+- <path> → <role>
 
 ## Key Decisions
 <ADR titles from decisions.md>
@@ -30,4 +30,4 @@
 
 ## Resume
 Read code-map.md + state.md first. Open log.md / assets/ for detail.
-/openpocket to continue. Run /verify before formal handoff.
+ContextPocket is already active in this project — keep recording every turn.
