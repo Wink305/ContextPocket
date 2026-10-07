@@ -1111,6 +1111,16 @@ function cmdLogAppend(options) {
       : '';
     console.log(`\n  ✅ T${result.tId} added: ${fields.gist}\n` + whenSuffix + skipSuffix);
 
+    // 本轮新建的块缺了 verify 会判 ERROR 的小节：当场说，别等 archive/migrate/提交撞墙。
+    // 只报这一块（不回扫历史），否则老 pocket 每次 append 都会被别人的漏记刷屏。
+    if (result.missingSections && result.missingSections.length > 0) {
+      console.log(colorize(`  ⚠️  T${result.tId} 没有 ${result.missingSections.join(' / ')} 节 — verify 会判成 ERROR 并拦住 archive/migrate/提交：`, 'yellow'));
+      for (const title of result.missingSections) {
+        const flag = title === 'User' ? '--user' : '--action';
+        console.log(colorize(`     context-pocket log amend ${result.tId} ${flag} "…"\n`, 'dim'));
+      }
+    }
+
     // 检出的冲突已经写进本块的 Conflicts 节；这里只负责让人当场看见
     if (result.conflictsWritten > 0) {
       console.log(colorize(`  ⚔️  ${result.conflictsWritten} 条冲突已记入 T${result.tId} 的 Conflicts 节：`, 'yellow'));
@@ -1143,6 +1153,8 @@ function cmdLogAppend(options) {
       when: result.when || null,
       // 非 null = 调用方给了 --when，但这一轮的时间没能落盘，原因写在里面
       whenSkipped: result.whenSkipped || null,
+      // 本轮新建块里缺的必需小节（verify 会判 ERROR）；空数组 = 这一条写得齐
+      missingSections: result.missingSections || [],
       // 写时冲突闸：all 是全部检出（含只提示、不写进块的 info 那条），
       // conflictsWritten 是已进本块 Conflicts 节的条数；skipped/error 说明这一轮没检查成
       autoConflicts: result.autoConflicts,
@@ -1825,7 +1837,9 @@ function cmdDistill(options) {
   const result = distill(pocketDir, { dryRun, recentKeep });
 
   if (options.json) {
-    emitJson(Object.assign({ ok: true, recentKeep: recentKeep === undefined ? null : recentKeep }, result));
+    // 报"生效的那个数"而不是"旗标给没给"：没给 --recent-keep 时用的是 config.recent_keep，
+    // 报 null 会让人以为窗口没生效（判据一直是对的，只是这个数字会骗人）
+    emitJson(Object.assign({ ok: true }, result));
   }
 
   console.log('');
@@ -2312,8 +2326,12 @@ function main() {
     --author <text>      Who records this turn (your agent id, not the user).
                          Several agents share one ContextPocket/; this is what
                          tells their turns apart later. Goes in ### Author.
-    --user <text>        User request text
-    --action <text>      Action description
+    --user <text>        User request text (### User — verify makes a block
+                         without it an ERROR, and an ERROR blocks archive,
+                         migrate and the pre-commit hook)
+    --action <text>      Action description (### Action — same rule as --user;
+                         omit it and the append still succeeds, but it now says
+                         so on the same line as the ✅)
     --commits <csv>      Commit hashes
     --decisions <text>   Decisions & constraints
     --pitfalls <text>    Pitfalls discovered (alias: --pitfall)
@@ -2322,7 +2340,8 @@ function main() {
     --attachments <text> Attachment references
     --uncertain <text>   Uncertain items
     --when <text>        When this turn happened (v2+ pockets only).
-                         "2026-10-03 09:00 → 11:30" / "2026-10-03" / any
+                         "2026-10-03 09:00 → 11:30" · day-only range
+                         "2026-05-01 → 2026-05-03" · "2026-10-03" / any
                          verbatim words ("上周三下午" — stored as-is, never
                          computed). Default: the write clock.
     --no-conflict-check  Skip the write-time conflict scan (it runs by default:
@@ -2330,7 +2349,12 @@ function main() {
                          already in log.md, and anything it newly finds is
                          recorded in this block's Conflicts section as
                          "[auto] …" and printed here).
-    --verify             Run verify after append
+    --verify             Run the full pocket health check after appending and
+                         exit 1 if it finds errors (opt-in here; the MCP tool
+                         context_pocket_log_append runs it unless you pass
+                         verify=false — the difference is deliberate: a full
+                         verify re-reads every file, which on an 800-turn
+                         pocket is paid on every single append).
     --no-index           Skip the index refresh that normally happens right
                          after the write. The turn is still in log.md and still
                          searchable — the next search notices the source files

@@ -1589,6 +1589,10 @@ function toolLogAppend(args) {
   if (result.conflictCheckError) {
     output += `\n⚠️ This turn was NOT conflict-checked: ${result.conflictCheckError}`;
   }
+  // 本轮新建的块缺了 verify 会判 ERROR 的小节：当场给修法，别等 archive/migrate 被拦
+  if (result.missingSections && result.missingSections.length > 0) {
+    output += `\n🧾 T${result.tId} is missing ${result.missingSections.join(' / ')} — verify counts that as an ERROR, which blocks archive, migrate and pre-commit. Fill it now: context_pocket_log_amend { tId: ${result.tId}, ${result.missingSections.map((s) => (s === 'User' ? 'user: "…"' : 'action: "…"')).join(', ')} }`;
+  }
 
   if (args.verify !== false) {
     const verifyResult = verify(pocketDir);

@@ -1,6 +1,6 @@
 {
   "name": "context-pocket",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Zero-dependency CLI + MCP server that auto-records every AI coding conversation turn into a project-local ContextPocket/ folder of plain Markdown, so any agent or model can pick the context back up in seconds.",
   "keywords": [
     "context",

@@ -55,7 +55,7 @@ context-pocket migrate --dir <project-root> --to v2             # 真写：先�
 
 ### Q: 怎么确认我装的 context-pocket 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"1.1.0","source":"package.json","node":"<你的 Node 版本>"}`。
+**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"1.2.0","source":"package.json","node":"<你的 Node 版本>"}`。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余三处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、以及 `CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 
@@ -172,7 +172,7 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 
 - `bootstrap`（`context-pocket bootstrap`）— 初始化：按模板建 10 个核心文件（lite 模式 5 个）、扫目录预填 code-map、登记 hub（加 `--no-hub`，MCP 写 `noHub: true`，就只建 pocket，`CONTEXTPOCKET_HOME` 下一个字节都不写；之后去掉这个开关重跑一次即可补登记）。**不做体检**，`ContextPocket/` 已存在时是无害的 no-op（退 0，一个字节都不改）
 
-- `context-pocket verify` — 体检，默认 15 项：文件完整性（含 🔒 区 `absolute.md` 在不在）、编号连续性（T/R/ADR）、引用完整性、index 一致性、T-block 小节格式、code-map 漂移、handoff 过期、标题行 T 一致、畸形编号、log 体积 vs `archive_at`、pocket 里的密钥 / PII 形状、**附件声明对不对得上磁盘**（`### Attachments` 写了 `assets/T04-x.png` 而文件不在 = ERROR，`log.md` 与 `log-archive.md` 都扫；模板占位 `<...>`、URL、绝对路径、含 `..` 的、以及已经按规范标了 `[missing: T<n> <file>]` 的那一条都不算，宁可不报也不误报。修法是补回文件，或按 `[missing: …]` 把这一条标注成缺失，然后重跑 `context-pocket verify`）、**格式版本是否落后**（`lib/validator.js:74`；登记表里真有可走的一跳才报，而且是 WARNING，所以它既不刷屏也不拦提交）。加 `--drift` 才跑另两项扫目录的检查：认知漂移（最近 T-block 提到的路径 vs 工作树）与"代码比记录新"（mtime 晚于上次记录的文件，**不需要 git**）
+- `context-pocket verify` — 体检，默认 15 项：文件完整性（含 🔒 区 `absolute.md` 在不在）、编号连续性（T/R/ADR）、引用完整性、index 一致性、T-block 小节格式（缺 `### User` / `### Action` 是 ERROR；`log append` 当场就把缺的那一节说出来并给出 `log amend` 命令，不再让你只看到"追加成功"；还有一种 ERROR 专门照 1.1.0 写坏的时间行 `--- WHEN: undefined → undefined ---`，判据是"这一行没有 `stated: ` 前缀，工具不可能这样写原话"，所以用户逐字说过 "undefined" 不会被误拦在提交门外）、code-map 漂移、handoff 过期、标题行 T 一致、畸形编号、log 体积 vs `archive_at`、pocket 里的密钥 / PII 形状、**附件声明对不对得上磁盘**（`### Attachments` 写了 `assets/T04-x.png` 而文件不在 = ERROR，`log.md` 与 `log-archive.md` 都扫；模板占位 `<...>`、URL、绝对路径、含 `..` 的、以及已经按规范标了 `[missing: T<n> <file>]` 的那一条都不算，宁可不报也不误报。修法是补回文件，或按 `[missing: …]` 把这一条标注成缺失，然后重跑 `context-pocket verify`）、**格式版本是否落后**（`lib/validator.js:74`；登记表里真有可走的一跳才报，而且是 WARNING，所以它既不刷屏也不拦提交）。加 `--drift` 才跑另两项扫目录的检查：认知漂移（最近 T-block 提到的路径 vs 工作树）与"代码比记录新"（mtime 晚于上次记录的文件，**不需要 git**）
 
 - `context-pocket sync` — 补档，只关心"最近几轮是否漏记"。判定"记过没有"只认**强证据**：路径出现在最近某轮的 `### Action` 小节里
 
@@ -256,7 +256,7 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 **A**: 会被 `verify` 拦下来。pocket 是明文 Markdown，每一轮新会话都会被重新读进来，工具输出又会被抄进下一条 T-block——所以一句"报错原文"里的 `sk-ant-…` 会沿着历史一路复制下去。`lib/secrets.js` 认 17 类厂商凭证形状（Anthropic / OpenAI / Stripe / AWS / GitHub / GitLab / Google / Slack / npm / Twilio / SendGrid / OAuth / JWT / 私钥块）：
 
 - 命中即 `verify` 报 **ERROR**，位置精确到 `log.md:11`，`archive` 与 `migrate` 当场拒绝执行，装了 pre-commit hook 的话 `git commit` 退 1
-- 报告里只有掩码（`sk-ant…(30 chars)`），绝不回显完整密钥——这条是硬约束，因为输出会进下一条记录
+- 告警里只有掩码（`sk-ant…(30 chars)`），扫描告警本身绝不回显完整密钥——这条是硬约束，因为输出会进下一条记录。**注意边界**：`verify --json` 除了告警还会回吐 `data`（这个 pocket 的逐字解析内容，`status` / `recall` / `search` 也一样，它们的存在意义就是把记录原文还给调用方），所以**整串密钥会出现在那一行 JSON 里**——值已经在你的 `log.md` 里了，工具不会替你打码。别把 `verify --json` 的原文转存进下一条记录或共享日志；要清掉值，用它给的 `fix`（改那一行，或 `log amend <Tn>`）。
 - 正确做法：记下那句话、略掉值本身（`报错原文：401 using <Anthropic key，已略> 调用失败`）
 
 身份证号、卡号、手机号、`password: xxxx` 这类属于 **WARNING**：照样报出来，但**永远不拦提交**——把客户手机号记进历史是正常业务，拦下来只会让人绕过工具。卡号还要过 Luhn 校验，时间戳和订单号不会被误报。

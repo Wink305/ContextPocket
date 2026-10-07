@@ -9,7 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_本节暂无条目。1.1.0 之后的改动写在这里。_
+_本节暂无条目。1.2.0 之后的改动写在这里。_
+
+---
+
+## [1.2.0] - 2026-10-07
+
+> 本版修的是 1.1.0 发布后复现出的一个数据损坏缺陷（P1，见下面第一小节），另外补了两处静默失败
+> （缺必填节的 append、`distill --json` 报错窗口）和三处文档与代码的口径对齐。
+> **数据格式仍是 v2**，没有新跳：老 pocket 不需要再 `migrate`，只是历史上被写坏的那几行时间现在会被
+> `verify` 照出来（一条 ERROR，附删行后重记的命令）。抬到 1.2.0 而不是 1.1.1，是因为这一版除了修复还**新增了**
+> 用户能读到的东西：`--json` 的 `missingSections` 字段、`log append` 的写后告警、MCP 回执里的补齐指引，
+> 以及一条过去不存在的 verify ERROR 判据。
+> 定版当天日期写在标题里；Git tag 与 npm publish 由维护者按 `CONTRIBUTING.md`「发布流程」第 6-8 步补，
+> 那两步没做完之前，不要把这一节当成"已经发出去了"。
+
+### 🐛 P1：`--when` 的整天区间把 `undefined` 写进了记录，而且 verify 一声不响（2026-10-07）
+
+- **缺陷本体**：1.1.0 的 `lib/when.js` 里，区间分支两个端点都取 `.stamp`，而只有日期、没有钟点的端点（`precision:'day'`）根本没有 `stamp` 这个键。于是 `context-pocket log append --when "2026-05-01 → 2026-05-03"` 落盘的是 `--- WHEN: undefined → undefined ---`——一行谁都不认得的结构行，永久留在 `log.md` 里。另一半同样坏：`--when "2026-05-01 09:00 → 2026-05-03"`（左端有钟点、右端只有天）写成 `2026-05-01 09:00 → undefined`。
+- **为什么没人发现**：`verify` 当时只看这一行**是不是** WHEN 行（`lib/parser.js` 用 `WHEN_LINE_RE` 匹配后交 `parseWhenLine`），不解析行内的值；`undefined → undefined` 反解出来是"用户原话"，于是 recall 从此显示一句用户从没说过的话，格式检查还给这条记录打通过。
+- **写入侧修法**：新增 `pointValue(point)`（`lib/when.js:140`）——有钟点取 `日期 钟点`，只有天就落日期，两边都给不出值才退回 `{kind:'text'}`；区间分支改成 `lib/when.js:85-90` 的 `fromValue && toValue` 判据。**补全，不推算**这条约束没动：右端只给钟点仍然继承左端日期。测过 12 种输入形状，全部逐字节往返稳定，落盘行里 `undefined` 出现 0 次（`tests/unit.js` 的往返语料现在每个形状都断言 `!/undefined/`）。
+- **读取侧修法（已躺在历史里的坏行）**：`lib/when.js:184`/`:191` 给 `text` kind 补了一个 `unprefixed` 标记，含义是"这一行没有 `stated: ` 前缀，而写入方从不用那种形状写原话（`formatWhen` 一定要加前缀），所以它只能是手改或 1.1.0 的缺陷"。`lib/validator.js:555` 据此报 **ERROR**，修法给的是可跑的命令（先删那一行，再 `log amend <n> --when "…"`，因为 amend 只肯补空行、从不覆盖已记下的时间）。
+  - **为什么判据不是"行里有 undefined 就行"**：ERROR 是闸门——它拦住 `archive`、`migrate` 和 pre-commit hook。用户原话里真的可能出现 "undefined" 这个词（那一行有 `stated: ` 前缀），工具不能拿用户逐字说过的话去挡他的提交，所以缺陷判据锁在"无前缀 + undefined"这一种形状上。`tests/pocket.js` 两个方向都钉着：原话行 0 条告警、`undefined → 2026-05-03 11:30` 1 条 ERROR。
+- **Tests**：`tests/unit.js` +1 条（整天区间 / 混合区间 / `上午 → 下午` 的退回原话，外加两条 `'2026-05-01 →'`、`'上周三 → 11:30'` 必须落成 `stated:`），另在既有的手改行用例里钉死 `unprefixed` 的有与无；`tests/pocket.js` +1 条（写坏 → 照出来 → 删掉 → amend 补回 → 干净，含原话不误报）；`tests/cli.js` +1 条（`--when` 走真实 CLI：`--json` 的 `when`、文件内容、recall 输出无 `undefined`、重读 kind 是 `range`）。
+- **文档**：`templates/log.md:8` 表头注释、`SKILL-reference.md:240` 的形状表、`docs/MIGRATION.md` 的 `range` 行都补了"端点只到天"这一种；`bin/context-pocket.js` 的 `log append --help` 里 `--when` 同样列出该形状。
+
+### 🧾 四个"文档/代码不一致"与两个静默失败（2026-10-07）
+
+按既有工作规则处理：文档承诺了代码没做的 → 改代码；行为是有意的取舍 → 改文档。
+
+- **`log append` 静默写出缺必填节的块**（改代码）：`--user` / `--action` 都没给时，块照样落盘，而 `verify` 判 ERROR，于是 `archive`、`migrate`、pre-commit 一起被拦，用户却只看到"追加成功"。现在 `lib/writer.js:65` 把必填节名单 `REQUIRED_TBLOCK_SECTIONS` 收在一处（与 `AMENDABLE_SECTIONS` 同源排序，判据在 `lib/validator.js`），`:187` 起记下缺了哪几节，`:221` 随返回值交出 `missingSections`；CLI 在 "✅ T\<n\> added" 同一屏补一条 ⚠️ 并打印该跑的 `log amend` 命令（`bin/context-pocket.js:1116-1118`，`:1157` 进 `--json`），MCP 在工具回执里给同一条信息、连 MCP 形态的入参（`mcp-server.js:1593-1594`）。**没有删掉任何写入能力**：块照写，只是不再假装没事。
+- **`distill --json` 报的是旗标不是生效窗口**（改代码）：`--recent-keep` 不给时字段是 `null`，而实际用的是 `config.recent_keep`，机器读到的数对不上报告本体。现在两处返回都带 `recentKeep`（`lib/distill.js:124` 的 `nothing` 早退与 `:180` 的主结果），值就是真正生效的那个窗口。`tests/cli.js` 钉住"config=2 时报告 2、旗标 4 覆盖成 4"。
+- **CLI 与 MCP 的写后自检默认值不同**（改文档）：CLI 的 `--verify` 是 opt-in，MCP 的 `verify` 默认开——这不是漏，是 800 轮全量扫描的代价只落在常驻进程一侧。已在 `log append --help` 的 `--verify` 条目写明两侧默认值与原因，MCP 侧参数 schema 的 `default: true` 原先就有。
+- **"扫描告警绝不回显完整密钥"说得太满**（改文档）：掩码保证覆盖的是**告警本身**（返回值、人类输出、hook 的 stderr，三处各有断言）；`verify --json` 的 `data` 段里逐字带上下文，所以完整值确实会出现在那里。`CHANGELOG.md` 那句已收窄成带出处的说法，`docs/FAQ.md` 把"报告里只有掩码"换成同一条口径，并写明要机器可读又不想带出完整值时该怎么做。
+
+### 定版与门禁
+
+- **四处版本号抄本一起改准**（`CONTRIBUTING.md`「发布流程」第 1-2 步）：`package.json` 的 `version` 是真值，`lib/version.js` 的 `FALLBACK_VERSION`、`SKILL.md` frontmatter 的 `version:`、本文件的 `## [1.2.0] - 2026-10-07` 节标题是抄本，`tests/unit.js` 那条同值用例盯着。顺带把两处会随版本过期的文档说法改准：`docs/COMPATIBILITY.md:97` 的"对应 skill …"、`docs/FAQ.md` 里 `--version --json` 的示例回包。
+- **门禁**：`npm run lint` 35 个 .js；`node tests/run.js` 全量 **239 条通过 / 0 失败**（unit 61 / pocket 61 / hooks 16 / importer 17 / migrate 16 / repair 19 / cli 30 / mcp 19，相对 1.1.0 定版时的 233 条多 6 条）；`npm run smoke` ALL PASS。同一套在发布克隆里也跑了一遍，结果一致。
+- **活测**（真实 CLI 子进程，临时目录 + 临时 hub，不碰用户的 `~/.contextpocket`）六项：整天区间落 `--- WHEN: 2026-05-01 → 2026-05-03 ---` 且文件里 `undefined` 出现 0 次；植入 1.1.0 坏行后 `verify` 退 1、`archive --dry-run` 退 1 并说明"verify found 1 error(s)"；改成 `stated:` 原话行后 `verify` 退 0；删行后 `log amend 1 --when` 补回、`recall` 显示 `When: 2026-05-01 → 2026-05-03`；缺 `--action` 的追加当场打 ⚠️ 并给出 `log amend 2 --action`，`--json` 的 `missingSections` 是 `["User","Action"]`；`distill --json` 在 `config.md` 写 `recent_keep: 2` 时报 2、带 `--recent-keep 5` 时报 5。
+- 本版**没有新增文件**，`lib/` 下的改动都在既有模块里，所以 `npm pack --dry-run` 的 `files` 白名单那一步无事可做（发布前照跑一遍确认）。
 
 ---
 
@@ -440,7 +479,8 @@ _本节暂无条目。1.1.0 之后的改动写在这里。_
 
 - 短板：`### User` 小节按设计就是**逐字原话**，而排查报错时用户贴进来的原文里最常带的就是 `sk-ant-…` / `ghp_…` / 私钥块。pocket 又是每轮新会话都要读回上下文的明文目录，Agent 还会把工具输出抄进下一条 T-block —— 一次粘贴会长期复利。此前 12 项检查只看结构与编号，**没有任何一项看内容形状**。
 - `SECRET_RULES`（`lib/secrets.js:37`）分两档共 21 条：17 条 `error` 全是厂商前缀强特征（Anthropic、OpenAI 的 `sk-` 与 `sk-proj-`、Stripe、AWS `AKIA/ASIA/ABIA/ACCA`、GitHub 六种前缀与 fine-grained、GitLab、Google `AIza`、Slack token 与 webhook、npm、Twilio、SendGrid、Google OAuth、私钥块、JWT）；4 条 `warning` 是人的信息（身份证、SSN、手机号）与手写赋值。卡号走独立候选正则再套 **Luhn 门**，所以"订单号 4111 1111 1111 1112""构建时间戳 1727950000000"不会被打扰。
-- 两档的分工是这次唯一的设计决定：**`error` 就是闸门**（`verify` 的 errorCount 涨 → pre-commit 的 `verify --quiet` 退 1、`archive` 与 `migrate` 拒绝执行），只有"泄露即需立刻轮换"的东西配得上；`warning` 永不拦提交，因为把客户手机号记进历史是正常业务，拦下来的结果只会是用户绕开工具。`scanText()` 的每条结果经 `mask()` 只留前 6 位 + 长度（`sk-ant…(30 chars)`），完整值绝不出现在返回值、`--json`、人类输出或 hook 的 stderr 里 —— 五处都有断言钉着。
+- 两档的分工是这次唯一的设计决定：**`error` 就是闸门**（`verify` 的 errorCount 涨 → pre-commit 的 `verify --quiet` 退 1、`archive` 与 `migrate` 拒绝执行），只有"泄露即需立刻轮换"的东西配得上；`warning` 永不拦提交，因为把客户手机号记进历史是正常业务，拦下来的结果只会是用户绕开工具。`scanText()` 的每条结果经 `mask()` 只留前 6 位 + 长度（`sk-ant…(30 chars)`），**扫描告警本身**的返回值、人类输出与 hook 的 stderr 都不带完整值 —— 三处各有断言钉着（`tests/unit.js` 扫结果 dump、`tests/pocket.js` 的 `formatVerifyResult` 全文、`tests/hooks.js` 真 git 端到端的拦截输出）。
+  - 2026-10-07 定版后的一次真人全流程实测把这句话的边界照出来了：`verify --json` 里**确实**能看到整串密钥。不是掩码坏了——告警那条仍是 `log.md:43 Anthropic API key sk-ant…(57 chars)`；是 `--json` 除了告警还回吐 `data`，而 `data` 是这个 pocket 的逐字解析内容（`status`/`recall`/`search` 同理，它们的存在意义就是把记录原文还给调用方）。这条不是 bug，是 `--json` 的契约本身，所以改的是话术：**"扫描告警永远只有掩码" ≠ "工具的任何输出里都不会有密钥"**。想把密钥从记录里清掉，用它给的 `fix`（改那一行或 `log amend`），别指望任何输出帮你打码。
 - `redactText()` 存在但**只有调用方显式要求才用**：`log append` / `absolute add` 都不自动改写文本。🔒 区的定义就是逐字原话，工具偷偷打码等于对历史撒谎；真要留这些串（写密钥轮换手册）就把 `config.md` 的 `- secret_scan: false` 关掉整块检查（`DEFAULT_CONFIG` 与模板同步加上，默认开）。
 - 没有新增 CLI 子命令或 MCP 工具：这条挂在 `verify` 里就够，多一个入口就要多养一份 `help --json` ↔ README ↔ 26 工具对表。
 - 顺带挖出两个**已经存在很久**的 bug：① `parseConfigValue` 只在"字符串"分支摘行尾注释，而 `templates/config.md` **每一行都带注释**，于是 `- quiet: false   # 说明` 解析成字符串 `'false'`（真值判断为"开着"）、`- archive_at: 800   # 说明` 退化成字符串 —— 用户在 config.md 里改配置从来没有生效。现在由 `stripTrailingComment()`（`lib/core.js:155`）先找"空白 + `#`"的第一个位置，`language: zh#1` 这类值不被截，`- key:   # 只写了注释` 视同没配、默认值继续生效。② `parseIndex` 把出厂标题 `# Index · T0` 判成 malformed header 报 **ERROR**，pre-commit 于是对**新项目的第一个提交**直接退 1 —— 用户还没记下任何东西就被拦下。T0 现在是合法取值（`malformedIndexT` 只在解析不出或超出可信范围时置真），而 `# Index · T99999999999` 依旧报 ERROR，两头各一条用例。

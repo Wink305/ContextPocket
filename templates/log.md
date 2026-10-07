@@ -5,9 +5,12 @@
 > Session divider before a block when the date changed: `--- SESSION: <YYYY-MM-DD> ---`
 > Time line right under each `## T<n>` heading (format v2): `--- WHEN: <YYYY-MM-DD HH:mm> ---`
 >   Written by `log append` (default = the moment you recorded it). Other shapes the tool
->   accepts: range `--- WHEN: 2026-05-01 09:00 → 2026-05-01 11:30 ---` · day only, no clock
+>   accepts: range `--- WHEN: 2026-05-01 09:00 → 2026-05-01 11:30 ---` · range with day-only
+>   endpoints `--- WHEN: 2026-05-01 → 2026-05-03 ---` · day only, no clock
 >   known (this is what a migrated v1 block looks like) `--- WHEN: 2026-05-01 (day) ---` ·
 >   the user's own words, never computed `--- WHEN: stated: 上周三下午 ---`
+>   Words like 上午/下午 have no slot in a structured line: if the text also carries a date,
+>   the date is what gets stored. Keep the whole phrase verbatim by giving no date.
 
 ## T1 · <one-line gist> · [tag1] [tag2]
 --- WHEN: <YYYY-MM-DD HH:mm> ---

@@ -486,13 +486,41 @@ test('whenLine round-trips through parseWhenLine for every kind', () => {
     '2026-10-03 14:47',
     '2026-10-03',
     '2026-10-03 09:00 → 11:30',
+    '2026-05-01 → 2026-05-03',
+    '2026-05-01 → 11:30',
     'stated 上周三下午',
   ]) {
     const line = whenLine(parseWhen(raw));
     const back = parseWhenLine(line);
     assert.ok(line && /^--- WHEN: .+ ---$/.test(line), '结构行的形状：' + line);
+    assert.ok(!/undefined/.test(line), raw + ' 落成了带 undefined 的行：' + line);
     assert.strictEqual(formatWhen(back), formatWhen(parseWhen(raw)), raw + ' → ' + line);
   }
+});
+
+// 回归：区间端点只报"日"时，老代码取的是 normalizePoint 里不存在的 .stamp，
+// 于是 `undefined → undefined` 被写进 log.md 并永久留在记录里，verify 还放行。
+test('a range whose endpoints carry no clock lands on the dates, not on undefined', () => {
+  assert.deepStrictEqual(parseWhen('2026-05-01 → 2026-05-03'), {
+    kind: 'range', date: '2026-05-01', from: '2026-05-01', to: '2026-05-03',
+  });
+  assert.strictEqual(whenLine(parseWhen('2026-05-01 → 2026-05-03')), '--- WHEN: 2026-05-01 → 2026-05-03 ---');
+
+  // 混着写也一样：右端有钟点、左端只有天，左端不许变成 undefined
+  assert.strictEqual(whenLine(parseWhen('2026-05-01 → 11:30')), '--- WHEN: 2026-05-01 → 2026-05-01 11:30 ---');
+  assert.strictEqual(whenLine(parseWhen('2026-05-01 → 2026-05-03 11:30')), '--- WHEN: 2026-05-01 → 2026-05-03 11:30 ---');
+
+  // 中文修饰语没有结构位，但日期那一段照样要落对，不能落成 undefined
+  assert.strictEqual(whenLine(parseWhen('2026-10-06 上午 → 2026-10-06 下午')), '--- WHEN: 2026-10-06 → 2026-10-06 ---');
+
+  // 读回来还是同一个区间（坏值曾经被当"用户原话"存成 stated，从此再也修不掉）
+  assert.deepStrictEqual(parseWhenLine('--- WHEN: 2026-05-01 → 2026-05-03 ---'), {
+    kind: 'range', date: '2026-05-01', from: '2026-05-01', to: '2026-05-03',
+  });
+
+  // 一端整个认不出来时退回原话，而不是造一个半空的区间
+  assert.deepStrictEqual(parseWhen('2026-05-01 →'), { kind: 'text', text: '2026-05-01 →' });
+  assert.deepStrictEqual(parseWhen('上周三 → 11:30'), { kind: 'text', text: '上周三 → 11:30' });
 });
 
 test('a WHEN value can never forge a second structure line', () => {
@@ -506,7 +534,8 @@ test('a WHEN value can never forge a second structure line', () => {
   assert.strictEqual(dashed.indexOf('--- SESSION'), -1, dashed);
   assert.strictEqual((dashed.match(/---/g) || []).length, 2,
     '整行只剩行首、行尾那对分隔符，正文里不能再出现第三个：' + dashed);
-  assert.deepStrictEqual(parseWhenLine(dashed), { kind: 'text', text: 'x — SESSION: 2020-01-01 —' });
+  assert.deepStrictEqual(parseWhenLine(dashed), { kind: 'text', text: 'x — SESSION: 2020-01-01 —' },
+    'whenLine 给 text 加了 `stated: ` 前缀，所以这是"逐字原话"，不该带 unprefixed 标记');
 
   assert.strictEqual(whenLine(null), null);
   assert.strictEqual(whenLine({ kind: 'nonsense' }), null);
@@ -514,8 +543,14 @@ test('a WHEN value can never forge a second structure line', () => {
 
 test('a hand-edited WHEN line stays readable instead of becoming "no time at all"', () => {
   assert.deepStrictEqual(parseWhenLine('--- WHEN: 三月的第二个星期四 ---'), {
+    kind: 'text', text: '三月的第二个星期四', unprefixed: true,
+  });
+  // 带 `stated: ` 前缀的才是"逐字原话"，那种行永远不该被 validator 当成缺陷（ERROR 会拦提交）
+  assert.deepStrictEqual(parseWhenLine('--- WHEN: stated: 三月的第二个星期四 ---'), {
     kind: 'text', text: '三月的第二个星期四',
   });
+  assert.strictEqual(parseWhenLine('--- WHEN: undefined → 2026-05-03 11:30 ---').unprefixed, true,
+    '1.1.0 写坏的那一行长这样：没有前缀、某一端是 undefined');
   assert.strictEqual(parseWhenLine('## T1 · 这不是时间行'), null);
   assert.strictEqual(parseWhenLine('--- WHEN:   ---'), null);
   assert.strictEqual(parseWhenLine(''), null);

@@ -528,6 +528,34 @@ test('cli: recall prints the recorded time next to the session date', () => {
   assert.deepStrictEqual(json.t.when, { kind: 'day', date: '2026-06-07' }, JSON.stringify(json));
 });
 
+// 端到端钉住那次实测复现的数据损坏：整天区间曾被写成 `--- WHEN: undefined → undefined ---`
+// 落进 log.md，而且 verify 一声不响（它不解析行内值）。
+test('cli: a day-only range given to --when is written as dates, never as undefined', () => {
+  const { pocketDir } = makePocket('cli-when-day-range');
+
+  for (const [raw, expect] of [
+    ['2026-05-01 → 2026-05-03', '--- WHEN: 2026-05-01 → 2026-05-03 ---'],
+    ['2026-05-01 → 11:30', '--- WHEN: 2026-05-01 → 2026-05-01 11:30 ---'],
+  ]) {
+    const appended = parseJsonLine(runCli([
+      'log', 'append', '--gist', '区间 ' + raw, '--user', 'u', '--action', 'a', '--when', raw, '--json',
+    ], pocketDir));
+    assert.strictEqual(appended.when, expect, JSON.stringify(appended));
+
+    const log = fs.readFileSync(path.join(pocketDir, 'log.md'), 'utf-8');
+    assert.ok(log.includes(expect + '\n'), '文件里应有：' + expect);
+
+    const human = runCli(['recall', String(appended.tId)], pocketDir);
+    assert.ok(!/undefined/.test(human.stdout), 'recall 不能读出 undefined：\n' + human.stdout);
+
+    const reread = parseJsonLine(runCli(['recall', String(appended.tId), '--json'], pocketDir));
+    assert.strictEqual(reread.t.when.kind, 'range', JSON.stringify(reread.t.when));
+  }
+
+  const whole = fs.readFileSync(path.join(pocketDir, 'log.md'), 'utf-8');
+  assert.ok(!/undefined/.test(whole), 'log.md 里不该有 undefined 字样');
+});
+
 test('cli: log amend --when reports the note in --json and on screen', () => {
   const { pocketDir } = makePocket('cli-when-amend');
   const first = parseJsonLine(runCli([
@@ -751,4 +779,58 @@ test('cli: --version answers with the number from package.json instead of the wh
 
   // 代码读了这个开关，帮助就得教
   assert.match(runRaw(['help'], empty).stdout, /--version/, '全局 Options 要列出 --version');
+});
+
+test('cli: an append that omits a required section says so on the same screen it claims success', () => {
+  // 实测踩过：`log append --gist X --user u` 退 0、只有一句 ✅，写出来的块却缺 ### Action，
+  // 而 lib/validator.js 把缺 Action 判成 ERROR —— 于是下一次 archive / migrate / 提交才被拦。
+  // 提示必须在写成的当场给，而且只给本轮这一块（老 pocket 里别人的漏记不该刷屏）。
+  const { pocketDir } = makePocket('cli-append-missing-section');
+
+  const human = runCli(['log', 'append', '--gist', '忘了写 action 的一轮', '--user', 'u'], pocketDir);
+  assert.strictEqual(human.code, 0, human.stderr);
+  assert.match(human.stdout, /⚠️\s*T\d+ 没有 Action 节/, '缺必需小节要当场说：\n' + human.stdout);
+  assert.match(human.stdout, /log amend \d+ --action/, '要给可直接跑的修法：\n' + human.stdout);
+
+  const json = parseJsonLine(runCli([
+    'log', 'append', '--gist', '又忘了', '--user', 'u', '--json',
+  ], pocketDir));
+  assert.deepStrictEqual(json.missingSections, ['Action'], JSON.stringify(json));
+
+  // 两节都缺时报两条
+  const both = parseJsonLine(runCli(['log', 'append', '--gist', '光一句概要', '--json'], pocketDir));
+  assert.deepStrictEqual(both.missingSections, ['User', 'Action'], JSON.stringify(both));
+
+  // 写齐了就只能有一个字都不提 —— 这条是给"每次都喊一遍"留的刹车
+  const complete = runCli([
+    'log', 'append', '--gist', '写齐的一轮', '--user', 'u', '--action', 'a',
+  ], pocketDir);
+  assert.strictEqual(complete.code, 0, complete.stderr);
+  assert.ok(!/没有 (User|Action) 节/.test(complete.stdout), '不该没事找事：\n' + complete.stdout);
+  const completeJson = parseJsonLine(runCli([
+    'log', 'append', '--gist', '写齐的第二轮', '--user', 'u', '--action', 'a', '--json',
+  ], pocketDir));
+  assert.deepStrictEqual(completeJson.missingSections, [], JSON.stringify(completeJson));
+
+  // 这条 ERROR 会拦住 archive —— 顺手钉一次"闸门确实连着"
+  const blocked = runCli(['archive', '--json'], pocketDir);
+  assert.strictEqual(blocked.code, 1, 'archive 该被缺 Action 拦住');
+});
+
+test('cli: distill --json reports the window it actually applied', () => {
+  // 曾经报的是"旗标给没给"：没传 --recent-keep 就给 null，而 lib/distill.js 一直在用
+  // config.recent_keep —— 判据是对的，数字会骗人（实测 config=3、8 个块时扫出 5 个，正是 8-3）。
+  const { pocketDir } = makePocket('cli-distill-window');
+  for (let i = 0; i < 6; i++) {
+    runCli(['log', 'append', '--gist', '第 ' + i + ' 轮', '--user', 'u', '--action', 'a'], pocketDir);
+  }
+  const cfgPath = path.join(pocketDir, 'config.md');
+  fs.writeFileSync(cfgPath, fs.readFileSync(cfgPath, 'utf-8').replace(/recent_keep:\s*\d+/, 'recent_keep: 2'), 'utf-8');
+
+  const fromConfig = parseJsonLine(runCli(['distill', '--dry-run', '--json'], pocketDir));
+  assert.strictEqual(fromConfig.recentKeep, 2, '没给旗标时要报 config 里那个生效值：' + JSON.stringify(fromConfig));
+
+  const fromFlag = parseJsonLine(runCli(['distill', '--dry-run', '--recent-keep', '4', '--json'], pocketDir));
+  assert.strictEqual(fromFlag.recentKeep, 4, '旗标压过 config');
+  assert.ok(fromFlag.scannedBlocks <= fromConfig.scannedBlocks, '窗口变大，扫到的旧块不会变多');
 });

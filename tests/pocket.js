@@ -39,6 +39,13 @@ function setMtime(file, ms) {
   fs.utimesSync(file, d, d);
 }
 
+/** 改掉块本体那一条时间行。锚点必须锁在行首：log.md 的表头注释里列着好几种 WHEN 示例形状，
+ *  拿字符串从中间找会先命中那段说明，本体一个字都没改还以为改了。 */
+function overwriteWhen(pocketDir, line) {
+  writePocketFile(pocketDir, 'log.md',
+    readPocketFile(pocketDir, 'log.md').replace(/^--- WHEN: .* ---$/m, line));
+}
+
 // ------------------------------------------------------------
 // log append / amend
 // ------------------------------------------------------------
@@ -1291,6 +1298,52 @@ test('amend adds a missing time line, upgrades a day-only one, and refuses to re
   assert.strictEqual(r3.success, true, JSON.stringify(r3));
   assert.ok(readPocketFile(pocketDir, 'log.md').includes('--- WHEN: 2026-06-07 (day) ---'),
     readPocketFile(pocketDir, 'log.md'));
+});
+
+// 写入侧修好了（lib/when.js 的 pointValue），这一条管已经躺在历史里的那些坏行：
+// 1.1.0 会把整天区间写成 `--- WHEN: undefined → undefined ---`，而且 verify 一声不响。
+test('a time line left broken by the 1.1.0 writer is reported, and amend can replace it', () => {
+  const { pocketDir } = makePocket('when-broken-residue');
+  record(pocketDir, '被写坏的那一轮', { action: ['改了 lib/when.js'] });
+
+  const clean = readPocketFile(pocketDir, 'log.md');
+  assert.ok(/^--- WHEN: .* ---$/m.test(clean), '测试前提：v2 的块该有一条时间行');
+  overwriteWhen(pocketDir, '--- WHEN: undefined → undefined ---');
+
+  const before = verify(pocketDir);
+  const broken = before.results.filter((r) => r.severity === 'error' && /broken time line/.test(r.message));
+  assert.strictEqual(broken.length, 1, '坏行必须报成 ERROR（曾经 0 条）：' + JSON.stringify(before.results.filter((r) => r.severity === 'error')));
+  assert.match(broken[0].message, /undefined → undefined/, broken[0].message);
+  assert.match(broken[0].fix, /log amend 1 --when/, '修法要给出可跑的命令：' + broken[0].fix);
+
+  // 修好它：删掉那一行（amend 从不覆盖已记下的时间），再让 amend 补一行
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md')
+    .split('\n').filter((l) => l !== '--- WHEN: undefined → undefined ---').join('\n'));
+  const fixed = writer.amendLogBlock(pocketDir, 1, { when: '2026-05-01 → 2026-05-03' });
+  assert.strictEqual(fixed.success, true, JSON.stringify(fixed));
+  assert.ok(readPocketFile(pocketDir, 'log.md').includes('--- WHEN: 2026-05-01 → 2026-05-03 ---'),
+    readPocketFile(pocketDir, 'log.md'));
+
+  const after = verify(pocketDir);
+  assert.strictEqual(after.results.filter((r) => r.severity === 'error' && /broken time line/.test(r.message)).length, 0,
+    JSON.stringify(after.results.filter((r) => r.severity === 'error')));
+
+  // 用户逐字原话里真有 "undefined" 这个词时不算缺陷：那一行有 `stated: ` 前缀，
+  // 值是谁写的人一眼能看出来，而 ERROR 会拦住 archive/migrate/提交，不能拿原话去挡路。
+  // 锚点必须锁在行首（^---）：log.md 的表头注释里就写着几种 WHEN 形状，
+  // 从中间找字符串会先命中那段说明，块本身的时间行一个字都没改（我第一版就这么骗过了自己）。
+  overwriteWhen(pocketDir, '--- WHEN: stated: 用户说 undefined 也算 —— 原话 ---');
+  const stated = verify(pocketDir);
+  assert.strictEqual(stated.results.filter((r) => r.severity === 'error' && /broken time line/.test(r.message)).length, 0,
+    JSON.stringify(stated.results.filter((r) => r.severity === 'error')));
+
+  // 反过来说，缺陷行不只有 `undefined → undefined` 一种：单端坏掉（另一端是正常时刻）
+  // 同样是写入方的指纹，必须照出来
+  overwriteWhen(pocketDir, '--- WHEN: undefined → 2026-05-03 11:30 ---');
+  const half = verify(pocketDir);
+  const halfBroken = half.results.filter((r) => r.severity === 'error' && /broken time line/.test(r.message));
+  assert.strictEqual(halfBroken.length, 1, JSON.stringify(half.results.filter((r) => r.severity === 'error')));
+  assert.match(halfBroken[0].fix, /stated: /, '原话那种情况要在修法里给出出路：' + halfBroken[0].fix);
 });
 
 test('amend keeps every line between the heading and the first section instead of swallowing them', () => {

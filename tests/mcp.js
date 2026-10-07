@@ -750,3 +750,33 @@ test('mcp: initialize reports the same version the CLI prints', () => {
     srv.child.kill();
   });
 });
+
+test('mcp: log_append names the required section it could not write', () => {
+  // 与 CLI 同一句提醒（lib/writer.js 的 missingSections），两个入口不该一个说一个不说。
+  // MCP 侧更要说：Agent 就是那个会忘记传 action 的调用方。
+  const { projectDir } = makePocket('mcp-append-missing-section');
+  const srv = startServer(projectDir);
+
+  srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
+  srv.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+  srv.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'context_pocket_log_append', arguments: { gist: '只给了 gist 和 user', user: '用户的原话' } } });
+  srv.send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'context_pocket_log_append', arguments: { gist: '写齐的一轮', user: '原话', action: '改了 lib/when.js' } } });
+
+  return srv.waitFor(3).then(() => {
+    const byId = {};
+    for (const m of srv.messages) if (m.id !== undefined) byId[m.id] = m;
+    const text = (m) => String((m.result && m.result.content && m.result.content[0] && m.result.content[0].text) || '');
+
+    const missing = text(byId[2]);
+    assert.ok(!/isError/.test(JSON.stringify(byId[2]).slice(0, 40)) || byId[2].result.isError !== true,
+      '缺小节不是失败，块必须照写：' + missing);
+    assert.match(missing, /missing Action/, 'MCP 侧要报出缺的是哪一节：\n' + missing);
+    assert.match(missing, /context_pocket_log_amend \{ tId: \d+, action: "…" \}/, '要给 MCP 形状的修法：\n' + missing);
+    assert.match(missing, /blocks archive, migrate and pre-commit/, '要说清后果，不然下一轮还是一样忘');
+
+    const complete = text(byId[3]);
+    assert.ok(!/missing (User|Action)/.test(complete), '写齐了就不该唠叨：\n' + complete);
+
+    srv.child.kill();
+  });
+});
