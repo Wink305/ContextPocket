@@ -10,14 +10,14 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外三处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题 | `1.1.0` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以四处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外三处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题 | `1.2.1` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以四处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
 
 ### 兼容性原则
 
 > **新 skill 能读旧数据，旧 skill 可能不识别新数据。**
 
-- **向前兼容（forward compatible）**：高版本 skill 可以读取低版本格式的数据（当前的 skill 1.1.x 就能同时读 `format: v1` 和 `format: v2` 的 pocket），读取时自动忽略不识别的字段。
+- **向前兼容（forward compatible）**：高版本 skill 可以读取低版本格式的数据（当前的 skill 1.2.x 就能同时读 `format: v1` 和 `format: v2` 的 pocket），读取时自动忽略不识别的字段。
 - **不向后兼容**：低版本 skill 读取高版本格式的数据时（如 skill 1.0 遇到 `format: v2`），可能无法正确解析新增字段，应提示用户升级 skill 或进行迁移。
 - v1 → v2 是**只做加法**的一跳：新增的 `--- WHEN: … ---` 结构行落在 `## T<n>` 标题的下一行，而 v1 的解析器把标题与第一个 `###` 之间的行整段忽略，所以旧代码读新文件不会丢东西（`tests/unit.js` 用同一份 `parseLogText` 逐字段比过带行与不带行的解析结果）。
 
@@ -127,23 +127,23 @@ In MCP mode, use `context_pocket_migrate` tool.
 v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构行，其余（文件清单、小节名、R-id / ADR 编号规则）一字未改：
 
 ```markdown
-## T7 · 把搜索改成按时间分页 · [前端]
---- WHEN: 2026-10-03 09:00 → 2026-10-03 11:30 ---
+## T<n> · <一句话概述> · [tag]
+--- WHEN: <时间，见下表> ---
 
 ### User
-- 用户原话：搜索要能按时间段翻
+- <用户原话>
 ```
 
 四个形状（`lib/when.js` 负责解析与格式化，`lib/parser.js` 把它读成 `block.when`）：
 
 | kind | 落盘的样子 | 谁写的 |
 |------|-----------|--------|
-| `instant` | `--- WHEN: 2026-10-03 14:47 ---` | `log append` 不带 `--when` 时的默认值：写下它的这一刻 |
-| `range` | `--- WHEN: 2026-10-03 09:00 → 2026-10-03 11:30 ---` | `--when "09:00 → 11:30"` 这类显式区间；端点只报到"日"时那一端就落日期（`2026-05-01 → 2026-05-03`），不会有别的形状 |
-| `day` | `--- WHEN: 2026-10-03 (day) ---` | **v1 迁移补出来的就是这一种**；只知道天就只写天 |
-| `text` | `--- WHEN: stated: 上周三下午 ---` | 用户原话，逐字照抄，工具不做任何换算 |
+| `instant` | `--- WHEN: <日期> <时刻> ---` | `log append` 不带 `--when` 时的默认值：写下它的这一刻 |
+| `range` | `--- WHEN: <日期> <时刻> → <日期> <时刻> ---` | `--when "09:00 → 11:30"` 这类显式区间；端点只报到"日"时那一端就落日期（`<日期> → <日期>`），不会有别的形状 |
+| `day` | `--- WHEN: <日期> (day) ---` | **v1 迁移补出来的就是这一种**；只知道天就只写天 |
+| `text` | `--- WHEN: stated: <用户原话> ---` | 用户原话，逐字照抄，工具不做任何换算 |
 
-读写入口：CLI `log append --when` / `log amend <T> --when` / `recall`（人读的是 `⏱ 2026-10-03 09:00 → 11:30` 这样的一句话，`--json` 里的 `when` 是文件里逐字那一行）；MCP 是 `context_pocket_log_append` / `context_pocket_log_amend` 的同名参数与 `context_pocket_recall` 的 `When:` 一行。两个入口的时间句子都出自 `lib/when.js` 的 `describeWhenLine`，不会各说一套。
+读写入口：CLI `log append --when` / `log amend <T> --when` / `recall`（人读的是 `⏱ <日期> <时刻> → <时刻>` 这样的一句话，`--json` 里的 `when` 是文件里逐字那一行）；MCP 是 `context_pocket_log_append` / `context_pocket_log_amend` 的同名参数与 `context_pocket_recall` 的 `When:` 一行。两个入口的时间句子都出自 `lib/when.js` 的 `describeWhenLine`，不会各说一套。
 
 ### 迁移做了什么
 

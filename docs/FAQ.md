@@ -55,7 +55,7 @@ context-pocket migrate --dir <project-root> --to v2             # 真写：先�
 
 ### Q: 怎么确认我装的 context-pocket 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"1.2.0","source":"package.json","node":"<你的 Node 版本>"}`。
+**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"1.2.1","source":"package.json","node":"<你的 Node 版本>"}`。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余三处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、以及 `CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 

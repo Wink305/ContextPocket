@@ -203,7 +203,7 @@ The new agent picks recording back up automatically — up and running in 5 seco
 | "Hand this off" · "I'm switching models" · "Give this to someone else" | `handoff` | `handoff.md` generated |
 | "Check for anything missing" · "Check before I commit" · "Is it healthy?" | `verify` | Pass — or each issue with a runnable fix command |
 | "Fill in T7" · "I forgot to tell you that line" | `log amend` | T7 filled in |
-| "That turn was yesterday afternoon" · "It took us from 9 to 11" | `log append --when` / `log amend <Tn> --when` | The turn's time line, echoed back as `⏱ 2026-10-03 09:00 → 2026-10-03 11:30` — a day it only knows as a day stays `(day)`, and the user's own words stay verbatim |
+| "That turn was yesterday afternoon" · "It took us from 9 to 11" | `log append --when` / `log amend <Tn> --when` | The turn's time line, echoed back as `⏱ <date> 09:00 → <date> 11:30` — a day it only knows as a day stays `(day)`, and the user's own words stay verbatim |
 | "Who changed this file?" · "Why does it look like this?" | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
 | "How did we fix that bug last time?" · "Search for X" | `search <keyword>` | The matching T-blocks |
 | "What did T7 actually say?" | `recall T<n>` | The full T-block |
@@ -302,30 +302,36 @@ project-root/
         └── archive/            # Archived attachments (moved here on archive)
 ```
 
-### T-block example
+### T-block structure
+
+The canonical shape of a T-block. Everything in `<…>` is a placeholder — the tool
+never invents content for it. Sections marked *omit* are written only when they have
+something to say; `verify` reports a block that is missing `### User` or
+`### Action`, and treats the rest as optional.
 
 ```markdown
-## T5 · User confirmed database choice · [requirement-change] [arch-decision]
---- WHEN: 2026-10-03 14:47 ---
+## T<n> · <one-line gist> · [tag] [tag]
+--- WHEN: <YYYY-MM-DD HH:mm> ---
 
 ### Author
-- agent-A
+- <who recorded this turn>                    (omit when unsigned)
 
 ### User
-- PostgreSQL or MongoDB? I lean PG
+- <the request, every part and every condition>
 
 ### Action
-- 修改 decisions.md — 新增 ADR-3，记录 PG 选型理由
+- <operation> <file path> — <what changed>
 
 ### Decisions & Constraints
-- PostgreSQL over MongoDB: user prefers relational + team familiarity
-  → see ADR-3
+- <why this approach>                         (non-trivial → also an ADR in decisions.md)
 
 ### Uncertain
-- ❓ Will full-text search be needed? If yes, may add ES later
+- ❓ <inferred, not confirmed>
 ```
 
-The `--- WHEN: … ---` line (format v2, right under the heading) is when that turn happened. `log append` writes the moment you record it; pass `--when` when the user said something else — `--when "09:00 → 11:30"` for a stretch of time, `--when "2026-10-03"` when only the day is known (it stores `(day)`, never a fake midnight), `--when "上周三下午"` to keep the user's words verbatim. `recall` shows it, and a folder still on v1 simply has no such line until `migrate --to latest` — passing `--when` there still records the turn (log.md is P0) but says why the time did not land (`whenSkipped` in `--json`), rather than swallowing it.
+Full field reference, including the sections this example leaves out: [SKILL-reference.md](SKILL-reference.md).
+
+The `--- WHEN: … ---` line (format v2, right under the heading) is when that turn happened. `log append` writes the moment you record it; pass `--when` when the user said something else — `--when "09:00 → 11:30"` for a stretch of time, `--when "<YYYY-MM-DD>"` when only the day is known (it stores `(day)`, never a fake midnight), `--when "<the user's own words>"` to keep them verbatim. `recall` shows it, and a folder still on v1 simply has no such line until `migrate --to latest` — passing `--when` there still records the turn (log.md is P0) but says why the time did not land (`whenSkipped` in `--json`), rather than swallowing it.
 
 `### Author` is there only when someone was told who wrote the turn (`log append --author`). It is a section like any other, not a structural line, so it changed nothing about the format version: a v1 folder may already have one, and a block without it is not incomplete — the tool never fills in a name it was not given.
 

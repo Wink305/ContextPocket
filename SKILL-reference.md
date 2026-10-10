@@ -235,15 +235,15 @@ Append to the **end**. Never rewrite existing blocks.
 
 | 写法 | 落盘 | 什么时候用 |
 |------|------|-----------|
-| 省略 `--when` | `--- WHEN: 2026-10-03 14:47 ---` | 就是现在记的，精确到分钟 |
-| `--when "2026-10-03 09:00 → 11:30"` | `--- WHEN: 2026-10-03 09:00 → 2026-10-03 11:30 ---` | 一轮跨了段时间；右边只继承左边的日期，工具不做跨天算术 |
-| `--when "2026-05-01 → 2026-05-03"` | `--- WHEN: 2026-05-01 → 2026-05-03 ---` | 整天区间：端点只报了哪天，那一端就落日期（左端有日期、右端只给钟点也一样，右端继承左端日期） |
-| `--when "2026-10-03"` | `--- WHEN: 2026-10-03 (day) ---` | 只知道哪天。v1 老 pocket 升级（`migrate --to v2`）补出来的就是这一种 |
+| 省略 `--when` | `--- WHEN: <日期> <时刻> ---` | 就是现在记的，精确到分钟 |
+| `--when "<日期> <时刻> → <时刻>"` | `--- WHEN: <日期> <时刻> → <日期> <时刻> ---` | 一轮跨了段时间；右边只继承左边的日期，工具不做跨天算术 |
+| `--when "<日期> → <日期>"` | `--- WHEN: <日期> → <日期> ---` | 整天区间：端点只报了哪天，那一端就落日期（左端有日期、右端只给钟点也一样，右端继承左端日期） |
+| `--when "<日期>"` | `--- WHEN: <日期> (day) ---` | 只知道哪天。v1 老 pocket 升级（`migrate --to v2`）补出来的就是这一种 |
 | `--when "上周三下午"` | `--- WHEN: stated: 上周三下午 ---` | 用户原话，逐字照抄，绝不换算成日期 |
 
-**"上午/下午"这类修饰语没有结构位。** 认得出日期时（`--when "2026-10-06 上午"`）落盘的是 `2026-10-06 (day)`，修饰语不进去；要把这句话说全，就别带日期、让它整句走 `stated:`。
+**"上午/下午"这类修饰语没有结构位。** 认得出日期时（`--when "<日期> 上午"`）落盘的是 `<日期> (day)`，修饰语不进去；要把这句话说全，就别带日期、让它整句走 `stated:`。
 
-**看到 `has a broken time line` 这条 ERROR 别去解释它。** 1.1.0 把整天区间的端点取成了 `undefined`，写出来是 `--- WHEN: undefined → undefined ---` 或 `--- WHEN: 2026-05-01 09:00 → undefined ---`（`lib/when.js:140` 的 `pointValue` 修掉了写入侧，这一条只负责照出历史里的坏行）。那一行没有 `stated: ` 前缀，而工具写原话一定要带前缀，所以它不是用户说过的话。处理：删掉那一行 → `context-pocket log amend <T> --when "2026-05-01 → 2026-05-03"`（amend 从不覆盖已记下的时间，必须先删）。带前缀的原话行永远不报，因为 ERROR 会拦住 `archive`/`migrate`/pre-commit，用户逐字说过 "undefined" 不该变成挡门的理由。
+**看到 `has a broken time line` 这条 ERROR 别去解释它。** 1.1.0 把整天区间的端点取成了 `undefined`，写出来是 `--- WHEN: undefined → undefined ---` 或 `--- WHEN: <日期> <时刻> → undefined ---`（`lib/when.js:140` 的 `pointValue` 修掉了写入侧，这一条只负责照出历史里的坏行）。那一行没有 `stated: ` 前缀，而工具写原话一定要带前缀，所以它不是用户说过的话。处理：删掉那一行 → `context-pocket log amend <T> --when "<日期> → <日期>"`（amend 从不覆盖已记下的时间，必须先删）。带前缀的原话行永远不报，因为 ERROR 会拦住 `archive`/`migrate`/pre-commit，用户逐字说过 "undefined" 不该变成挡门的理由。
 
 v1 的 pocket 里没有这一行，也不会被偷偷加：先 `context-pocket migrate --to latest` 才会开始写（`verify` 会用一条 WARNING 提醒有升级可走，绝不拦提交）。在 v1 里传了 `--when`，块照记、这一行不写，工具会把原因回给你（CLI/MCP 文本里一行 `⚠️ pocket 还是 v1 格式…`，`--json` 里是 `whenSkipped`），别当成已经记下了。旧版解析器会忽略标题与第一个 `###` 之间的行，所以这一行对它们是安全的加法。
 
@@ -339,37 +339,29 @@ v1 的 pocket 里没有这一行，也不会被偷偷加：先 `context-pocket m
 
 **Completeness > brevity**. Omit empty subsections.
 
-### Filled example (first-use reference in log.md)
+### T-block structure
+
+The canonical shape written into `log.md`. All `<…>` are placeholders — nothing here
+is sample dialogue, and the tool never fills them in on its own.
 
 ```markdown
-## T1 · Initial setup: user described project goal and tech stack · [需求变更] [架构决策]
---- WHEN: 2026-10-03 14:47 ---
+## T<n> · <one-line gist> · [tag1] [tag2]
+--- WHEN: <YYYY-MM-DD HH:mm> ---
 
 ### User
-- Building a REST API for a to-do app, Express + PostgreSQL, deployed on Docker
-- Must use TypeScript, no plain JS
+- <the request, every part and every condition>
 
 ### Action
-- 新增 src/server.ts — Express 入口，挂载 routes，启动 DB 连接
-- 新增 src/db.ts — pg 连接池（max 5）
-- 新增 src/routes/、src/models/、src/middleware/ 目录结构
-- 新增 Dockerfile — node:20-alpine 多阶段构建
-
-### Commits
-- a1b2c3d — initial scaffold: express + pg + docker
+- <operation> <file path> — <what changed>
 
 ### Decisions & Constraints
-- Express over NestJS: 用户偏好简洁（已记 ADR-1）
-- pg pool, no ORM: "keep it lightweight"
+- <why this approach>          (non-trivial → also an ADR in decisions.md)
 
 ### Preferences
-- TypeScript strict, no any
-- No ORM, raw SQL
-- Docker deployment
-
-### Attachments
-- T1 project-structure.png: assets/T01-project-structure.png — 初始目录结构
+- <preference expressed this turn>            (omit if none)
 
 ### Uncertain
-- ❓ "keep it lightweight" 是否适用于所有依赖还是仅 DB 层
+- ❓ <inferred, not confirmed>                (omit if none)
 ```
+
+Sections omitted above and the rules that govern them: **Tags** and **Completeness** just above.

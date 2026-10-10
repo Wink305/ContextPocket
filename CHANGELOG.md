@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_本节暂无条目。1.2.0 之后的改动写在这里。_
+_本节暂无条目。1.2.1 之后的改动写在这里。_
+
+---
+
+## [1.2.1] - 2026-10-10
+
+修复了一些已知问题
 
 ---
 
