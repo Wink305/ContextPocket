@@ -626,6 +626,33 @@ test('mcp: every writing tool lands its arguments in the markdown', () => {
   });
 });
 
+test('mcp: state_update with empty arguments refreshes only the header T, body untouched', async () => {
+  const { projectDir, pocketDir } = makePocket('mcp-state-noargs');
+
+  await mcpCall(projectDir, 'context_pocket_log_append', { gist: '第一轮', user: '原话', action: '记一轮' }, 2);
+  await mcpCall(projectDir, 'context_pocket_state_update', { summary: '现状快照', nextStep: '下一步', pitfall: '坑' }, 2);
+  const before = readPocketFile(pocketDir, 'state.md');
+
+  await mcpCall(projectDir, 'context_pocket_log_append', { gist: '第二轮', user: '原话', action: '再记一轮' }, 2);
+  // 空参 = 只刷头号 T（mcpCall 对 isError 会直接抛，走到下面就是没报错）
+  const text = await mcpCall(projectDir, 'context_pocket_state_update', {}, 2);
+  assert.match(text, /\S/, '回话不能是空壳');
+
+  const after = readPocketFile(pocketDir, 'state.md');
+  assert.match(after, /^# State · T2 · /m, '头号要刷成最新 T');
+  const body = (t) => t.split('\n').filter((l) => !/^# State · T\d+ · /.test(l)).join('\n');
+  assert.strictEqual(body(after), body(before), '三节正文要一字不动');
+
+  // 反向：给了字段却没给值仍然是错误 —— 空字符串不算值（与 CLI 的裸 flag 同一口径）
+  const srv = startServer(projectDir);
+  srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
+  srv.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'context_pocket_state_update', arguments: { summary: '' } } });
+  await srv.waitFor(2);
+  const res = srv.messages.find((m) => m.id === 2);
+  srv.child.kill();
+  assert.ok(res.result && res.result.isError, '给了字段没给值仍要报错：' + JSON.stringify(res));
+});
+
 test('mcp: maintenance tools do over the wire what they claim — and dry runs touch nothing', () => {
   const { projectDir, pocketDir } = makePocket('mcp-pipe-maintain');
   for (let i = 1; i <= 3; i++) {

@@ -550,7 +550,7 @@ const TOOLS = [
         },
         tId: {
           type: 'integer',
-          description: 'Associate with a specific T-number (default: latest T)',
+          description: 'Associate with a specific T-number (default: next T to record — latest + 1)',
         },
       },
     },
@@ -1755,7 +1755,12 @@ function toolStateUpdate(args) {
   const summary = textOption(args, 'summary');
   const nextStep = textOption(args, 'nextStep');
   const pitfall = textOption(args, 'pitfall', 'pitfalls');
-  if (summary === undefined && nextStep === undefined && pitfall === undefined) {
+  // 「一个文本字段都没给」= 只刷新头号的 T（工具描述就是这么承诺的）。
+  // 「给了字段却没给值」是另一回事 —— 那仍然是什么都没打算改，要报错。
+  const TEXT_KEYS = ['summary', 'nextStep', 'pitfall', 'pitfalls'];
+  const noTextField = !TEXT_KEYS.some((k) => k in args);
+
+  if (!noTextField && summary === undefined && nextStep === undefined && pitfall === undefined) {
     return {
       content: [{ type: 'text', text: '❌ Error: pass at least one of summary / nextStep / pitfall (each needs a value)' }],
       isError: true,

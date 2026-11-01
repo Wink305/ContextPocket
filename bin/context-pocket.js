@@ -1522,7 +1522,12 @@ function cmdStateUpdate(options) {
   const nextStep = textOption(options, 'next-step');
   const pitfall = textOption(options, 'pitfall', 'pitfalls');
 
-  if (summary === undefined && nextStep === undefined && pitfall === undefined) {
+  // 「一个文本字段都没给」= 只刷新头号的 T（帮助文本就是这么承诺的）。
+  // 「给了字段却没给值」是另一回事 —— 那仍然是什么都没打算改，要报错。
+  const TEXT_KEYS = ['summary', 'next-step', 'pitfall', 'pitfalls'];
+  const noTextField = !TEXT_KEYS.some((k) => k in options);
+
+  if (!noTextField && summary === undefined && nextStep === undefined && pitfall === undefined) {
     failJson(options, 'at least one option is required (--summary / --next-step / --pitfall)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' At least one option is required');
     console.error('     Usage: context-pocket state update [--summary "..."] [--next-step "..."] [--pitfall "..."]');
@@ -2441,7 +2446,7 @@ function main() {
     --text <text>        The user's requirement, saved verbatim (required)
     --gist <text>        Short summary used for conflict keyword matching
                          (default: first sentence of --text)
-    --t-id <n>           Associate with a specific T (default: latest T).
+    --t-id <n>           Associate with a specific T (default: next T to record — latest + 1).
                          Same one T id as everywhere else: --t <n> / --id <n> work too
     --dir <path>         Project directory
 
@@ -2584,6 +2589,7 @@ function main() {
   Usage: context-pocket state update [options]
 
   Update state.md. Updates the T-number in the header automatically.
+  With no options at all, only refreshes the T-number in the header — body sections stay untouched.
 
   Options:
     --summary <text>     Replace Summary section with this text

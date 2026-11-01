@@ -447,6 +447,30 @@ test('cli: a flag with no value is "not given" — never a literal true in the r
   assert.ok(/## T\d+ · true 的字符串值/.test(pocketFile('log.md')), '文本 "true" 是合法内容，别误伤：\n' + pocketFile('log.md'));
 });
 
+test('cli: state update with no arguments refreshes only the header T, body untouched', () => {
+  // 帮助文本承诺 "Updates the T-number in the header automatically" —— 零参数调用
+  // 就是这句话的用法。库层（lib/writer.js updateState）本来就支持 header-only，
+  // 曾经被 CLI/MCP 的守卫直接挡住。
+  const { pocketDir } = makePocket('cli-state-noargs');
+  runCli(['log', 'append', '--gist', '第一轮', '--user', '原话', '--action', '新增 a.js', '--json'], pocketDir);
+  runCli(['state', 'update', '--summary', '现状快照', '--next-step', '下一步', '--pitfall', '坑', '--json'], pocketDir);
+  const before = fs.readFileSync(path.join(pocketDir, 'state.md'), 'utf-8');
+
+  runCli(['log', 'append', '--gist', '第二轮', '--user', '原话', '--action', '新增 b.js', '--json'], pocketDir);
+  const r = runCli(['state', 'update'], pocketDir);
+  assert.strictEqual(r.code, 0, '零参数是合法调用（只刷头号）：\n' + r.stderr + r.stdout);
+
+  const after = fs.readFileSync(path.join(pocketDir, 'state.md'), 'utf-8');
+  assert.ok(/^# State · T2 · /m.test(after), '头号要刷成最新一轮 T2：\n' + after);
+  // Summary / Next Steps / Pitfalls 三节一字未改（只比掉头号行）
+  const body = (text) => text.split('\n').filter((l) => !/^# State · T\d+ · /.test(l)).join('\n');
+  assert.strictEqual(body(after), body(before), '零参数只许刷头号，正文不能动：\n' + after);
+
+  // 给了字段却没给值仍然是错误 —— 那是什么都没打算改，不能算"只刷头号"
+  const bareFlag = runCli(['state', 'update', '--summary'], pocketDir);
+  assert.strictEqual(bareFlag.code, 1, bareFlag.stdout);
+});
+
 test('cli: status --json reports the archive threshold it reads', () => {
   const { pocketDir } = makePocket('cli-status-archive');
   // 刚 bootstrap 的 log.md 只有表头（6 行），阈值压到 3 才算"已过阈值"

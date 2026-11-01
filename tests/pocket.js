@@ -294,6 +294,29 @@ test('addAbsoluteEntry stores verbatim text, survives blockquote headings, and c
   assert.ok(/1/.test(String(index.entries['absolute.md'] || '')), 'index.md 的 🔒 计数要同步');
 });
 
+test('addAbsoluteEntry stamps the next turn (latestT + 1), and verify forgives the bootstrap T0', () => {
+  // 红线与 decision/req 同一约定：盖在"紧接着要记的那一轮"上。bootstrap 时
+  // log.md 还是空的（latestT=0），落成 T0 就会让 verify 永久报
+  // "references T0, which doesn't exist"（log.md 从 T1 开始，天然没有 T0 块）。
+  const { pocketDir } = makePocket('abs-tid');
+  const first = writer.addAbsoluteEntry(pocketDir, { text: '红线落在紧接着的那一轮上' });
+  assert.strictEqual(first.tId, 1, 'bootstrap 后的红线要落 T1，不是 T0');
+
+  record(pocketDir, '第一轮');
+  const second = writer.addAbsoluteEntry(pocketDir, { text: '第二条红线' });
+  assert.strictEqual(second.tId, 2, '记完 T1 之后，红线要落 T2');
+
+  // 存量 pocket 里的 🔒 T0 引用不再报警，但真正悬空的引用仍要报 —— 两头都钉住，
+  // 只断言"不报警"会让引用检查整个死掉也能通过
+  record(pocketDir, '第二轮', { conflicts: ['T0 与 T99 都不许推翻'] });
+  const refs = verify(pocketDir).results.filter(
+    (x) => x.category === 'reference-integrity' && /Conflicts references T/.test(x.message));
+  assert.ok(!refs.some((x) => /references T0/.test(x.message)),
+    'T0 = bootstrap 那一轮，不该报悬空引用：' + JSON.stringify(refs));
+  assert.ok(refs.some((x) => /references T99/.test(x.message)),
+    '真正悬空的引用仍要报：' + JSON.stringify(refs));
+});
+
 test('updateState and updatePreferences report the fields they touched', () => {
   const { pocketDir } = makePocket('state');
   const s = writer.updateState(pocketDir, { summary: '现在的状态', nextStep: '写完测试', pitfall: '别用 eval' });
@@ -400,6 +423,39 @@ test('code-map keeps per-path descriptions when the same file name appears twice
   const after = readPocketFile(pocketDir, 'code-map.md');
   assert.ok(after.includes('根入口'), '根 index.js 的描述丢了');
   assert.ok(after.includes('服务端入口'), 'server/index.js 的描述丢了');
+});
+
+test('code-map drift check reads Chinese file names whole — no false alarm, no silent skip', () => {
+  // 旧正则的字符类不含 CJK：`交接Prompt-MiniMaxCode.md` 被截成 `Prompt-MiniMaxCode.md`
+  // 误报丢失，纯中文名（`规划.md`）整行漏检 —— 静默漏检比误报更危险。
+  // 这里两种都钉住：存在的中文名不许误报，缺失的中文名必须按全名报出来
+  // （只断言"不报警"的话，检查整个坏掉也能通过）。
+  const { projectDir, pocketDir } = makePocket('codemap-cjk');
+  fs.writeFileSync(path.join(projectDir, '规划.md'), '# 规划\n', 'utf-8');
+  fs.writeFileSync(path.join(projectDir, 'WorkBuddy独有能力.md'), '# 独有能力\n', 'utf-8');
+  writePocketFile(pocketDir, 'code-map.md', [
+    '# Code Map',
+    '',
+    '## Structure',
+    '',
+    '```',
+    '├── 规划.md → 项目整体规划',
+    '├── WorkBuddy独有能力.md → 独有能力清单',
+    '├── 交接Prompt-MiniMaxCode.md → 交接文档',
+    '├── 完整工作流.md.bak → 工作流备份',
+    '└── 纯中文缺失.md → 缺失的中文文件',
+    '```',
+    '',
+  ].join('\n'));
+
+  const drift = verify(pocketDir).results.filter((r) => r.category === 'code-map-drift');
+  const missing = drift.filter((r) => /file doesn't exist/.test(r.message));
+  const missingNames = missing.map((r) => r.message.replace(/^code-map references /, '').replace(/ but file doesn't exist$/, ''));
+  assert.deepStrictEqual(missingNames.sort(),
+    ['交接Prompt-MiniMaxCode.md', '完整工作流.md.bak', '纯中文缺失.md'].sort(),
+    '缺失的中文/多后缀/混合名要按全名报出：' + JSON.stringify(drift));
+  assert.ok(!drift.some((r) => /规划\.md|WorkBuddy独有能力\.md/.test(r.message)),
+    '存在的中文名不许误报丢失：' + JSON.stringify(drift));
 });
 
 // ------------------------------------------------------------

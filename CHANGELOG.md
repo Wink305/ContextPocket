@@ -9,7 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_本节暂无条目。1.2.1 之后的改动写在这里。_
+> 本节收录 1.2.1 之后的改动。下面三条来自一份外部诊断清单（2026-11-01 修复），
+> 都是"功能承诺了、实际没做到"的缺陷，没有数据格式变更（仍是 v2，老 pocket 不需要 migrate）。
+
+### 🐛 P1：bootstrap 时写的红线永远归到不存在的 T0（2026-11-01）
+
+- **缺陷本体**：`addAbsoluteEntry` 用 `logData.latestT` 定 T 号，而 `appendLogBlock` / `amendLogBlock` 都是 `latestT + 1`。bootstrap 刚建的 pocket 里 `latestT` 是 0，第一条红线于是写成 `## 🔒 T0 ·`——而 `log.md` 从 T1 开始，T0 这一轮永远不存在。`verify` 每次都报 `T1 Conflicts references T0, which doesn't exist`，而且没有任何命令能修掉它。同理，"在记下一轮之前先写红线"（这是 absolute 的典型用法）也会落到上一轮头上。
+- **修法**：`lib/writer.js:787` 改成 `options.createdAt || logData.latestT + 1`（默认归到**紧接着要记的那一轮**），JSDoc 同步；`--t-id` 显式指定仍然照给。读取侧 `lib/validator.js:606-614` 的 T 引用检查对 **T0 网开一面**（bootstrap 那一轮的存量引用不算悬空），真正不存在的引用（如 T99）照报——`absolute add --help` 与 MCP schema 里 "default: latest T" 的说法改成 "next T to record — latest + 1"。
+- **Tests**：`tests/pocket.js` +1 条（bootstrap 后红线落 T1、记完 T1 后落 T2；存量 `🔒 T0` 不报警而 `T99` 仍报——两个方向都钉着，防止检查整个坏掉也算通过）。
+
+### 🐛 P2：code-map 漂移检查读不了中文文件名（2026-11-01）
+
+- **缺陷本体**：`checkCodeMapDrift` 的路径正则 `[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+` 不含 CJK。中文文件名被截半（`规划.md` 报成 `md` 之类）会**误报**"file doesn't exist"；整行都含中文时正则匹配不到、**整条漂移检查静默跳过**——后者更危险：文件真丢了也不报。
+- **修法**：`lib/validator.js:685` 换成 `/([^\s→]*\.[^\s→]+)\s*→/`——取 `→` 之前的非空白段，天然覆盖中文、多后缀（`完整工作流.md.bak`）与混合名（`WorkBuddy独有能力.md`）。
+- **Tests**：`tests/pocket.js` +1 条（存在的中文名不许误报、缺失的中文名必须按**全名**报出，双向断言）。
+
+### 🐛 P3：`state update` 零参调用被拒绝，而帮助文本承诺它能用（2026-11-01）
+
+- **缺陷本体**：帮助文本说 `state update` 可以只刷头号的 T，但 CLI 与 MCP 的守卫要求至少给一个文本字段，零参调用直接报 `at least one option is required`。库层 `lib/writer.js` 的 `updateState` 本来就支持 header-only 更新，只是两个入口把路堵死了。
+- **修法**："一个文本字段都没给"= 只刷头号 T；"给了字段却没给值"（CLI 裸 flag / MCP 空字符串）仍然是错误——那是另一回事，等于什么都没打算改却要写盘。判据在 `bin/context-pocket.js`（`cmdStateUpdate`）与 `mcp-server.js`（`toolStateUpdate`）各一份，键名按各自入口的拼写（kebab-case / camelCase）。`state update --help` 补一行说明零参语义。
+- **Tests**：`tests/cli.js` +1 条（零参退出 0、头号刷成 latestT、三节正文一字不动，裸 flag 仍退 1）；`tests/mcp.js` +1 条（`{}` 不再 isError、正文不动，`{summary:''}` 仍报错）。
+
+### 门禁（2026-11-01）
+
+- `node tests/run.js` 全量 **233 条通过 / 0 失败**（unit 61 / pocket 63 / hooks 16 / importer 17 / migrate 16 / repair 19 / cli 31 / mcp 20，相对 1.2.1 定版时多 4 条回归用例）。
+- 活测：对一个真实存量 pocket（`C:\Users\13401\Desktop\b站视频流`）跑 `verify`，修复前 3 个 warning 全部消失（3 → 0，`✅ All checks passed`）。
+- `git ls-files --eol` 复查 `w/crlf|w/mixed` 为空。
 
 ---
 
