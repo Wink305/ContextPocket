@@ -30,6 +30,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **修法**："一个文本字段都没给"= 只刷头号 T；"给了字段却没给值"（CLI 裸 flag / MCP 空字符串）仍然是错误——那是另一回事，等于什么都没打算改却要写盘。判据在 `bin/context-pocket.js`（`cmdStateUpdate`）与 `mcp-server.js`（`toolStateUpdate`）各一份，键名按各自入口的拼写（kebab-case / camelCase）。`state update --help` 补一行说明零参语义。
 - **Tests**：`tests/cli.js` +1 条（零参退出 0、头号刷成 latestT、三节正文一字不动，裸 flag 仍退 1）；`tests/mcp.js` +1 条（`{}` 不再 isError、正文不动，`{summary:''}` 仍报错）。
 
+### ♻️ 内部重构：三处重复逻辑收敛（2026-11-02）
+
+> 用户不可感知的行为变化只有一处（code-map 嵌套文件的误报被修掉），其余是"同一个规则只留一份定义"。
+
+- **T 号计算收敛到 `nextT()`**：`latestT + 1` 原先散落 6 处（`lib/writer.js` 4 个写入口 + `lib/sync.js` 2 处补录预览），现统一为 `lib/parser.js` 的 `nextT(log)` 单点发号。"next T = latest T + 1" 的不变量改一个函数就生效。
+- **code-map 解析器统一 + 修嵌套路径误报**：`parseCodeMapEntries` 从 `lib/writer.js` 迁到 `lib/parser.js`，`checkCodeMapDrift` 改用它按缩进累积出的**完整路径**（`byPath`）做存在性检查。旧实现拿 Structure 树里的 basename 直接去项目根找文件，`lib/writer.js` 这类嵌套条目必然被误报 "file doesn't exist"——潜伏缺陷，顺带修掉。解析器同时放宽围栏正则（`## Structure` 与 ``` 之间允许空行）并统一走 CRLF 归一读取。
+- **state update 守卫下沉 `lib/fields.js`**：键名归一（kebab/camel 两种拼写都收）与"给了键没给值 = 报错、一个键没给 = 合法 header-only"的判据收敛为 `stateUpdateFields()`，CLI 与 MCP 两个壳只做报错展示。将来再加入口不用第三份拷贝。
+- **Tests**：`tests/unit.js` +2（`stateUpdateFields` 双拼写判据、`nextT` 单点发号含畸形编号不参与）、`tests/pocket.js` +1（嵌套 code-map 条目不误报、缺失文件按全路径报出）。
+
+### 门禁（2026-11-02）
+
+- `node tests/run.js` 全量 **246 条通过 / 0 失败**（unit 63 / pocket 64 / hooks 16 / importer 17 / migrate 16 / repair 19 / cli 31 / mcp 20）。
+- 活测：对真实存量 pocket（`C:\Users\13401\Desktop\b站视频流`）跑 `verify`，仍 `✅ All checks passed`（0 warning）。
+- `git ls-files --eol` 复查 `w/crlf|w/mixed` 为空。
+
 ### 门禁（2026-11-01）
 
 - `node tests/run.js` 全量 **233 条通过 / 0 失败**（unit 61 / pocket 63 / hooks 16 / importer 17 / migrate 16 / repair 19 / cli 31 / mcp 20，相对 1.2.1 定版时多 4 条回归用例）。

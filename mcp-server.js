@@ -43,7 +43,7 @@ const { sync: syncPocket } = require('./lib/sync');
 const { buildIndex } = require('./lib/indexer');
 const { distill } = require('./lib/distill');
 const { importSession } = require('./lib/importer');
-const { sectionFields, turnFields, hasAnySection, textOption, toList } = require('./lib/fields');
+const { sectionFields, turnFields, hasAnySection, textOption, toList, stateUpdateFields } = require('./lib/fields');
 const { afterWrite } = require('./lib/lifecycle');
 const {
   getHubDir,
@@ -1750,29 +1750,21 @@ function toolHandoff() {
 function toolStateUpdate(args) {
   const pocketDir = getPocketDir();
 
-  // 与 CLI 对齐：一个字段都没给就直接报错，而不是"成功"地什么都不改。
-  // 三个字段都只收文本 —— `{ summary: true }` 会在 state.md 里留下一行 `- true`。
-  const summary = textOption(args, 'summary');
-  const nextStep = textOption(args, 'nextStep');
-  const pitfall = textOption(args, 'pitfall', 'pitfalls');
-  // 「一个文本字段都没给」= 只刷新头号的 T（工具描述就是这么承诺的）。
-  // 「给了字段却没给值」是另一回事 —— 那仍然是什么都没打算改，要报错。
-  const TEXT_KEYS = ['summary', 'nextStep', 'pitfall', 'pitfalls'];
-  const noTextField = !TEXT_KEYS.some((k) => k in args);
+  // 字段抽取与守卫只有一处定义（lib/fields.js stateUpdateFields），与 CLI 共用 ——
+  // 键名拼写差异（nextStep / next-step）也在那里抹平。三条判据：
+  // 一个文本字段都没给 = 只刷新头号的 T（工具描述就是这么承诺的）；
+  // 给了字段却没给值 = 什么都没打算改，要报错；{ summary: true } 这类
+  // 裸值绝不落盘（state.md 里留下一行 `- true` 就是谎话）。
+  const { fields, invalid } = stateUpdateFields(args);
 
-  if (!noTextField && summary === undefined && nextStep === undefined && pitfall === undefined) {
+  if (invalid) {
     return {
       content: [{ type: 'text', text: '❌ Error: pass at least one of summary / nextStep / pitfall (each needs a value)' }],
       isError: true,
     };
   }
 
-  const result = updateState(pocketDir, {
-    summary,
-    appendSummary: !!args.appendSummary,
-    nextStep,
-    pitfall,
-  });
+  const result = updateState(pocketDir, fields);
 
   const lines = [];
   lines.push('✅ **state.md updated**');

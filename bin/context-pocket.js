@@ -65,7 +65,7 @@ const { sync: syncPocket } = require('../lib/sync');
 const { buildIndex } = require('../lib/indexer');
 const { distill } = require('../lib/distill');
 const { importSession } = require('../lib/importer');
-const { toList, textOption, sectionFields, turnFields, hasAnySection } = require('../lib/fields');
+const { toList, textOption, sectionFields, turnFields, hasAnySection, stateUpdateFields } = require('../lib/fields');
 const { describeWhen, describeWhenLine } = require('../lib/when');
 const { afterWrite } = require('../lib/lifecycle');
 const { pkgVersion } = require('../lib/version');
@@ -1516,18 +1516,13 @@ function cmdRepair(options) {
 function cmdStateUpdate(options) {
   const pocketDir = ensurePocket(options);
 
-  // 三个字段都只收文本：`--summary` 后面没有值时不等于"要写 summary"，
-  // 否则 state.md 里会多出一行 `- true`（判据见 lib/fields.js textOption）
-  const summary = textOption(options, 'summary');
-  const nextStep = textOption(options, 'next-step');
-  const pitfall = textOption(options, 'pitfall', 'pitfalls');
+  // 字段抽取与守卫只有一处定义（lib/fields.js stateUpdateFields），CLI 与 MCP
+  // 共用 —— 键名拼写差异（--next-step / nextStep）也在那里抹平。
+  const { fields, invalid } = stateUpdateFields(options);
 
   // 「一个文本字段都没给」= 只刷新头号的 T（帮助文本就是这么承诺的）。
   // 「给了字段却没给值」是另一回事 —— 那仍然是什么都没打算改，要报错。
-  const TEXT_KEYS = ['summary', 'next-step', 'pitfall', 'pitfalls'];
-  const noTextField = !TEXT_KEYS.some((k) => k in options);
-
-  if (!noTextField && summary === undefined && nextStep === undefined && pitfall === undefined) {
+  if (invalid) {
     failJson(options, 'at least one option is required (--summary / --next-step / --pitfall)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' At least one option is required');
     console.error('     Usage: context-pocket state update [--summary "..."] [--next-step "..."] [--pitfall "..."]');
@@ -1535,12 +1530,7 @@ function cmdStateUpdate(options) {
     process.exit(1);
   }
 
-  const result = updateState(pocketDir, {
-    summary,
-    appendSummary: !!options['append-summary'],
-    nextStep,
-    pitfall,
-  });
+  const result = updateState(pocketDir, fields);
 
   if (options.json) emitJson({ ok: true, state: result });
 

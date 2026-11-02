@@ -12,12 +12,12 @@ const { assert, test, tmpProject, ROOT } = require('./harness');
 const { parseArgs } = require(path.join(ROOT, 'bin', 'context-pocket'));
 // toTId / intOption 已上收到 lib/core：CLI 与 MCP 共用同一份归一规则
 const { toTId, intOption } = require(path.join(ROOT, 'lib', 'core'));
-const { toList, toOne, textOption, sectionFields, turnFields, hasAnySection } = require(path.join(ROOT, 'lib', 'fields'));
+const { toList, toOne, textOption, sectionFields, turnFields, hasAnySection, stateUpdateFields } = require(path.join(ROOT, 'lib', 'fields'));
 const io = require(path.join(ROOT, 'lib', 'io'));
 const { isPlaceholderLine, stripPlaceholders, maxNumber, readConfig } = require(path.join(ROOT, 'lib', 'core'));
 // 默认配置的定义处，用来断言"这一项没配成功"时还是出厂值
 const { DEFAULT_CONFIG } = require(path.join(ROOT, 'lib', 'constants'));
-const { parseLogText, parseAbsolute } = require(path.join(ROOT, 'lib', 'parser'));
+const { parseLogText, parseAbsolute, nextT } = require(path.join(ROOT, 'lib', 'parser'));
 // 分词是搜索的唯一语义来源（倒排与现场扫描都调它），所以单独钉住
 const { tokenize } = require(path.join(ROOT, 'lib', 'indexer'));
 
@@ -140,6 +140,26 @@ test('sectionFields is one definition for both entry points', () => {
   assert.deepStrictEqual(turn.tags, ['x', 'y']);
   assert.strictEqual(turn.gist, 'g');
   assert.deepStrictEqual(turn.user, ['u']);
+});
+
+test('stateUpdateFields: CLI kebab 与 MCP camel 是同一份判据', () => {
+  // 键名拼写差异以前在两个壳里各写一份表：有一边对不齐，那一侧就把
+  // 用户给的值当没给（悄悄只刷头号），或者把裸 flag 当值写进 state.md
+  assert.strictEqual(stateUpdateFields({ 'next-step': 'N' }).fields.nextStep, 'N');
+  assert.strictEqual(stateUpdateFields({ nextStep: 'N' }).fields.nextStep, 'N');
+  assert.strictEqual(stateUpdateFields({ pitfalls: 'P' }).fields.pitfall, 'P');
+  assert.strictEqual(stateUpdateFields({ pitfall: 'P' }).fields.pitfall, 'P');
+  assert.strictEqual(stateUpdateFields({ 'append-summary': true }).fields.appendSummary, true);
+  assert.strictEqual(stateUpdateFields({ appendSummary: true }).fields.appendSummary, true);
+
+  // 给了键却没给值 = 什么都没打算改，要报错；一个键都没给 = 合法的 header-only
+  assert.strictEqual(stateUpdateFields({ summary: true }).invalid, true, '裸 flag 不算给值');
+  assert.strictEqual(stateUpdateFields({ summary: '' }).invalid, true, '空串也不算');
+  assert.strictEqual(stateUpdateFields({ nextStep: '  ' }).invalid, true, '只有空白等于没写');
+  assert.strictEqual(stateUpdateFields({}).invalid, false, '零参数是合法的只刷头号');
+  assert.strictEqual(stateUpdateFields(null).invalid, false);
+  assert.strictEqual(stateUpdateFields({ summary: '现状' }).invalid, false);
+  assert.strictEqual(stateUpdateFields({ summary: '现状' }).fields.summary, '现状');
 });
 
 // ------------------------------------------------------------
@@ -297,6 +317,14 @@ test('an implausible T id keeps its content but stops steering latestT', () => {
   assert.deepStrictEqual(data.blocks[1].sections.User, ['伪造的一轮']);
   assert.strictEqual(data.implausible.length, 1);
   assert.strictEqual(data.implausible[0].rawId, 'T4000000000');
+});
+
+test('nextT: 发号规则只有一个 —— latestT + 1，畸形编号不参与发号', () => {
+  assert.strictEqual(nextT({ latestT: 0 }), 1, '空 pocket 从 T1 开始');
+  assert.strictEqual(nextT(parseLogText(SAMPLE_LOG)), 3);
+  // 天文数字编号不进 latestT，下一轮回到可信序列
+  const forged = parseLogText('## T4000000000 · forged\n### User\n- x\n');
+  assert.strictEqual(nextT(forged), 1);
 });
 
 test('T0 is not a usable id either', () => {

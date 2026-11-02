@@ -458,6 +458,38 @@ test('code-map drift check reads Chinese file names whole — no false alarm, no
     '存在的中文名不许误报丢失：' + JSON.stringify(drift));
 });
 
+test('code-map drift check follows the tree down — nested files are not false alarms', () => {
+  // Structure 树每层只写 basename（`lib/` 下面是 `writer.js`），完整路径要按缩进
+  // 累积目录链重建。旧检查拿行里的 basename 直接去项目根找文件，`lib/writer.js`
+  // 必然被误报 "file doesn't exist"。双向钉住：存在的嵌套文件不许报警，
+  // 缺失的必须按完整路径报出（只断言"不报警"的话，检查整个坏掉也能通过）。
+  const { projectDir, pocketDir } = makePocket('codemap-nested');
+  fs.mkdirSync(path.join(projectDir, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(projectDir, 'lib', 'writer.js'), '// writer\n');
+  fs.writeFileSync(path.join(projectDir, 'index.js'), '// entry\n');
+  writePocketFile(pocketDir, 'code-map.md', [
+    '# Code Map',
+    '',
+    '## Structure',
+    '',
+    '```',
+    '├── lib/ → 工具库',
+    '│   ├── writer.js → 写入器',
+    '│   └── 幽灵.js → 缺失的嵌套文件',
+    '└── index.js → 入口',
+    '```',
+    '',
+  ].join('\n'));
+
+  const drift = verify(pocketDir).results.filter((r) => r.category === 'code-map-drift');
+  const missing = drift.filter((r) => /file doesn't exist/.test(r.message));
+  const missingNames = missing.map((r) => r.message.replace(/^code-map references /, '').replace(/ but file doesn't exist$/, ''));
+  assert.deepStrictEqual(missingNames, ['lib/幽灵.js'],
+    '缺失的嵌套文件要按完整路径报出：' + JSON.stringify(drift));
+  assert.ok(!drift.some((r) => /writer\.js|references lib\/ but/.test(r.message)),
+    '存在的嵌套文件和目录条目不许误报：' + JSON.stringify(drift));
+});
+
 // ------------------------------------------------------------
 // 换行归一化 / 原子写 / 锁
 // ------------------------------------------------------------
