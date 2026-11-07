@@ -11,7 +11,7 @@ const { execFileSync } = require('child_process');
 const { assert, test, makePocket, makeV1Pocket, tmpProject, ROOT } = require('./harness');
 
 const CLI = path.join(ROOT, 'bin', 'context-pocket.js');
-const { HELP_COL } = require(path.join(ROOT, 'bin', 'context-pocket.js'));
+const { HELP_COL } = require(path.join(ROOT, 'lib', 'help'));
 
 function runCli(args, dir) {
   const argv = [...args];

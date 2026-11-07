@@ -9,7 +9,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_本节暂无条目。1.2.2 之后的改动写在这里。_
+---
+
+## [1.3.0] - 2026-11-07
+
+> 本节收录 1.2.2 之后、随 1.3.0 发布的改动：帮助文本单源化、活测进发版门禁、verify 语义层
+> （三类跨轮矛盾检测）。没有数据格式变更（仍是 v2，老 pocket 不需要 migrate）。
+
+### 🔍 verify 语义层：三类跨轮矛盾检测（2026-11-07）
+
+> verify 此前只查"结构坏没坏"（编号跳号、引用悬空、格式缺节），不查"记录之间打不打架"。
+> 一份 pocket 攒久了，最常见的坏味道是两条记录各说各话：记录说建了文件、账本里却没有；
+> 两个轮次都说自己"首次创建"；更正块说"其实不是 X"、决策条目还站在那里说"就是 X"。
+> 三类全部 `SEVERITY.WARNING` 起步——矛盾是"可疑"不是"确定坏了"，绝不拦 pre-commit。
+
+- **17. Action ↔ code-map 漂移**（`action-code-map-drift`）：某轮 Action 用了创建类动词
+  （create / 新增 / 创建 / 新建 / Added …，认 `block.actions[].type` 或自由格式行行首）声明创建了
+  文件 X，但 `code-map.md` 的清单（`parseCodeMapEntries` 的 byPath / byName）里没有 X → warning。
+  路径比较归一（`\`→`/`、去 `./` 与盘符、小写），`src\listed.js` 与 `./src/listed.js` 算同一个文件。
+  修法文案覆盖两种都无害的可能：账本没跟上（跑 `code-map update`）或文件后来删/改名（历史没错，忽略）。
+  code-map 的 Structure 还是空清单时不逐条报，只给一条 INFO（那是账本没初始化，不是逐条漂移）。
+- **18. 重复创建声明**（`duplicate-creation-claim`）：同一文件（归一化路径）被两个不同 T-block
+  声明"首次创建" → warning，报出全部 T 号。文件只被创建一次，两条"首次创建"至少一条记错了。
+- **19. 决策 vs 更正**（`decision-correction-conflict`）：`### Decisions & Constraints` 的决策条目
+  与更正块（`## T<n>-fix · <what> · [correction]` 或带 `[correction]` 标签的 T-block）内容互相矛盾
+  → warning。判"矛盾"复用 `lib/query.js` 的 `areTextsContradictory`（关键词反义对 + 共词启发式），
+  与 check-conflicts 六维冲突同一出处，不新造语义判据；更正块自己的决策不自比。
+  修法指向 SKILL.md「Corrections」第 3 条：更正之后要同步 decisions.md / state.md。
+- **parser**：`parseLogText` 现在认识 `## T<n>-fix` 更正块，单独收进 `fixBlocks`（含 `Corrects T<a>`
+  引用解析成 `corrects`），不参与 T 编号与连续性。以前这种标题整个被忽略，它下面的 `### Action`
+  会被记到**上一个** T-block 头上，把两轮的内容搅在一起——顺手修掉了这个串扰。
+- **Tests**：`tests/pocket.js` +4 条（三类各正反例 + 更正块解析不串扰），全量 **257 条通过 / 0 失败**
+  （unit 63 / pocket 68 / hooks 16 / importer 17 / migrate 16 / repair 19 / cli 31 / help 7 / mcp 20）。
+
+### ♻️ 帮助文本单源：`lib/help.js`（2026-11-05）
+
+> 1.2.2 的 P3 缺陷（`state update` 零参"帮助说能、守卫说不能"）根源是同一段行为说明抄在
+> CLI 各命令 `--help`、MCP 工具描述等多处，改一处漏一处不会报错，只会让某个入口开始说谎。
+> 本次把文本收进一个文件、给两个入口各上一把锁。
+
+- **单源**：新增 `lib/help.js`，帮助文本只在这里定义一次——`COMMAND_HELP`（CLI 27 个命令的
+  `--help` 全文，键即命令名）、`HELP_GROUPS`/`HELP_OPTIONS`/`HELP_COL`（`context-pocket help`
+  主帮助页，人类与 `--json` 同源渲染）、`TOOL_DESCRIPTIONS`（MCP `tools/list` 的 27 条工具级
+  描述）、`SERVER_INSTRUCTIONS`（MCP `initialize` 回包的 instructions）。`bin/context-pocket.js`
+  与 `mcp-server.js` 只做渲染，不再内联文本（参数级描述仍留在 `mcp-server.js` 的 schema 里，
+  它们是 schema 的一部分）。**这是纯搬运**：重构前后 29 份 CLI 帮助输出（27 命令 + 主帮助页 +
+  `help --json`）与 27 条 MCP 工具描述逐字节比对一致，用户可见文本零变化。
+- **钉子**：新测试套件 `tests/help.js`（7 条）断言"各入口输出 === 单源内容"——每个命令的
+  `--help` 子进程输出与 `COMMAND_HELP` 逐字节相等；主帮助页的命令清单与 `COMMAND_HELP` 的键
+  互相覆盖（一边多一个少一个都红）；`help --json` 与人类页渲染同一张表；MCP `tools/list` 的
+  每条描述与 `TOOL_DESCRIPTIONS` 相等且键集相同；`initialize` 的 instructions 同理。
+  谁再在入口里内联一段帮助文本，测试直接红。
+- **Tests**：`node tests/run.js` 全量 **253 条通过 / 0 失败**（unit 63 / pocket 64 / hooks 16 /
+  importer 17 / migrate 16 / repair 19 / cli 31 / help 7 / mcp 20）。
+
+### ✅ 活测自动化：`npm run smoke-live` 进发版门禁（2026-11-05）
+
+> 1.2.0 发版时六项链路活测是手工跑的，跑法只留在 CHANGELOG 的施工记录里——下次发版没人记得
+> 怎么复现。现在固化成脚本，成为 `CONTRIBUTING.md`「发布流程」第 4 步的第四道闸。
+
+- 新增 `tests/smoke-live.js`（`npm run smoke-live`）：临时目录 + 临时 hub（`CONTEXTPOCKET_HOME`
+  重定向，不碰 `~/.contextpocket`），全程走真实 CLI 子进程，退出即删。六项各钉着一次真实缺陷：
+  1. 整天区间 `--when` 落盘 `--- WHEN: 2026-05-01 → 2026-05-03 ---`，全文件 `undefined` 0 次（1.1.0 的 P1）；
+  2. 植入 1.1.0 坏行后 `verify` 退 1，`archive --dry-run` 一并被拦并说明"verify found …"（坏数据曾静默通过）；
+  3. 同一行改成 `stated:` 用户原话（原话里真可以有 "undefined" 这个词）就不误报；
+  4. 删掉时间行后 `log amend 1 --when` 补回，`recall` 显示回来；
+  5. 缺必填小节的追加当场打 ⚠️ 并给出该跑的 `log amend` 命令，`--json` 的 `missingSections` 准（曾静默写出坏块）；
+  6. `distill --json` 报告的 `recentKeep` 与实际生效窗口一致（config=2 报 2、旗标 5 报 5；曾报旗标而不是报窗口）。
+- 慢（真实子进程十几发），所以**不进** `npm test` 日常套件，只做发版前最后一道闸。
+- `CONTRIBUTING.md` 同步：发布流程第 4 步改为四条全绿并写明各项含义；目录树与用例计数更新到当前。
 
 ---
 

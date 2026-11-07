@@ -45,6 +45,7 @@ const { distill } = require('./lib/distill');
 const { importSession } = require('./lib/importer');
 const { sectionFields, turnFields, hasAnySection, textOption, toList, stateUpdateFields } = require('./lib/fields');
 const { afterWrite } = require('./lib/lifecycle');
+const { TOOL_DESCRIPTIONS, SERVER_INSTRUCTIONS } = require('./lib/help');
 const {
   getHubDir,
   getHubFile,
@@ -177,10 +178,7 @@ function handleInitialize(id, params) {
       name: 'context-pocket',
       version: SERVER_VERSION,
     },
-    instructions:
-      'ContextPocket project memory. Start with context_pocket_status to see what the pocket '
-      + 'holds, context_pocket_recall to fetch a specific T-block, and context_pocket_log_append '
-      + 'to record a turn. Never hand-edit the markdown files.',
+    instructions: SERVER_INSTRUCTIONS,
   });
 }
 
@@ -192,7 +190,7 @@ const TOOLS = [
   // --- Setup ---
   {
     name: 'context_pocket_bootstrap',
-    description: 'Initialize ContextPocket/ with template files (10 core in full mode, 5 in lite). Auto-detects project type. Idempotent: if ContextPocket/ already exists nothing is overwritten — it reports that and recording continues. Side effect worth naming: by default the project is also added to the user-level hub (~/.contextpocket/hub.json), so pass noHub=true for throwaway directories, script runs and CI projects that should leave nothing in your home.',
+    description: TOOL_DESCRIPTIONS.context_pocket_bootstrap,
     inputSchema: {
       type: 'object',
       properties: {
@@ -228,7 +226,7 @@ const TOOLS = [
   // --- Inspection ---
   {
     name: 'context_pocket_status',
-    description: 'Get current ContextPocket status summary (latest T, requirements, decisions, etc.)',
+    description: TOOL_DESCRIPTIONS.context_pocket_status,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -236,7 +234,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_verify',
-    description: 'Run health check on ContextPocket. 15 checks by default: file existence, T/R/ADR id continuity, T-block section format, reference integrity, index consistency, 🔒 integrity, code map drift, handoff staleness, header T agreement, implausible IDs, log size vs archive_at, format-version lag, the credential/PII scan, and attachment existence (a `### Attachments` line naming a file that is not on disk is an error — template placeholders, URLs, absolute paths, `../` paths and entries already written as `[missing: T<n> <file>]` are skipped, and `log-archive.md` is scanned too). The scan grades by what a leak costs: vendor-shaped keys (sk-ant-, AKIA-, ghp_, private-key blocks, JWT) come back as errors, which block the pre-commit hook and make archive/migrate refuse; personal data (ID numbers, card numbers, phone numbers, `password: xxxx`) is warning-only and never blocks. Findings are masked (first 6 chars + length) — never quote a value you find here into the next T-block. Set "- secret_scan: false" in config.md to disable. Pass drift=true to enable the two tree-scanning drift checks: log-cognition-drift (paths referenced in recent T-blocks vs working tree) and code-newer-than-log (files whose mtime is later than the last record — the missed-log net for projects without git). Both report warnings/info only, never errors.',
+    description: TOOL_DESCRIPTIONS.context_pocket_verify,
     inputSchema: {
       type: 'object',
       properties: {
@@ -265,7 +263,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_recall',
-    description: 'Show full details of a specific T-block (gist, tags, all sections). Archived turns (log-archive.md) are included and marked *(archived)*.',
+    description: TOOL_DESCRIPTIONS.context_pocket_recall,
     inputSchema: {
       type: 'object',
       required: ['tId'],
@@ -279,7 +277,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_diff',
-    description: 'Compare two T-blocks. Shows changes in requirements (added/completed/cancelled), decisions (new ADRs), and files.',
+    description: TOOL_DESCRIPTIONS.context_pocket_diff,
     inputSchema: {
       type: 'object',
       required: ['tA', 'tB'],
@@ -297,7 +295,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_search',
-    description: 'Keyword search over the whole history: T-blocks (gist + every section, archived turns included), ADRs, requirements and preferences. Indexed and scanned searches return the same matches in the same order; page with limit/offset.',
+    description: TOOL_DESCRIPTIONS.context_pocket_search,
     inputSchema: {
       type: 'object',
       required: ['keyword'],
@@ -326,7 +324,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_why',
-    description: 'Reverse lookup: which T-blocks mentioned this file path? Inspired by ThoughtDAG why_file/why_check. Searches every section of every turn, archived turns included. Each hit carries evidence: "changed" when the path is in that turn\'s Action section, "mentioned" when it only appears elsewhere (Uncertain / Attachments / Conflicts / Pitfalls) — which is NOT a record of changing the file. "changed" hits come first, then "mentioned", newest first inside each group.',
+    description: TOOL_DESCRIPTIONS.context_pocket_why,
     inputSchema: {
       type: 'object',
       required: ['filePath'],
@@ -345,7 +343,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_check_conflicts',
-    description: 'Scan for conflicts across 6 dimensions: tech stack, requirements, ADRs, style, deployment, and 🔒 absolute. Three severity levels: critical / warning / info.',
+    description: TOOL_DESCRIPTIONS.context_pocket_check_conflicts,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -353,7 +351,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_sync',
-    description: 'Git safety net: detect staged file changes that were NOT recorded in recent T-blocks ("agent forgot to log"), and optionally auto-record them as a [auto] T-block. Coverage counts strong evidence only: the path must appear in a recent turn\'s Action section. Files mentioned solely in other sections come back as unrecorded with mentionedIn[] naming the turn/section, so you can log amend that turn instead of writing an [auto] block. Use auto=true to fill the gap.',
+    description: TOOL_DESCRIPTIONS.context_pocket_sync,
     inputSchema: {
       type: 'object',
       properties: {
@@ -378,7 +376,7 @@ const TOOLS = [
   // --- Write ---
   {
     name: 'context_pocket_log_append',
-    description: 'Append a new T-block to log.md. Auto-assigns T-ID, updates index. Always use this instead of manually editing log.md.',
+    description: TOOL_DESCRIPTIONS.context_pocket_log_append,
     inputSchema: {
       type: 'object',
       required: ['gist'],
@@ -469,7 +467,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_log_amend',
-    description: 'Fill in sections that are MISSING from an already-written T-block (e.g. a turn appended without `user`). Never overwrites existing content. Use this to resolve "missing User/Action section" errors from context_pocket_verify.',
+    description: TOOL_DESCRIPTIONS.context_pocket_log_amend,
     inputSchema: {
       type: 'object',
       required: ['tId'],
@@ -535,7 +533,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_absolute_add',
-    description: 'Append a 🔒 red-line entry to absolute.md — verbatim, never compressed, never archived. Use ONLY for architecture / tech / code constraints a future agent must not violate (e.g. "never use ORM", "do NOT change the /api/v1 response shape"). NOT for schedule or scope emphasis.',
+    description: TOOL_DESCRIPTIONS.context_pocket_absolute_add,
     inputSchema: {
       type: 'object',
       required: ['text'],
@@ -557,7 +555,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_req_add',
-    description: 'Add a new requirement. Auto-assigns R-ID and updates index.',
+    description: TOOL_DESCRIPTIONS.context_pocket_req_add,
     inputSchema: {
       type: 'object',
       required: ['text'],
@@ -591,7 +589,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_decision_add',
-    description: 'Add a new ADR (Architecture Decision Record). Auto-assigns ADR number.',
+    description: TOOL_DESCRIPTIONS.context_pocket_decision_add,
     inputSchema: {
       type: 'object',
       required: ['title', 'context', 'options', 'decision'],
@@ -626,7 +624,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_handoff',
-    description: 'Generate handoff.md — a single-file summary for the next agent to get up to speed.',
+    description: TOOL_DESCRIPTIONS.context_pocket_handoff,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -634,7 +632,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_state_update',
-    description: 'Update state.md. Updates T-number automatically. Can update summary, next steps, and pitfalls.',
+    description: TOOL_DESCRIPTIONS.context_pocket_state_update,
     inputSchema: {
       type: 'object',
       properties: {
@@ -664,7 +662,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_preferences_update',
-    description: 'Update or add a preference entry in preferences.md. Updates T-number automatically.',
+    description: TOOL_DESCRIPTIONS.context_pocket_preferences_update,
     inputSchema: {
       type: 'object',
       required: ['key', 'value'],
@@ -682,7 +680,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_code_map_update',
-    description: 'Rescan project directory and update code-map.md. Preserves existing descriptions; marks new files as TODO.',
+    description: TOOL_DESCRIPTIONS.context_pocket_code_map_update,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -691,7 +689,7 @@ const TOOLS = [
   // --- Maintenance ---
   {
     name: 'context_pocket_archive',
-    description: 'Archive old T-blocks to log-archive.md. Runs verify before and after. Rolls back on failure.',
+    description: TOOL_DESCRIPTIONS.context_pocket_archive,
     inputSchema: {
       type: 'object',
       properties: {
@@ -709,7 +707,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_migrate',
-    description: 'Migrate ContextPocket data format along the registered one-hop steps (v1 → v2 → v3 in a single call). Backs up first, verifies before each hop, bumps the format stamp after each, and restores the backup if any hop or the final check fails — never half-migrated. Use list=true to see the registry and the computed path, dryRun=true for the full plan without writing.',
+    description: TOOL_DESCRIPTIONS.context_pocket_migrate,
     inputSchema: {
       type: 'object',
       properties: {
@@ -732,7 +730,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_repair',
-    description: 'Renumber T-blocks whose T-ids collide after two agents wrote to the same turn number. The write lock lives in os.tmpdir() (lib/io.js) so it only protects one machine: two clones can both compute latestT+1 and both write T9, and log.md ends up with two `## T9` blocks. verify detects that as an ERROR (its fix line names this tool), and hand-editing the markdown is what the skill forbids, so repair is the way out: the colliding block and every block after it shift up one, so ids stay increasing with file order (log.md is append-only). References are the honest part: a body line saying `T9` may have meant either block, so by default they are LISTED, not rewritten — add applyRefs=true to substitute every stale ref by the same mapping (applied simultaneously, so a T9→T10 / T10→T11 cascade does not move one ref twice). A reference has to be a STANDALONE `T<n>`: `GPT4`, `RTX4090`, `UTF8` are words that merely contain the shape and are never matched. Attachment file names (`T04-diagram.png`, `assets/T04-x.png`) are a third category and are NEVER rewritten, applyRefs included — renaming is two halves (`mv` the file, then edit the text), and doing only the second half manufactures a broken link plus lost zero-padding, so the tool just lists them in `fileNames` with the exact `mv` command for you to run. Derived counters (the `· T<n>` header line of state/requirements/decisions/preferences/code-map/handoff, and index.md) are realigned automatically. log-archive.md is reported only, never modified — it declares itself read-only. The renumbering itself is recorded as a new [auto] T-block so the pocket states that the tool moved numbers. Rolls back everything if verify ends up worse or duplicates remain. dryRun=true returns the plan without writing.',
+    description: TOOL_DESCRIPTIONS.context_pocket_repair,
     inputSchema: {
       type: 'object',
       properties: {
@@ -756,7 +754,7 @@ const TOOLS = [
   // --- Git Hooks ---
   {
     name: 'context_pocket_install_hook',
-    description: 'Install a git pre-commit hook (v3: three-step). Step 0 skips the checks when the repo has no ContextPocket/ directory, so installing the hook before bootstrap never blocks every commit. Step 1 runs context-pocket sync --auto to auto-fill missed T-blocks from staged changes. Step 2 runs context-pocket verify --quiet; blocks commit only if verify finds errors (warnings allow). Upgrades an older hook automatically.',
+    description: TOOL_DESCRIPTIONS.context_pocket_install_hook,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -764,7 +762,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_uninstall_hook',
-    description: 'Uninstall the ContextPocket pre-commit hook. If other hook content exists, only removes the ContextPocket section.',
+    description: TOOL_DESCRIPTIONS.context_pocket_uninstall_hook,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -773,7 +771,7 @@ const TOOLS = [
   // --- Long-term memory ---
   {
     name: 'context_pocket_index',
-    description: 'Build or refresh the derived search index (T-blocks + ADRs + requirements + preferences) at ContextPocket/assets/search-index.json. Markdown files remain the source of truth; the index is a cache that auto-refreshes on search, so this tool is mostly for forcing a rebuild after bulk edits or imports.',
+    description: TOOL_DESCRIPTIONS.context_pocket_index,
     inputSchema: {
       type: 'object',
       properties: {
@@ -787,7 +785,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_distill',
-    description: 'Distill old content: scan log-archive.md plus old turns in log.md and extract candidate decisions / pitfalls / preferences / open ❓ items worth promoting back into the living docs (decisions.md / state.md / preferences.md). Writes a digest report ContextPocket/digest-<date>.md — review it, merge still-valid items with their T references, then delete the report.',
+    description: TOOL_DESCRIPTIONS.context_pocket_distill,
     inputSchema: {
       type: 'object',
       properties: {
@@ -805,7 +803,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_import',
-    description: 'Import past agent conversation sessions (claude-code / codex JSONL, auto-detected) as [imported] T-blocks. T numbers continue from the current latest. Useful when enabling ContextPocket on a project that already has agent history.',
+    description: TOOL_DESCRIPTIONS.context_pocket_import,
     inputSchema: {
       type: 'object',
       required: ['file'],
@@ -840,7 +838,7 @@ const TOOLS = [
   },
   {
     name: 'context_pocket_hub',
-    description: 'User-level memory hub at ~/.contextpocket/hub.json (redirect the folder with the CONTEXTPOCKET_HOME env var to share it across machines). Actions: list registered projects (default), set/get global preferences, or unregister a project. The hub is only a registry — project data always lives in each project\'s ContextPocket/.',
+    description: TOOL_DESCRIPTIONS.context_pocket_hub,
     inputSchema: {
       type: 'object',
       properties: {

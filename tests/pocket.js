@@ -1577,3 +1577,104 @@ test('a pocket that stays on v1 is still healthy — the upgrade is offered, nev
     '已经是最新格式的 pocket 不该再被提示升级：' + JSON.stringify(after.results.map((r) => r.category)));
   assert.strictEqual(after.errorCount, 0);
 });
+
+// ------------------------------------------------------------
+// 跨轮矛盾检测（verify 语义层：action↔code-map 漂移 / 重复创建 / 决策 vs 更正）
+// 三类全部是 WARNING —— 矛盾是"可疑"，绝不许拦 pre-commit。
+// ------------------------------------------------------------
+
+/** 手写一份 code-map 的 Structure 树（bootstrap 预填的那份不一定带描述，靠不住） */
+function writeCodeMap(pocketDir, lines) {
+  writePocketFile(pocketDir, 'code-map.md',
+    ['# Code Map', '', '## Structure', '', '```', ...lines, '```', ''].join('\n'));
+}
+
+test('verify: a creation claim missing from code-map is a warning, a listed one is not', () => {
+  const { pocketDir } = makePocket('claim-map');
+  writeCodeMap(pocketDir, [
+    '├── src/ → 源码',
+    '│   └── listed.js → 已登记',
+    '└── app.js → 入口',
+  ]);
+  record(pocketDir, '建了没登记的', { action: ['创建 src/unlisted.js — 起了个头'] });
+
+  const hits = verify(pocketDir).results.filter((r) => r.category === 'action-code-map-drift');
+  assert.strictEqual(hits.length, 1, JSON.stringify(hits));
+  assert.strictEqual(hits[0].severity, 'warning', '矛盾是可疑不是确定坏了，绝不许是 error');
+  assert.ok(hits[0].message.includes('T1') && hits[0].message.includes('src/unlisted.js'), hits[0].message);
+
+  // 反例：登记过的不许报警 —— Windows 分隔符与 ./ 前缀都算同一个文件
+  const { pocketDir: ok } = makePocket('claim-map-ok');
+  writeCodeMap(ok, [
+    '├── src/ → 源码',
+    '│   ├── listed.js → 已登记',
+    '│   └── other.js → 也登记了',
+    '└── app.js → 入口',
+  ]);
+  record(ok, '建了已登记的', { action: ['创建 src\\listed.js — 收尾'] });
+  record(ok, '换种写法再记一次', { action: ['新增 ./src/other.js — 顺手'] });
+  assert.strictEqual(
+    verify(ok).results.filter((r) => r.category === 'action-code-map-drift' && r.severity === 'warning').length,
+    0,
+    '登记过的文件（含反斜杠 / ./ 前缀写法）不许报警'
+  );
+});
+
+test('verify: two turns claiming to first-create the same file fight, even through path noise', () => {
+  const { pocketDir } = makePocket('dup-claim');
+  record(pocketDir, '第一遍建', { action: ['创建 src/dup.js — 起头'] });
+  record(pocketDir, '第二遍又建', { action: ['新增文件 ./src/dup.js — 从头建'] });
+
+  const hits = verify(pocketDir).results.filter((r) => r.category === 'duplicate-creation-claim');
+  assert.strictEqual(hits.length, 1, JSON.stringify(hits));
+  assert.strictEqual(hits[0].severity, 'warning');
+  assert.ok(/T1/.test(hits[0].message) && /T2/.test(hits[0].message), '要报出两个 T 号：' + hits[0].message);
+  assert.ok(hits[0].message.includes('dup.js'), hits[0].message);
+
+  // 反例：两个不同的文件各建一次，不是矛盾
+  const { pocketDir: ok } = makePocket('dup-claim-ok');
+  record(ok, '建甲', { action: ['创建 src/one.js — 甲'] });
+  record(ok, '建乙', { action: ['创建 src/two.js — 乙'] });
+  assert.strictEqual(verify(ok).results.filter((r) => r.category === 'duplicate-creation-claim').length, 0);
+});
+
+test('verify: a decision that fights a T<n>-fix correction is flagged, and the fix block parses cleanly', () => {
+  const { pocketDir } = makePocket('dec-fix');
+  record(pocketDir, '定了接口协议', {
+    decisions: ['enable featureX for all users'],
+    action: ['配置 proto/config.yaml — 定了协议'],
+  });
+  // 按 SKILL.md「Corrections」的形状手写一条更正块（writer 不写 fix 标题）
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md') + [
+    '',
+    '## T1-fix · 更正协议 · [correction]',
+    'Corrects T1: said enable featureX, actually disable featureX',
+    '',
+  ].join('\n'));
+
+  const hits = verify(pocketDir).results.filter((r) => r.category === 'decision-correction-conflict');
+  assert.strictEqual(hits.length, 1, JSON.stringify(hits));
+  assert.strictEqual(hits[0].severity, 'warning');
+  assert.ok(/T1/.test(hits[0].message) && /T1-fix/.test(hits[0].message), hits[0].message);
+
+  // parser：更正块单独收进 fixBlocks，不许把 T1 自己的小节搅乱；Corrects 引用要解析出轮号
+  const parsed = parser.parseLog(pocketDir);
+  assert.strictEqual(parsed.blocks.length, 1);
+  assert.deepStrictEqual(parsed.blocks[0].sections['Decisions & Constraints'], ['enable featureX for all users'],
+    '更正块的小节不许串到 T1 头上：' + JSON.stringify(parsed.blocks[0].sections));
+  assert.strictEqual(parsed.fixBlocks.length, 1);
+  assert.deepStrictEqual(parsed.fixBlocks[0].corrects, [1]);
+});
+
+test('verify: a correction that contradicts no decision stays silent', () => {
+  const { pocketDir } = makePocket('dec-fix-ok');
+  record(pocketDir, '定了接口协议', {
+    decisions: ['enable featureX for all users'],
+    action: ['配置 proto/config.yaml — 定了协议'],
+  });
+  record(pocketDir, '更正文档笔误', {
+    tags: ['correction'],
+    action: ['Fixed docs/guide.md — 修了笔误'],
+  });
+  assert.strictEqual(verify(pocketDir).results.filter((r) => r.category === 'decision-correction-conflict').length, 0);
+});

@@ -36,7 +36,7 @@
    - 修改 `templates/` 时,确保新模板符合"占位符用 `<...>` 包裹"的约定
    - 修改 README/CHANGELOG 时同步更新相关章节
 4. **本地验证**（三条都要过，`package.json` 里已配好脚本）:
-   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 60+60+16+17+16+19+27+18 = 233 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
+   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 63+64+16+17+16+19+31+7+20 = 253 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
    - `npm run lint` — 对仓库内每个 `.js` 跑 `node --check`
    - `npm run smoke` — 用真实 stdio 跑一遍 MCP server（`initialize` / `tools/list` / 27 个工具里的 append、amend、absolute add、index、distill、hub、verify 等；`repair` 不在冒烟覆盖里——它要先人为造出撞号的目录，这件事由 `tests/repair.js` 与 `tests/mcp.js` 盯着）。不带参数时它会在 OS 临时目录里现造一个一次性 pocket 并把 `CONTEXTPOCKET_HOME` 隔离到同一目录，退出即删，所以可以直接跑；想对着指定项目跑就写 `npm run smoke -- /path/to/project`（此时若没设 `CONTEXTPOCKET_HOME`，hub 写入会落到你真实的 `~/.contextpocket`，脚本会先打印一行提示）。收尾断言是 `verify` 必须返回 `All checks passed`——所以往冒烟步骤里加任何声明（尤其是 `### Attachments` 那条路径）都得把文件真的写出来，否则第 15 项检查会让冒烟红）
    - `node tests/run.js pocket` 之类的前缀参数可以只跑某个文件
@@ -174,7 +174,7 @@ context-pocket/
 │   └── context-pocket.js  # CLI 入口（人类输出 + --json 一行输出）
 ├── lib/                   # 全部实现；CLI 与 MCP 都只调这里，不在入口里写业务逻辑
 │   ├── bootstrap.js  constants.js  core.js  distill.js  fields.js
-│   ├── formatter.js  hooks.js      importer.js  indexer.js  io.js
+│   ├── formatter.js  help.js   hooks.js      importer.js  indexer.js  io.js
 │   ├── lifecycle.js  migrate.js    parser.js    query.js    repair.js
 │   ├── secrets.js    sync.js       userhub.js   validator.js writer.js
 │   └── when.js        # v2 时间行的唯一解析/渲染处：parseWhen / whenLine / describeWhen / formatSupportsWhen
@@ -183,7 +183,8 @@ context-pocket/
 ├── tests/
 │   ├── run.js             # 零依赖跑批（可按文件前缀只跑一个）
 │   ├── harness.js         # test/tmpProject/makePocket + CONTEXTPOCKET_HOME 隔离
-│   ├── unit.js  pocket.js  hooks.js  importer.js  migrate.js  repair.js  cli.js  mcp.js
+│   ├── unit.js  pocket.js  hooks.js  importer.js  migrate.js  repair.js  cli.js  help.js  mcp.js
+│   └── smoke-live.js      # 发版门禁活测（npm run smoke-live）：六项链路走真实 CLI 子进程
 ├── templates/             # bootstrap 复制的是这个目录的**根**层文件（10 个）
 │   ├── readme.md  config.md  index.md  state.md  requirements.md
 │   ├── preferences.md  decisions.md  code-map.md  absolute.md  log.md
@@ -216,7 +217,11 @@ context-pocket/
 3. README / README.zh-CN **目前没有版本徽章**（`README.md:5-7` 只有 License / format / PRs 三枚），
    所以这一步通常无事可做；将来若加了版本徽章，定版时必须一起改，别让它停在旧号上。
    注意 `format-v1` 那枚指的是 `SKILL.md` 的文档排版版本，与包版本、数据格式版本都是三回事。
-4. `npm test`、`npm run lint`、`npm run smoke` 三条全绿。
+4. `npm test`、`npm run lint`、`npm run smoke`、`npm run smoke-live` 四条全绿。
+   `smoke-live` 是发版门禁活测（`tests/smoke-live.js`）：1.2.0 发版时手工跑过的六项链路
+   （整天区间 `--when` 落盘、坏行被 verify/archive 拦住、`stated:` 原话不误报、删行后 amend 补回、
+   缺必填小节当场警告且 `--json` 的 `missingSections` 准、`distill --json` 报告的窗口数字与实际一致），
+   全部走真实 CLI 子进程 + 临时 hub，退出即删。它比日常套件慢，所以不进 `npm test`，只做发版前的最后一道闸。
 5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单（`:36`）真的把它带上了。
    落在 `bin/` `lib/` `templates/` `assets/` `docs/` `scripts/` 里的会自动带上；白名单外的目录要显式加，
    否则发布出去的包缺文件，用户拿到的就是"读不到 package.json、只能报兜底版本"那种安装。
