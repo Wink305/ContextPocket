@@ -10,6 +10,7 @@
  *   context-pocket sync [--auto] [--dry-run] [--last-n <N>] [--quiet]
  *   context-pocket status
  *   context-pocket recall <T-id>
+ *   context-pocket recall --since <T> --until <T> [--from <date>] [--to <date>]
  *   context-pocket diff <T-a> <T-b>
  *   context-pocket search <keyword>
  *   context-pocket why <file-path> [--limit <N>]
@@ -57,7 +58,7 @@ const {
 } = require('../lib/writer');
 const { formatVerifyResult, formatStatus, colorize } = require('../lib/formatter');
 const { bootstrap } = require('../lib/bootstrap');
-const { recall, diff, searchAny, why, checkConflicts } = require('../lib/query');
+const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('../lib/query');
 const { runMigration, listMigrations } = require('../lib/migrate');
 const { repairLogIds } = require('../lib/repair');
 const { installPreCommitHook, uninstallPreCommitHook } = require('../lib/hooks');
@@ -667,15 +668,120 @@ function cmdStatus(options) {
 // 命令：recall
 // ============================================================
 
+/**
+ * 时间窗口的人类可读说明。search 与 recall 的窗口模式共用：
+ * 四个旗标的措辞、T 号/日期两组的拼接顺序只有一份，不然两个命令
+ * 迟早会各自"优化"出不一样的说法。
+ */
+function timeWindowLabel(sinceT, untilT, fromDate, toDate) {
+  const parts = [];
+  if (sinceT !== null || untilT !== null) {
+    parts.push(
+      'T号: ' +
+      (sinceT !== null ? `>= T${sinceT}` : '') +
+      (sinceT !== null && untilT !== null ? ' 且 ' : '') +
+      (untilT !== null ? `<= T${untilT}` : '')
+    );
+  }
+  if (fromDate !== null || toDate !== null) {
+    parts.push(
+      '日期: ' +
+      (fromDate !== null ? `>= ${fromDate}` : '') +
+      (fromDate !== null && toDate !== null ? ' 且 ' : '') +
+      (toDate !== null ? `<= ${toDate}` : '')
+    );
+  }
+  return parts.join(' · ');
+}
+
+/** 窗口模式：列一段时间线，而不是某一轮的全文 */
+function printRecallWindow(options, pocketDir, w) {
+  const out = recallWindow(pocketDir, {
+    sinceT: w.sinceT,
+    untilT: w.untilT,
+    fromDate: w.fromDate,
+    toDate: w.toDate,
+    limit: options.limit,
+    offset: options.offset,
+  });
+
+  if (options.json) {
+    emitJson({
+      ok: true,
+      mode: 'window',
+      sinceT: w.sinceT,
+      untilT: w.untilT,
+      fromDate: w.fromDate,
+      toDate: w.toDate,
+      count: out.turns.length,
+      total: out.total,
+      offset: out.offset,
+      limit: out.limit,
+      hasMore: out.hasMore,
+      turns: out.turns,
+    });
+  }
+
+  const label = timeWindowLabel(w.sinceT, w.untilT, w.fromDate, w.toDate);
+  const shown = out.limit !== null && out.turns.length < out.total
+    ? colorize(` · showing ${out.offset + 1}–${out.offset + out.turns.length}`, 'dim')
+    : '';
+  console.log('');
+  console.log(colorize(`  Recall: ${out.total} turn${out.total === 1 ? '' : 's'}`, 'bold') +
+    (label ? colorize('  ( ' + label + ' )', 'dim') : '') + shown);
+  console.log('  ' + colorize('─'.repeat(40), 'dim'));
+
+  if (out.turns.length === 0) {
+    console.log('  (no turns in this window)');
+  } else {
+    for (const t of out.turns) {
+      const tags = t.tags.length > 0 ? ' ' + t.tags.map(x => colorize(`[${x}]`, 'cyan')).join('') : '';
+      const when = t.when ? describeWhen(t.when) : (t.session || 'no time recorded');
+      const archived = t.archived ? colorize('  (archived)', 'dim') : '';
+      console.log(`  ${colorize('T' + t.id, 'bold')}  ${colorize(when, 'dim')}${tags}  ${t.gist}${archived}`);
+    }
+  }
+  if (out.hasMore) {
+    console.log(colorize(`  … ${out.total - out.offset - out.turns.length} more — next page: --offset ${out.offset + out.turns.length}; all: --limit 0`, 'dim'));
+  }
+  console.log('');
+}
+
 function cmdRecall(options, positional) {
   const pocketDir = ensurePocket(options);
   const tIdStr = positional[0] || tIdOption(options);
 
-  if (!tIdStr) {
-    failJson(options, 'T-id is required. Usage: context-pocket recall <T-id> (or --t-id <n>)');
-    console.error(colorize('\n  ❌ Error:', 'red') + ' T-id is required');
-    console.error('     Usage: context-pocket recall <T-id>  (or --t-id <n>, aliases --t/--id)\n');
+  // 与 search 同一组窗口旗标：intOption / textOption 统一收，垃圾值回落成 null，
+  // 让 filterByTime 按"没给过滤条件"处理（与 search 完全同一份判据）。
+  const sinceT = intOption(options.since, 0) > 0 ? intOption(options.since, 0) : null;
+  const untilT = intOption(options.until, 0) > 0 ? intOption(options.until, 0) : null;
+  const fromDate = textOption(options, 'from') || null;
+  const toDate = textOption(options, 'to') || null;
+  const hasWindow = sinceT !== null || untilT !== null || fromDate !== null || toDate !== null;
+
+  // 两种形态互斥：同时给 T 号和窗口，静默丢掉窗口就是"选项被正常解析、命令悄悄无视"
+  // ——本项目反复踩过的坑，所以这里明确报错。
+  if (tIdStr && hasWindow) {
+    failJson(options, 'recall: a T-id and a time window cannot be used together. Use either recall <T-id> or recall --since/--until/--from/--to.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' A T-id and a time window cannot be used together.');
+    console.error('     Use either `context-pocket recall <T-id>` or `context-pocket recall --since <T> --until <T>`.\n');
     process.exit(1);
+  }
+
+  if (!tIdStr && !hasWindow) {
+    // 保留 "T-id is required" 这句老实话：已有调用方（与回归锁）认得它，
+    // 后半句与下面两行再教会窗口用法。
+    failJson(options, 'T-id is required. Usage: context-pocket recall <T-id>, or a time window: recall --since <T> --until <T> --from <YYYY-MM-DD> --to <YYYY-MM-DD>');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' T-id is required (or a time window)');
+    console.error('     Show one turn:  context-pocket recall <T-id>  (or --t-id <n>)');
+    console.error('     List a window:  context-pocket recall --since <T> --until <T>');
+    console.error('                     context-pocket recall --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n');
+    process.exit(1);
+  }
+
+  if (!tIdStr) {
+    printRecallWindow(options, pocketDir, { sinceT, untilT, fromDate, toDate });
+    return;
   }
 
   const tId = toTId(tIdStr);
@@ -878,27 +984,11 @@ function cmdSearch(options, positional) {
     });
   }
 
-  // 时间窗口说明（人类输出头部）
-  const range = [];
-  if (sinceT !== null || untilT !== null) {
-    range.push(
-      'T号: ' +
-      (sinceT !== null ? `>= T${sinceT}` : '') +
-      (sinceT !== null && untilT !== null ? ' 且 ' : '') +
-      (untilT !== null ? `<= T${untilT}` : '')
-    );
-  }
-  if (fromDate !== null || toDate !== null) {
-    range.push(
-      '日期: ' +
-      (fromDate !== null ? `>= ${fromDate}` : '') +
-      (fromDate !== null && toDate !== null ? ' 且 ' : '') +
-      (toDate !== null ? `<= ${toDate}` : '')
-    );
-  }
+  // 时间窗口说明（人类输出头部）：措辞与 recall 的窗口模式共用一份
+  const label = timeWindowLabel(sinceT, untilT, fromDate, toDate);
 
   console.log('');
-  console.log(colorize(`  Search: "${keyword}"`, 'bold') + (range.length ? colorize('  ( ' + range.join(' · ') + ' )', 'dim') : ''));
+  console.log(colorize(`  Search: "${keyword}"`, 'bold') + (label ? colorize('  ( ' + label + ' )', 'dim') : ''));
   const shown = limit !== null && results.length < total
     ? colorize(` · showing ${offset + 1}–${offset + results.length}`, 'dim')
     : '';

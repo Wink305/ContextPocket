@@ -928,3 +928,110 @@ test('cli: code-map update --interactive 回车采纳建议、s 跳过、EOF 不
   assert.strictEqual(bad.code, 1);
 });
 
+// ============================================================
+// recall 窗口模式（1.4.0 的 search 旗标在 recall 侧的对称补齐）
+// ============================================================
+
+/** 追加一轮，返回它的 T 号；when 省略就用记录时刻 */
+function appendTurn(pocketDir, gist, when) {
+  const args = ['log', 'append', '--gist', gist, '--user', 'u', '--action', 'a'];
+  if (when) args.push('--when', when);
+  args.push('--json');
+  return parseJsonLine(runCli(args, pocketDir)).tId;
+}
+
+test('cli: recall --since/--until lists turns with the window JSON contract', () => {
+  const { pocketDir } = makePocket('cli-recall-window-t');
+  const ids = [
+    appendTurn(pocketDir, 'alpha', '2026-10-01'),
+    appendTurn(pocketDir, 'beta', '2026-10-10'),
+    appendTurn(pocketDir, 'gamma', '2026-11-01'),
+  ];
+
+  const data = parseJsonLine(runCli(['recall', '--since', String(ids[1]), '--until', String(ids[2]), '--json'], pocketDir));
+  assert.strictEqual(data.ok, true);
+  assert.strictEqual(data.mode, 'window', '窗口模式要有 mode 标记，别让调用方猜回包形状');
+  assert.strictEqual(data.sinceT, ids[1]);
+  assert.strictEqual(data.untilT, ids[2]);
+  assert.strictEqual(data.fromDate, null);
+  assert.strictEqual(data.total, 2);
+  assert.strictEqual(data.hasMore, false);
+  assert.deepStrictEqual(data.turns.map((t) => t.id), [ids[1], ids[2]]);
+  assert.strictEqual(data.turns[0].gist, 'beta');
+  assert.ok(data.turns[0].when && data.turns[0].when.kind === 'day', 'when 要把结构行原样交给机器');
+
+  // 人类输出是另一种形态，不能混进 --json 那一行
+  const human = runCli(['recall', '--since', String(ids[0]), '--until', String(ids[2])], pocketDir);
+  assert.strictEqual(human.code, 0, human.stderr);
+  assert.ok(/Recall: 3 turns/.test(human.stdout), human.stdout);
+  assert.ok(/T1/.test(human.stdout) && /gamma/.test(human.stdout), human.stdout);
+  assert.ok(!/^\{/.test(human.stdout.trim()));
+});
+
+test('cli: recall --from/--to filters by WHEN date and echoes the flags', () => {
+  const { pocketDir } = makePocket('cli-recall-window-date');
+  appendTurn(pocketDir, 'old', '2026-10-01');
+  appendTurn(pocketDir, 'middle', '2026-10-10');
+  appendTurn(pocketDir, 'new', '2026-11-01');
+
+  const data = parseJsonLine(runCli(['recall', '--from', '2026-10-05', '--to', '2026-10-20', '--json'], pocketDir));
+  assert.strictEqual(data.fromDate, '2026-10-05');
+  assert.strictEqual(data.toDate, '2026-10-20');
+  assert.strictEqual(data.total, 1);
+  assert.strictEqual(data.turns[0].gist, 'middle');
+});
+
+test('cli: recall window pages after filtering, --limit 0 means all', () => {
+  const { pocketDir } = makePocket('cli-recall-window-page');
+  for (const g of ['a', 'b', 'c']) appendTurn(pocketDir, g, '2026-10-01');
+
+  const page1 = parseJsonLine(runCli(['recall', '--since', '1', '--limit', '1', '--json'], pocketDir));
+  assert.strictEqual(page1.total, 3, 'total 不能被 limit 截小');
+  assert.strictEqual(page1.count, 1);
+  assert.strictEqual(page1.hasMore, true);
+  assert.strictEqual(page1.turns[0].id, 1);
+
+  const page2 = parseJsonLine(runCli(['recall', '--since', '1', '--limit', '1', '--offset', '1', '--json'], pocketDir));
+  assert.strictEqual(page2.turns[0].id, 2);
+
+  const all = parseJsonLine(runCli(['recall', '--since', '1', '--limit', '0', '--json'], pocketDir));
+  assert.strictEqual(all.limit, null);
+  assert.strictEqual(all.count, 3);
+  assert.strictEqual(all.hasMore, false);
+});
+
+test('cli: recall rejects a T-id combined with a window instead of silently dropping it', () => {
+  const { pocketDir } = makePocket('cli-recall-window-conflict');
+  appendTurn(pocketDir, 'only', '2026-10-01');
+
+  const r = runCli(['recall', '1', '--since', '1', '--json'], pocketDir);
+  assert.strictEqual(r.code, 1);
+  const data = parseJsonLine(r);
+  assert.strictEqual(data.ok, false);
+  assert.ok(/window/i.test(data.error), data.error);
+});
+
+test('cli: recall with no T-id and no window still errors, and now teaches both forms', () => {
+  const { pocketDir } = makePocket('cli-recall-window-missing');
+  const r = runCli(['recall', '--json'], pocketDir);
+  assert.strictEqual(r.code, 1);
+  const data = parseJsonLine(r);
+  assert.strictEqual(data.ok, false);
+  assert.ok(/T-id/.test(data.error));
+  assert.ok(/window/i.test(data.error), '报错要教会窗口用法，不能只说 T-id is required');
+  // --json 走 failJson 直接退出，人类提示只在非 --json 模式下出现
+  const human = runCli(['recall'], pocketDir);
+  assert.strictEqual(human.code, 1);
+  assert.ok(human.stderr.includes('--from') && human.stderr.includes('--since'), human.stderr);
+});
+
+test('cli: recall <T-id> is unchanged by the window mode', () => {
+  const { pocketDir } = makePocket('cli-recall-window-single');
+  const tId = appendTurn(pocketDir, 'single turn', '2026-10-01');
+  const data = parseJsonLine(runCli(['recall', String(tId), '--json'], pocketDir));
+  assert.strictEqual(data.ok, true);
+  assert.strictEqual(data.t.id, tId);
+  assert.ok(!data.mode, '单轮形态不该凭空多出 mode 字段');
+  assert.ok(data.t.rawText.includes('single turn'));
+});
+

@@ -207,6 +207,7 @@ Agent 会自动：
 | "这文件谁改的" · "为什么长这样" | `why <path>` | 命中的轮次，按证据强弱标注：`[changed]`（这轮的 Action 小节里有它）/ `[mentioned only]`（只在 Uncertain、Attachments、Conflicts 里被谈到过，不等于改过）；改过的排在前面 |
 | "上次那个 bug 怎么修的" · "搜一下 X" | `search <关键词>` | 命中的 T-block |
 | "T7 当时说了什么" · "回看一下那轮" | `recall T<n>` | 完整 T-block |
+| "上周都干了啥" · "把 T5 到 T9 的记录列出来" | `recall --from … --to …` / `recall --since T5 --until T9` | 这个窗口里的轮次，按 T 号从早到晚 |
 | "T5 到 T9 变了啥" | `diff Ta Tb` | 差异 |
 | "有什么待确认的" · "有没有我不确定的" | 直接读 `❓` 行（无工具） | 列出清单，然后问"逐条确认吗？" |
 | "有没有前后矛盾" | `check-conflicts` | 按严重度分级的结果 |
@@ -228,6 +229,7 @@ Agent 会自动：
 | `context-pocket verify --drift --dir <root>` | 增加两项扫目录的漂移检查：认知漂移（最近 T-block 提到的路径 vs 工作树）+ 代码比记录新（上次记录之后又被改的文件，不依赖 git）。可加 `--drift-last-n <N>` 调节回看窗口 |
 | `context-pocket status --dir <root>` | 一行摘要（T 范围、需求数、ADR 数、❓ 数、归档状态） |
 | `context-pocket recall <T-id> --dir <root>` | 查看某一轮的完整详情 |
+| `context-pocket recall --dir <root> --since <T> [--until <T>] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit N] [--offset N]` | **窗口模式**：不给 T 号、至少给一个窗口旗标——没有关键词可搜、只想按时间/轮号列一段历史时用。窗口语义与 `search` 完全一致（见下文「时间窗口」）。按 T 号从早到晚，归档轮次也列并标注；`--limit 0` 取全量。T 号与窗口不能同时给。MCP 侧：`context_pocket_recall` 不传 `tId`，改传 `sinceT` / `untilT` / `fromDate` / `toDate` |
 | `context-pocket diff <Ta> <Tb> --dir <root>` | 对比两轮：需求变化、ADR 新增、文件变化 |
 | `context-pocket search <关键词> --dir <root> [--limit N] [--offset N] [--no-index]` | 在全量历史上做关键词搜索：T-block（gist、标签、每一个小节，含已归档轮次）、ADR、需求与偏好。自动走 `assets/search-index.json` 索引，加 `--no-index` 直接扫 Markdown —— 两条路径的匹配与排序完全相同，所以 `--limit`/`--offset` 翻的是同一份结果（`--limit 0` 为全部）。匹配规则：拉丁词按分隔符拆开，中文按**相邻两字组合**建索引，且查询词必须**全部**命中。所以长中文串里的短语能搜到（`时间分页` 能找到「给搜索加时间分页」），换个顺序就不行（`分页时间` 搜不到）；单独一个汉字只能命中那个字独立出现的地方 |
 | `context-pocket why <文件路径> --dir <root>` | 反向检索：哪些 T-block 提到过这个文件，并按证据强弱分开 —— `[changed]`（该轮 Action 小节里有这个路径）与 `[mentioned only]`（只在 Uncertain / Attachments / Conflicts / Pitfalls 里出现）。改过它的那几轮排前面，所以 `--limit` 截掉的是弱证据，不会把真实改动挤掉（借鉴 ThoughtDAG） |
@@ -264,6 +266,26 @@ Agent 会自动：
 > 💡 `--no-index` 在缓存的两端都出现，两端都动不到数据：`search` 上是"这一次不信缓存"，`log append` / `log amend` 上是"这次写完不刷缓存"。Markdown 永远是真相源，所以下一轮 search 会发现源文件变了、自己重建，命中的轮次一条不少（连着 append 几十轮再归档一轮也不会漏）。但它省多少要看规模：30 轮的项目里每轮约 15 ms，800 轮时才是 0.18 秒；而一次空转的 CLI 调用本身要 112 ms（Node 启动占大头）——所以真正划算的是常驻的 MCP server 和长循环，一次一条的 CLI 用法不必为它改习惯。
 >
 > 💡 `context-pocket --version`（`-v`、`context-pocket version` 三种写法同解）直接把 `package.json` 里的版本号打出来——不需要项目里有 `ContextPocket/`，也不写任何东西。MCP 客户端在 `initialize` 回包的 `serverInfo.version` 里看到的是同一个数字，两个入口都经 `lib/version.js` 读它，所以版本号只有 `package.json` 一处需要改。
+
+### ⏱ 时间窗口
+
+`search` 与 `recall` 共用同一套窗口判据（`lib/query.js` 的 `filterByTime`），同一轮在两边进出窗口的结果必然一致：
+
+| 旗标 | MCP 参数 | 保留 |
+|------|----------|------|
+| `--since <T>` | `sinceT` | T 号 >= `<T>` |
+| `--until <T>` | `untilT` | T 号 <= `<T>` |
+| `--from <YYYY-MM-DD>` | `fromDate` | WHEN 日期 >= 这天 |
+| `--to <YYYY-MM-DD>` | `toDate` | WHEN 日期 <= 这天 |
+
+都是**闭区间**，可以混用；垃圾值（`--since abc`、`--from oops`）按"没传"处理而不是报错。**日期窗口会排除没有 `--- WHEN: …` 结构行的轮次**（v1 口袋、手写块）；T 号窗口仍然收录它们——时间没记，编号还在。`search` 里的 FIX / ADR / R / 偏好条目也走同一规则（FIX 沿用被更正那轮的时间）；`recall` 窗口只列 T-block，更正内容在 `recall T<n>` 里读。
+
+`search` 始终要关键词；问的是"某段时间发生了什么"、根本没词可搜时，用 `recall` 的窗口模式。两个命令都是**过滤之后**再套 `--limit` / `--offset`，所以 `total` 是过滤后的真实条数（`--limit 0` 取全量）。
+
+```
+context-pocket search 登录 --since 12 --until 40 --json
+context-pocket recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
+```
 
 ---
 

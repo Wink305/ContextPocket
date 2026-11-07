@@ -207,6 +207,7 @@ The new agent picks recording back up automatically — up and running in 5 seco
 | "Who changed this file?" · "Why does it look like this?" | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
 | "How did we fix that bug last time?" · "Search for X" | `search <keyword>` | The matching T-blocks |
 | "What did T7 actually say?" | `recall T<n>` | The full T-block |
+| "What did we do last week?" · "Show me everything from T5 to T9" | `recall --from … --to …` / `recall --since T5 --until T9` | The turns in that window, oldest first |
 | "What changed between T5 and T9?" | `diff Ta Tb` | The delta |
 | "Anything I should confirm?" · "Anything I'm unsure about?" | Reads the `❓` lines directly (no tool) | The list, then "Confirm one by one?" |
 | "Any contradictions?" | `check-conflicts` | Severity-ranked result |
@@ -228,6 +229,7 @@ All commands below work via CLI when Node.js 14+ is available. Type `context-poc
 | `context-pocket verify --drift --dir <root>` | Add the two tree-scanning drift checks: cognition drift (paths in recent T-blocks vs working tree) + code-newer-than-log (files modified after the last record; works without git). Add `--drift-last-n <N>` to tune lookback |
 | `context-pocket status --dir <root>` | One-line summary (T-range, reqs, ADRs, ❓, archive status) |
 | `context-pocket recall <T-id> --dir <root>` | View full details of one T-block |
+| `context-pocket recall --dir <root> --since <T> [--until <T>] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit N] [--offset N]` | **Window mode**: no T-id, at least one window flag — list turns when you have no keyword to search for. Same window semantics as `search` (see "Time windows" below). Oldest first, archived turns included and marked; `--limit 0` = all. A T-id and a window cannot be combined. MCP: `context_pocket_recall` without `tId`, with `sinceT` / `untilT` / `fromDate` / `toDate` |
 | `context-pocket diff <Ta> <Tb> --dir <root>` | Compare two turns: req changes, ADR additions, file changes |
 | `context-pocket search <keyword> --dir <root> [--limit N] [--offset N] [--no-index]` | Keyword search over the whole history: T-blocks (gist, tags, every section, archived turns included), ADRs, requirements and preferences. Auto-uses the `assets/search-index.json` index; `--no-index` scans the markdown instead — both paths match and order identically, so `--limit`/`--offset` page the same list (`--limit 0` = all). Matching: latin words split on separators, Chinese is indexed as adjacent two-character pairs, and **every** query term must hit. A phrase inside a longer Chinese run therefore works (`时间分页` finds 「给搜索加时间分页」) and a reordered one does not (`分页时间`); one lone Chinese character only matches where that character stands alone |
 | `context-pocket why <file-path> --dir <root>` | Reverse lookup: which T-blocks mention this file, split by evidence — `[changed]` (path in that turn's Action section) vs `[mentioned only]` (elsewhere: Uncertain / Attachments / Conflicts / Pitfalls …). Changed turns are listed first, so `--limit` drops the weak ones, never the real edits (Inspired by ThoughtDAG) |
@@ -264,6 +266,26 @@ All commands below work via CLI when Node.js 14+ is available. Type `context-poc
 > 💡 `--no-index` sits on both ends of the cache and is safe on both: on `search` it means "ignore the cache for this query", on `log append` / `log amend` it means "don't refresh the cache after this write". Markdown stays the source of truth either way, so the next search rebuilds the cache and returns the very same hits — including archived turns, measured to come back in the same order on both paths. Bulk loops use it to skip a refresh per turn, and the size of that saving depends on scale: ≈15 ms/turn at 30 turns (a bare CLI call already costs ≈112 ms of Node startup), ≈0.18 s/turn at 800 turns — so it pays off mainly in the resident MCP server or a long append loop, not in one-shot CLI use (`log append --help`).
 >
 > 💡 `context-pocket --version` (also accepted: `-v`, `context-pocket version`) prints the number straight out of `package.json` — it needs no `ContextPocket/` folder and writes nothing. An MCP client reads the same number from `initialize`'s `serverInfo.version`; both entry points go through `lib/version.js`, so `package.json` is the only place a version is written.
+
+### ⏱ Time windows
+
+`search` and `recall` share one window vocabulary (`filterByTime` in `lib/query.js`), so a turn inside the window for one is inside it for the other:
+
+| Flag | MCP parameter | Keeps turns with |
+|------|---------------|------------------|
+| `--since <T>` | `sinceT` | T-id >= `<T>` |
+| `--until <T>` | `untilT` | T-id <= `<T>` |
+| `--from <YYYY-MM-DD>` | `fromDate` | WHEN date >= this day |
+| `--to <YYYY-MM-DD>` | `toDate` | WHEN date <= this day |
+
+Both are **closed intervals**, can be mixed, and a junk value (`--since abc`, `--from oops`) counts as "not given" rather than an error. A **date window excludes turns with no `--- WHEN: …` line** (v1 pockets, blocks written by hand); a T-id window still includes them — the number exists even when the time is missing. In `search`, FIX / ADR / R / preference documents follow the same rule (a FIX inherits the time of the turn it corrects); `recall`'s window lists T-blocks only, and corrections come back inside `recall T<n>`.
+
+`search` still needs a keyword. Use `recall` window mode when the question is "what happened between X and Y" and there is nothing to search *for*. Both commands apply `--limit` / `--offset` **after** filtering, so `total` is the real number of matching turns (`--limit 0` = all).
+
+```
+context-pocket search 登录 --since 12 --until 40 --json
+context-pocket recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
+```
 
 ---
 

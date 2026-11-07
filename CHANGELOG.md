@@ -11,6 +11,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.1] - 2026-11-07
+
+### 🕰 recall 时间窗口：没有关键词时也能按坐标翻历史
+
+> 1.4.0 给 `search` 加了 `--since/--until/--from/--to`，但 `recall` 只能按 T 号取一整块。
+> 于是"上周三到周五都记了什么"这种**没有关键词**的问题无处可问：`search` 必须给词，
+> 而逐轮 `recall T<n>` 得先知道号码。本版让 `recall` 补上对称的另一半——不给 T 号、
+> 给窗口，就列一段按 T 号升序的时间线；给 T 号，行为与以前完全一样。
+>
+> 核心层其实早就留好了钩子：`filterByTime` 从 1.4.0 起就是导出的，注释里写着
+> "recall 也要按时间/轮号列出区间内的 T-block"。这次把它接上，缺的只是 CLI / MCP 的门面。
+> 数据格式、模板、索引、迁移一律没动，老口袋零成本可用。
+
+- **核心层**（`lib/query.js`）：新增 `recallWindow(pocketDir, opts)`。直接读 `parseLogAll` 的块
+  （含归档轮次），整成 `filterByTime` 认得的 T 行后交给**与 `search` 完全同一份**窗口判据——
+  日期窗口排除无 `WHEN` 的 v1 块、T 号窗口不看 `WHEN`、闭区间、无效日期当没传，
+  两个命令对这些边界的理解不可能漂移。顺序显式按 T 号升序（时间线不是相关度排序，
+  归档把旧块搬走后两份文件的拼接顺序会让人以为跳号）；分页在过滤之后施加，
+  `total` 是过滤后的真实条数，`limit 0` 取全量，与 `searchAny` 同一口径。
+  只列 T-block：`T<n>-fix` / `[correction]` 没有自己的时间结构行，跟着被更正的那轮，
+  由 `recall T<n>` 的 `corrections` 字段给出；在这里单列会把同一段历史数两遍。
+- **CLI**（`bin/context-pocket.js`）：`recall` 两条形态互斥——T 号与窗口同时给会明确报错，
+  **不会静默丢掉窗口**（本项目反复踩过的"选项被正常解析、命令悄悄无视"那个坑）。
+  都不给时的报错同时教会两种用法。`--json` 回包带 `mode:"window"` 与
+  `turns/total/offset/limit/hasMore` 及四个窗口参数；人类输出列出每轮的时间、标签、gist、
+  归档标记，截断时提示下一页 `--offset` / `--limit 0`。四个窗口旗标的措辞抽成
+  `timeWindowLabel()`，`search` 与 `recall` 共用一份，输出逐字不变。
+- **MCP**（`mcp-server.js`）：`context_pocket_recall` 的 `tId` 不再是 `required`，新增
+  `sinceT/untilT/fromDate/toDate/limit/offset`（与 `context_pocket_search` 同名同义）。
+  缺参、`tId` 与窗口互斥都回 `isError`，不静默降级成"列全部"。
+- **单源 help / 文档**：`lib/help.js` 的 `COMMAND_HELP.recall` 写全两种用法、四条窗口语义与
+  互斥规则，主命令表、`TOOL_DESCRIPTIONS`、`SERVER_INSTRUCTIONS` 同步；README 中英文各补
+  一条命令表行、一条意图表行，并新增「时间窗口 / Time windows」小节——顺手把 1.4.0
+  就存在但一直没写进文档的 `search` 四个窗口旗标一并交代清楚；`SKILL.md` 意图表补窗口问法。
+- **Tests**：+12 条——pocket 3（四组窗口与 `search` 逐条对齐、无 WHEN 的 v1 块、
+  分页 / 归档块 / 升序），cli 6（`--json` 契约、日期窗口、分页与 `--limit 0`、
+  T 号与窗口互斥、无参报错教会两种用法、单轮形态不变），mcp 3（窗口调用、
+  两种错误分支、tools/list 声明窗口参数）。全量 **289 条通过 / 0 失败**
+  （unit 64 / pocket 87 / hooks 16 / importer 17 / migrate 16 / repair 19 /
+  cli 39 / help 7 / mcp 24）；`lint`、`smoke`、`smoke-live` 亦全绿。
+
+---
+
 ## [1.5.0] - 2026-11-07
 
 ### 🧠 code-map update 智能增强：`--diff` / `--auto-suggest` / `--apply` / `--interactive`

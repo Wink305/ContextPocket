@@ -2164,3 +2164,99 @@ test('code-map update: undescribed 只报真没描述的，已描述/已采纳�
   assert.ok(!again.undescribed.includes('src/done.ts'), '有真实描述的不进待补名单');
 });
 
+// ============================================================
+// recallWindow —— 没有关键词时按坐标浏览时间线
+// ============================================================
+
+test('recallWindow: 四组窗口与 search 的命中逐条一致（同一份 filterByTime）', () => {
+  const { pocketDir } = makePocket('recall-window-parity');
+  record(pocketDir, 'alpha', { when: '2026-10-01 → 2026-10-03' });
+  record(pocketDir, 'beta', { when: '2026-10-10 → 2026-10-12' });
+  record(pocketDir, 'gamma', { when: '2026-11-01 → 2026-11-03' });
+  resetIndexMemo();
+  buildIndex(pocketDir, { rebuild: true });
+
+  const cases = [
+    { sinceT: 2 },
+    { untilT: 2 },
+    { sinceT: 2, untilT: 2 },
+    { fromDate: '2026-10-05' },
+    { toDate: '2026-10-31' },
+    { fromDate: '2026-10-05', toDate: '2026-10-15' },
+    { fromDate: '2026-12-01' },
+  ];
+  for (const opts of cases) {
+    const window = query.recallWindow(pocketDir, Object.assign({ limit: 0 }, opts));
+    const hits = query.searchAny(pocketDir, '测试', Object.assign({ limit: 0 }, opts));
+    assert.deepStrictEqual(
+      window.turns.map((t) => t.id),
+      hits.results.filter((r) => r.type === 'T').map((r) => r.id).sort((a, b) => a - b),
+      '窗口 ' + JSON.stringify(opts) + ' 与 search 不一致'
+    );
+    assert.strictEqual(window.total, window.turns.length, 'limit 0 时 total 应等于列出的条数');
+  }
+});
+
+test('recallWindow: 日期窗口排除无 WHEN 的块，T 号窗口仍收录（v1 语义）', () => {
+  const { pocketDir: v1 } = makeV1Pocket('recall-window-v1');
+  writePocketFile(v1, 'log.md', [
+    '# ContextPocket · LOG', '',
+    '--- SESSION: 2026-11-01 ---', '',
+    '## T1 · old-block · [测试]', '',
+    '### User', '- u',
+    '### Action', '- 做了某事', '',
+    '--- SESSION: 2026-11-10 ---', '',
+    '## T2 · new-block · [测试]',
+    '--- WHEN: 2026-11-10 → 2026-11-12 ---', '',
+    '### User', '- u',
+    '### Action', '- 做了另一件事', '',
+  ].join('\n'));
+
+  const byDate = query.recallWindow(v1, { fromDate: '2026-11-05', limit: 0 });
+  assert.deepStrictEqual(byDate.turns.map((t) => t.id), [2], 'T1 没有 WHEN，日期窗口下必须排除');
+  const byT = query.recallWindow(v1, { sinceT: 1, limit: 0 });
+  assert.deepStrictEqual(byT.turns.map((t) => t.id), [1, 2], 'T 号窗口与 WHEN 无关');
+  assert.strictEqual(byT.turns[0].when, null, 'v1 块的 when 必须如实为 null，不能编一个日期');
+});
+
+test('recallWindow: 分页在过滤之后算，归档块照常列入并标记', () => {
+  const { pocketDir } = makePocket('recall-window-page');
+  // 手写的归档轮次 + 两轮 log.md，检验"归档≠丢失"与显式按 T 号升序
+  writePocketFile(pocketDir, 'log-archive.md', [
+    '# ContextPocket · LOG ARCHIVE', '',
+    '--- SESSION: 2026-09-01 ---', '',
+    '## T1 · archived-old · [测试]',
+    '--- WHEN: 2026-09-01 ---', '',
+    '### User', '- u',
+    '### Action', '- 老改动', '',
+  ].join('\n'));
+  // 手写现场两块固定编号：appendLogBlock 只按 log.md 发号，会与归档里的 T1 撞上
+  writePocketFile(pocketDir, 'log.md', [
+    '# ContextPocket · LOG', '',
+    '--- SESSION: 2026-10-01 ---', '',
+    '## T2 · live-two · [测试]',
+    '--- WHEN: 2026-10-01 ---', '',
+    '### User', '- u',
+    '### Action', '- 改动二', '',
+    '## T3 · live-three · [测试]',
+    '--- WHEN: 2026-10-02 ---', '',
+    '### User', '- u',
+    '### Action', '- 改动三', '',
+  ].join('\n'));
+
+  const all = query.recallWindow(pocketDir, { sinceT: 1, limit: 0 });
+  assert.deepStrictEqual(all.turns.map((t) => t.id), [1, 2, 3], '按 T 号升序，归档块排在前面');
+  assert.strictEqual(all.turns[0].archived, true, '归档块要标 archived');
+  assert.strictEqual(all.turns[1].archived, false);
+  assert.strictEqual(all.total, 3);
+  assert.strictEqual(all.hasMore, false);
+
+  const page1 = query.recallWindow(pocketDir, { sinceT: 2, limit: 1 });
+  assert.strictEqual(page1.total, 2, 'total 是过滤后的真实条数，不是原始总数');
+  assert.deepStrictEqual(page1.turns.map((t) => t.id), [2]);
+  assert.strictEqual(page1.hasMore, true);
+  const page2 = query.recallWindow(pocketDir, { sinceT: 2, limit: 1, offset: 1 });
+  assert.deepStrictEqual(page2.turns.map((t) => t.id), [3]);
+  assert.strictEqual(page2.hasMore, false);
+});
+

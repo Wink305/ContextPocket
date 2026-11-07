@@ -34,7 +34,7 @@ const {
   updateCodeMap,
 } = require('./lib/writer');
 const { bootstrap } = require('./lib/bootstrap');
-const { recall, diff, searchAny, why, checkConflicts } = require('./lib/query');
+const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('./lib/query');
 const { runMigration, listMigrations } = require('./lib/migrate');
 const { repairLogIds } = require('./lib/repair');
 const { describeWhen, describeWhenLine } = require('./lib/when');
@@ -266,11 +266,36 @@ const TOOLS = [
     description: TOOL_DESCRIPTIONS.context_pocket_recall,
     inputSchema: {
       type: 'object',
-      required: ['tId'],
       properties: {
         tId: {
           type: 'integer',
-          description: 'T-block ID number',
+          description: 'T-block ID number. Omit it and pass a time window instead to list the turns in that window. Cannot be combined with a window.',
+        },
+        sinceT: {
+          type: 'number',
+          description: 'Window mode — only turns with T-id >= this number (CLI equivalent: --since)',
+        },
+        untilT: {
+          type: 'number',
+          description: 'Window mode — only turns with T-id <= this number (CLI equivalent: --until)',
+        },
+        fromDate: {
+          type: 'string',
+          description: 'Window mode — only turns whose WHEN is on or after this day (YYYY-MM-DD; CLI equivalent: --from)',
+        },
+        toDate: {
+          type: 'string',
+          description: 'Window mode — only turns whose WHEN is on or before this day (YYYY-MM-DD; CLI equivalent: --to)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Window mode — turns per page (default 50; 0 = all). CLI equivalent: --limit',
+          default: 50,
+        },
+        offset: {
+          type: 'number',
+          description: 'Window mode — turns to skip before the page (CLI equivalent: --offset)',
+          default: 0,
         },
       },
     },
@@ -1239,11 +1264,54 @@ function toolRecall(args) {
   // 与 CLI 同一份归一：裸 parseInt 会把 "abc" 变成 NaN 再当合法编号传给 recall
   const tId = toTId(args.tId);
 
-  if (Number.isNaN(tId)) {
+  // 四个窗口参数与 context_pocket_search 同名同义，判据最终都落到 query.filterByTime。
+  const sinceT = typeof args.sinceT === 'number' && args.sinceT > 0 ? args.sinceT : null;
+  const untilT = typeof args.untilT === 'number' && args.untilT > 0 ? args.untilT : null;
+  const fromDate = typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null;
+  const toDate = typeof args.toDate === 'string' && args.toDate ? args.toDate : null;
+  const hasWindow = sinceT !== null || untilT !== null || fromDate !== null || toDate !== null;
+
+  if (!Number.isNaN(tId) && hasWindow) {
     return {
-      content: [{ type: 'text', text: '❌ Error: tId is required (positive integer, e.g. 7 or "T7")' }],
+      content: [{ type: 'text', text: '❌ Error: tId and a time window cannot be combined. Pass either tId, or sinceT/untilT/fromDate/toDate.' }],
       isError: true,
     };
+  }
+
+  if (Number.isNaN(tId) && !hasWindow) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: tId or a time window is required. Pass tId (positive integer, e.g. 7 or "T7") for one full turn, or sinceT/untilT/fromDate/toDate to list a window.' }],
+      isError: true,
+    };
+  }
+
+  // 窗口模式：按坐标浏览时间线（关键词检索是 search 的职责，这里不碰索引）
+  if (Number.isNaN(tId)) {
+    const out = recallWindow(pocketDir, {
+      sinceT, untilT, fromDate, toDate,
+      limit: args.limit,
+      offset: args.offset,
+    });
+    const windowParts = [];
+    if (sinceT !== null) windowParts.push(`T >= ${sinceT}`);
+    if (untilT !== null) windowParts.push(`T <= ${untilT}`);
+    if (fromDate !== null) windowParts.push(`from ${fromDate}`);
+    if (toDate !== null) windowParts.push(`to ${toDate}`);
+    const lines = [`## Recall: ${out.total} turn${out.total === 1 ? '' : 's'}${windowParts.length ? ' (' + windowParts.join(', ') + ')' : ''}`, ''];
+    if (out.turns.length === 0) {
+      lines.push('*(no turns in this window)*');
+    } else {
+      for (const t of out.turns) {
+        const tags = t.tags.length > 0 ? ' ' + t.tags.map((x) => `[${x}]`).join('') : '';
+        const when = t.when ? describeWhen(t.when) : (t.session || 'no time recorded');
+        lines.push(`- **T${t.id}**${tags}: ${t.gist} — *${when}*${t.archived ? ' *(archived)*' : ''}`);
+      }
+    }
+    if (out.hasMore) {
+      lines.push('');
+      lines.push(`_${out.total - out.offset - out.turns.length} more — next page: {"offset": ${out.offset + out.turns.length}}; all of them: {"limit": 0}_`);
+    }
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 
   const result = recall(pocketDir, tId);

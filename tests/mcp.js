@@ -170,6 +170,19 @@ function cliAppend(pocketDir, turn) {
   return execFileSync(process.execPath, [CLI, ...args], { encoding: 'utf-8' });
 }
 
+/** 与 mcpCall 同一条链路，但保留 isError 回包本身（错误分支要能断言） */
+function mcpCallRaw(projectDir, name, args) {
+  const srv = startServer(projectDir);
+  srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
+  srv.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name, arguments: args } });
+  return srv.waitFor(2).then(() => {
+    const res = srv.messages.find((m) => m.id === 2);
+    srv.child.kill();
+    if (!res) throw new Error('MCP 没有回包：' + name);
+    return res.result;
+  });
+}
+
 function mcpCall(projectDir, name, args, waitCount) {
   const srv = startServer(projectDir);
   srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
@@ -832,5 +845,66 @@ test('mcp: code_map_update diff/autoSuggest/apply over the wire', () => {
     const map = readPocketFile(pocketDir, 'code-map.md');
     assert.match(map, /wired\.ts → 线上建议文本（T1）/, 'apply 必须把候选写进树');
   });
+});
+
+// ============================================================
+// recall 窗口模式：tId 不再是必填
+// ============================================================
+
+test('mcp: recall without tId lists a window, with the same four parameters as search', () => {
+  const { projectDir, pocketDir } = makePocket('mcp-recall-window');
+  const writer = require(path.join(ROOT, 'lib', 'writer'));
+  for (const [gist, when] of [['alpha', '2026-10-01'], ['beta', '2026-10-10'], ['gamma', '2026-11-01']]) {
+    writer.appendLogBlock(pocketDir, { gist, when, tags: ['测试'], user: ['u'], action: ['a'] });
+  }
+
+  return mcpCall(projectDir, 'context_pocket_recall',
+    { sinceT: 2, untilT: 2, limit: 0 }, 2).then((text) => {
+    assert.match(text, /Recall: 1 turn\b/, '窗口回包要报过滤后的真实条数：\n' + text);
+    assert.match(text, /\*\*T2\*\*/, text);
+    assert.ok(!/\*\*T1\*\*/.test(text) && !/\*\*T3\*\*/.test(text), '窗口外的轮次不能出现：\n' + text);
+
+    return mcpCall(projectDir, 'context_pocket_recall',
+      { fromDate: '2026-10-05', toDate: '2026-10-20', limit: 0 }, 2);
+  }).then((byDate) => {
+    assert.match(byDate, /\*\*T2\*\*/, byDate);
+    assert.ok(!/\*\*T3\*\*/.test(byDate), '日期窗口要滤掉 11 月那轮：\n' + byDate);
+
+    // 单轮形态照旧：给 tId 仍返回完整 T-block
+    return mcpCall(projectDir, 'context_pocket_recall', { tId: 1 }, 2);
+  }).then((single) => {
+    assert.match(single, /## T1 · alpha/, single);
+    assert.match(single, /### Action/, single);
+  });
+});
+
+test('mcp: recall rejects tId + window, and rejects neither being given', async () => {
+  const { projectDir, pocketDir } = makePocket('mcp-recall-window-errors');
+  const writer = require(path.join(ROOT, 'lib', 'writer'));
+  writer.appendLogBlock(pocketDir, { gist: 'only', when: '2026-10-01', tags: ['测试'], user: ['u'], action: ['a'] });
+
+  const conflict = await mcpCallRaw(projectDir, 'context_pocket_recall', { tId: 1, sinceT: 1 });
+  assert.strictEqual(conflict.isError, true, 'tId 与窗口不能静默忽略其中一个');
+  assert.match(conflict.content.map((c) => c.text).join('\n'), /cannot be combined/i);
+
+  const missing = await mcpCallRaw(projectDir, 'context_pocket_recall', {});
+  assert.strictEqual(missing.isError, true, '两个都不给不能偷偷列全部');
+  const text = missing.content.map((c) => c.text).join('\n');
+  assert.match(text, /time window/i, text);
+  assert.match(text, /tId/i, text);
+});
+
+test('mcp: tools/list advertises the window parameters on recall', async () => {
+  const { projectDir } = makePocket('mcp-recall-window-schema');
+  const srv = startServer(projectDir);
+  srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
+  srv.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  await srv.waitFor(2);
+  const listed = srv.messages.find((m) => m.id === 2).result.tools.find((t) => t.name === 'context_pocket_recall');
+  srv.child.kill();
+  assert.ok(!(listed.inputSchema.required || []).includes('tId'), 'tId 不能再是必填');
+  for (const key of ['sinceT', 'untilT', 'fromDate', 'toDate', 'limit', 'offset']) {
+    assert.ok(listed.inputSchema.properties[key], 'schema 缺窗口参数 ' + key);
+  }
 });
 

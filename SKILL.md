@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 1.5.0
+version: 1.5.1
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -75,8 +75,9 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | "代码是不是改了没记" · "没进 git 的项目也能查漏了吗" | `verify` with `drift: true` (`--drift`) | warning naming the files whose mtime is later than the last record (works without git; never blocks a commit) |
 | "补一下 T7" · "刚才漏了用户那句话" | `log amend` | `✅ T7 filled: User` |
 | "这文件谁改的" · "为什么长这样" | `why <path>` | matching turns, split by evidence: `[changed]` (in that turn's Action) vs `[mentioned only]` (Uncertain / Attachments / Conflicts — talked about, not modified) |
-| "上次那个 bug 怎么修的" · "搜一下 X" | `search <kw>` | matching T-blocks |
+| "上次那个 bug 怎么修的" · "搜一下 X" · "只看 T12 之后的" | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`) | matching T-blocks, window applied before paging |
 | "T7 当时说了什么" · "回看一下那轮" | `recall T<n>` | the full T-block |
+| "上周都干了啥" · "把 T5 到 T9 列出来" | `recall --since T5 --until T9` / `recall --from <date> --to <date>` (MCP: `context_pocket_recall` **without `tId`**, with the four window params) | turns in the window, oldest first, archived ones marked; page with `--limit/--offset`. No keyword needed. A `tId` and a window cannot be combined |
 | "T5 到 T9 变了啥" | `diff Ta Tb` | the delta |
 | "有什么待确认的" · "有没有我不确定的" | read `❓` lines directly (no tool) | the list, then "逐条确认吗?" |
 | "有没有前后矛盾" | `check-conflicts` | severity-ranked result |
