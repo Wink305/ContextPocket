@@ -1946,10 +1946,13 @@ test('filterByTime: 非 T/FIX 文档在日期窗口下被排除、在 T 号窗�
   // 搜能命中 T + ADR + R 的关键词（tag "测试" + title "test-keyword"）
   const kw = 'test-keyword';
 
-  // 先看不加过滤有多少条
+  // 先看不加过滤的基线——ADR 和 R 都必须被命中，否则下面"日期窗口排除它们"
+  // 的 every 断言对着空结果空转，测试就失去了说服力。（T 块的 gist 是 a/b，
+  // 不含关键词，本就不参与这个用例。）
   const all = query.searchAny(pocketDir, kw);
-  const types = all.results.map((r) => r.type).sort();
-  console.error('ALL RESULTS:', types);
+  const types = all.results.map((r) => r.type);
+  assert.ok(types.includes('ADR') && types.includes('R'),
+    '前置条件不成立，ADR 与 R 都该被关键词命中:' + JSON.stringify(types));
 
   // 日期窗口：ADR/R 没有日期字段 → 被排除；只留 T/FIX
   const byDate = query.searchAny(pocketDir, kw, { fromDate: '2026-11-01' });
@@ -1958,8 +1961,6 @@ test('filterByTime: 非 T/FIX 文档在日期窗口下被排除、在 T 号窗�
 
   // T 号窗口：ADR 有 createdAt=1、R 有 openedAt=2 → sinceT 1 应该都保留
   const byT = query.searchAny(pocketDir, kw, { sinceT: 1 });
-  const tTypes = byT.results.map((r) => r.type);
-  console.error('sinceT RESULTS:', tTypes);
   assert.ok(byT.results.some((r) => r.type === 'ADR'), 'sinceT 应该保留 ADR');
   assert.ok(byT.results.some((r) => r.type === 'R'), 'sinceT 应该保留 R');
 });

@@ -11,6 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-11-07
+
+### 🛡️ 1.4.0 的教训落成回归锁
+
+> 1.4.0 开发时踩过一个坑：`--from` 旗标不生效，因为 `textOption` 读取的键忘了登记进
+> `bin/context-pocket.js` 的 `VALUE_OPTIONS` Set——旗标被当成纯开关，值掉进位置参数，
+> `fromDate` 永远是 null。当时的回归锁（`parseArgs: every option read through intOption
+> is a value option`）只盯 `intOption` 读取的键，`textOption` 的洞没人看。本版把洞堵上，
+> 并清掉 1.4.0 遗留的测试调试输出。纯测试改动，零运行时代码变更。
+
+- **textOption 回归锁**（`tests/unit.js`）：对称于 intOption 那条——扫源码里所有
+  `textOption(options, 'key')` 字面量形状与 `...T_ID_OPTIONS` / `...FILE_PATH_OPTIONS`
+  spread 别名组（常量数组展开进同一份名单），逐个断言 `--key 7` 真的能吃到值。
+  以后再忘登记 VALUE_OPTIONS，测试当场红，不用等用户报"旗标不生效"。
+- **测试输出清洁**（`tests/pocket.js`）：删掉 1.4.0 调试残留的两行 `console.error`
+  （`ALL RESULTS` / `sinceT RESULTS`），换成前置断言——"ADR 与 R 必须被关键词命中"，
+  让日期窗口的 every 断言不再对着空结果空转。
+- **Tests**：`tests/unit.js` +1、`tests/pocket.js` 重写一条的基线检查。全量
+  **272 条通过 / 0 失败**（unit 64 / pocket 77 / hooks 16 / importer 17 / migrate 16
+  / repair 19 / cli 31 / help 7 / mcp 20）。
+
+---
+
 ## [1.4.0] - 2026-11-07
 
 ### ⚡ 时间窗口搜索：`--since` / `--until` / `--from` / `--to`

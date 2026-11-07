@@ -94,6 +94,32 @@ test('parseArgs: every option read through intOption is a value option', () => {
   }
 });
 
+// 1.4.0 的 `--from` 不生效就是这么进的：textOption 读的键忘了登记 VALUE_OPTIONS，
+// 旗标被当成纯开关，值掉进 positional，fromDate 永远是 null——而上面那条锁只盯
+// intOption，textOption 的洞没人看。这里对称补上：凡是代码里当文本读的选项
+// （含 spread 进来的别名组），必须真的能吃值。
+test('parseArgs: every option read through textOption is a value option', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'bin', 'context-pocket.js'), 'utf-8');
+  const names = new Set();
+  for (const m of src.matchAll(/textOption\(\s*(?:args|options)\s*,\s*'([a-z0-9-]+)'/g)) {
+    names.add(m[1]);
+  }
+  // spread 别名组（...T_ID_OPTIONS / ...FILE_PATH_OPTIONS）：把常量数组展开进同一份名单
+  for (const m of src.matchAll(/textOption\(\s*(?:args|options)\s*,\s*\.\.\.([A-Z][A-Z_]*)\)/g)) {
+    const def = src.match(new RegExp('const ' + m[1] + ' = \\[([^\\]]+)\\]'));
+    assert.ok(def, 'spread 的 ' + m[1] + ' 必须是数组字面量，否则这里抓不到键名');
+    for (const k of def[1].matchAll(/'([a-z0-9-]+)'/g)) names.add(k[1]);
+  }
+  assert.ok(names.size >= 10, '扫描到了 ' + names.size + ' 个文本选项，太少说明正则失效');
+
+  for (const name of names) {
+    const r = argv('status', '--' + name, '7');
+    assert.notStrictEqual(r.options[name], true,
+      '--' + name + ' 被登记成纯开关：值 "7" 会掉进 positional，文本永远读不到');
+    assert.strictEqual(r.options[name], '7', '--' + name + ' 必须吃到值');
+  }
+});
+
 test('parseArgs: multiple positionals keep their order', () => {
   const r = argv('diff', '3', '7');
   assert.deepStrictEqual(r.positional, ['3', '7']);
