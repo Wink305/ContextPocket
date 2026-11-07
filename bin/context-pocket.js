@@ -893,6 +893,12 @@ function cmdSearch(options, positional) {
       } else if (r.type === 'pref') {
         console.log(`  ${colorize('pref', 'bold')} · ${r.line}`);
         printHighlights(r);
+      } else if (r.type === 'FIX') {
+        const fixTags = r.tags && r.tags.length > 0
+          ? ' ' + r.tags.map(t => colorize(`[${t}]`, 'cyan')).join('')
+          : '';
+        console.log(`  ${colorize(r.fixId, 'bold')}${fixTags} · ${r.gist} ${colorize('→ corrects T' + r.targetId, 'dim')}${r.archived ? colorize(' (archived)', 'dim') : ''}`);
+        printHighlights(r);
       } else {
         const tagsStr = r.tags && r.tags.length > 0
           ? ' ' + r.tags.map(t => colorize(`[${t}]`, 'cyan')).join('')

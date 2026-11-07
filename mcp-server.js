@@ -1378,6 +1378,12 @@ function toolSearch(args) {
       } else if (r.type === 'pref') {
         lines.push(`- **pref**: ${r.line}`);
         printHighlights(r);
+      } else if (r.type === 'FIX') {
+        const fixTags = r.tags && r.tags.length > 0
+          ? ' ' + r.tags.map(t => `[${t}]`).join('')
+          : '';
+        lines.push(`- **${r.fixId}**${fixTags}: ${r.gist} → corrects T${r.targetId}${r.archived ? ' *(archived)*' : ''}`);
+        printHighlights(r);
       } else {
         const tagsStr = r.tags && r.tags.length > 0
           ? ' ' + r.tags.map(t => `[${t}]`).join('')

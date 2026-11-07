@@ -10,14 +10,14 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外三处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题 | `1.2.1` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以四处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外三处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题 | `1.3.0` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以四处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
 
 ### 兼容性原则
 
 > **新 skill 能读旧数据，旧 skill 可能不识别新数据。**
 
-- **向前兼容（forward compatible）**：高版本 skill 可以读取低版本格式的数据（当前的 skill 1.2.x 就能同时读 `format: v1` 和 `format: v2` 的 pocket），读取时自动忽略不识别的字段。
+- **向前兼容（forward compatible）**：高版本 skill 可以读取低版本格式的数据（当前的 skill 1.3.x 就能同时读 `format: v1` 和 `format: v2` 的 pocket），读取时自动忽略不识别的字段。
 - **不向后兼容**：低版本 skill 读取高版本格式的数据时（如 skill 1.0 遇到 `format: v2`），可能无法正确解析新增字段，应提示用户升级 skill 或进行迁移。
 - v1 → v2 是**只做加法**的一跳：新增的 `--- WHEN: … ---` 结构行落在 `## T<n>` 标题的下一行，而 v1 的解析器把标题与第一个 `###` 之间的行整段忽略，所以旧代码读新文件不会丢东西（`tests/unit.js` 用同一份 `parseLogText` 逐字段比过带行与不带行的解析结果）。
 

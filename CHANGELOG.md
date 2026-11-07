@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚡ 查询侧更正闭环 + verify 降噪与提速 + CI 门禁（2026-11-07）
+
+> 1.3.0 发出后的第一批优化，四项一起走：更正块从"verify 能看见"闭环到"查询侧能看见"，
+> 顺手消掉 verify 的重复解析、给两类误报降噪，并把发版门禁搬进 CI。没有数据格式变更
+> （仍是 v2），但检索索引格式升了 v5 —— 老缓存会在下次 search 时自动作废重建，无感。
+
+- **① verify 去重复解析**：`verify()` 以前把 log.md 解析两遍（`parseAll` + `parseLogAll`）、
+  log-archive.md 也解析两遍（`parseLogAll` + 附件检查）。`lib/parser.js` 新导出
+  `mergeLogs(live, archived)` 合并层（`parseLogAll` 委托它），verify 只补解析 log-archive.md 一次，
+  附件检查（`checkAttachmentExistence`）直接消费两份解析结果、按块归属区分来源，行为不变。
+- **② 更正块闭环进查询侧**：
+  - `recall` 带回 `corrections`：指向该轮的 `T<n>-fix` 块（targetId 或 `Corrects T<n>` 命中）
+    与带 `[correction]` 标签且 `Corrects T<n>` 命中的轮次，形状
+    `{ id, kind: 'fix'|'correction', gist, text }`（CLI `recall --json` 的 `t.corrections`）。
+    以前查旧轮看不到更正，等于拿着作废的原话当事实。
+  - `search` 搜得到更正：`T<n>-fix` 入索引为 FIX 文档，索引与 `--no-index` 双路径同命中
+    （`INDEX_VERSION` 4→5，旧缓存自动作废重建）；CLI / MCP 的搜索展示各加 FIX 分支
+    （`T1-fix · <gist> → corrects T1`），`--json` 带 `fixId` / `targetId`。
+  - `check-conflicts` 不再拿被更正的原话报冲突：六维扫描前先剔除已被更正的轮次
+    （`T<n>-fix` 的 targetId 与 `Corrects` 引用 + `[correction]` 轮的 `Corrects` 引用）。
+    整轮粒度抑制——哪句话被更正需要语义理解，误放比误报轻（冲突本来就只是"可疑"提示）。
+- **③ 漂移检查降噪**：`action-code-map-drift` 对"创建后被删/改名"不再报——更晚的轮次声明
+  删除/改名了同一归一化路径（delete / remove / rename / move / 删除 / 改名 / 重命名 …），
+  说明缺席是生命周期走完的正常结果，历史没错、账本也没错。只认**更晚**的删除：更早的删除
+  多半是"删了重建"，创建声明仍该体现在账本里，照报。
+- **④ CI + 小修**：新增 `.github/workflows/ci.yml`——push main / PR 跑与本地一字不差的四道
+  发版门禁（lint、tests、smoke、smoke-live；零依赖，不需要 npm install）；
+  `docs/MIGRATION.md` 的版本示例 1.2.1 → 1.3.0。
+
 ---
 
 ## [1.3.0] - 2026-11-07

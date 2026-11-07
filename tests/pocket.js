@@ -1678,3 +1678,131 @@ test('verify: a correction that contradicts no decision stays silent', () => {
   });
   assert.strictEqual(verify(pocketDir).results.filter((r) => r.category === 'decision-correction-conflict').length, 0);
 });
+
+// ------------------------------------------------------------
+// 更正块闭环进查询侧：recall 看得到更正、search 搜得到更正、
+// check-conflicts 不再拿被更正的原话报冲突。漂移检查的删/改名降噪也在此。
+// ------------------------------------------------------------
+
+test('recall: 被更正的轮次把更正一并带回来（fix 块与 [correction] 轮都算）', () => {
+  const { pocketDir } = makePocket('recall-corrections');
+  record(pocketDir, '原来说法');
+  record(pocketDir, '无关轮次');
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md') + [
+    '', '## T1-fix · 更正说法 · [correction]', 'Corrects T1: 原来说法不对，实际是另一种', '',
+  ].join('\n'));
+  record(pocketDir, '再补一条更正', {
+    tags: ['correction'],
+    action: ['Corrects T1: 补充说明，实际是另一种'],
+  });
+
+  const r = query.recall(pocketDir, 1);
+  assert.strictEqual(r.corrections.length, 2, JSON.stringify(r.corrections));
+  const fix = r.corrections.find((c) => c.kind === 'fix');
+  assert.strictEqual(fix.id, 'T1-fix', JSON.stringify(r.corrections));
+  assert.ok(fix.text.includes('实际是另一种'), fix.text);
+  const corr = r.corrections.find((c) => c.kind === 'correction');
+  assert.strictEqual(corr.id, 'T3', JSON.stringify(r.corrections));
+  assert.ok(corr.text.includes('补充说明'), corr.text);
+
+  // 没被更正的轮次是空数组，不是 undefined —— 消费方不用判空
+  assert.deepStrictEqual(query.recall(pocketDir, 2).corrections, []);
+});
+
+test('search: 更正块双路径都能命中，顺序与形状一致', () => {
+  const { pocketDir } = makePocket('search-fix');
+  record(pocketDir, '原来说法', { action: ['配置 sqlite 存储 — 起头'] });
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md') + [
+    '', '## T1-fix · 更正存储选型 · [correction]', 'Corrects T1: 实际用的是 pgvector，不是 sqlite', '',
+  ].join('\n'));
+
+  const indexed = searchWithIndex(pocketDir, 'pgvector') || [];
+  const scanned = query.search(pocketDir, 'pgvector');
+  assert.strictEqual(indexed.length, 1, JSON.stringify(indexed));
+  assert.strictEqual(scanned.length, 1, JSON.stringify(scanned));
+  for (const hit of [indexed[0], scanned[0]]) {
+    assert.strictEqual(hit.type, 'FIX', JSON.stringify(hit));
+    assert.strictEqual(hit.fixId, 'T1-fix', JSON.stringify(hit));
+    assert.strictEqual(hit.targetId, 1, JSON.stringify(hit));
+    assert.ok(hit.gist.includes('更正存储选型'), JSON.stringify(hit));
+    assert.ok(Array.isArray(hit.highlights) && hit.highlights.length > 0, JSON.stringify(hit));
+    assert.strictEqual(typeof hit.matchCount, 'number', JSON.stringify(hit));
+  }
+
+  // 统一入口（CLI / MCP 消费的那一层）也走得到
+  const viaAny = query.searchAny(pocketDir, 'pgvector', { useIndex: false });
+  assert.strictEqual(viaAny.total, 1);
+  assert.strictEqual(viaAny.results[0].type, 'FIX');
+});
+
+test('check-conflicts: 被更正轮次的原话不再参与冲突扫描', () => {
+  const { pocketDir } = makePocket('conflict-corrected');
+  record(pocketDir, '第一轮');
+  writer.addDecision(pocketDir, {
+    title: 'use react for the frontend',
+    context: 'c', options: 'o', decision: 'react', consequences: 'x', supersedes: 'none', createdAt: 1,
+  });
+  record(pocketDir, '首页改用 vue 重写');
+
+  const warnings = () => query.checkConflicts(pocketDir).categories
+    .reduce((acc, c) => acc.concat(c.items), [])
+    .filter((i) => i.severity === 'warning' && i.message.includes('ADR-1'));
+  assert.strictEqual(warnings().length, 1, '前提：不更正时这条冲突在');
+
+  // 更正 T2：其实没换 vue，还是 react —— 作废的原话不该再被报成冲突
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md') + [
+    '', '## T2-fix · 更正技术栈 · [correction]', 'Corrects T2: said vue, actually stayed with react', '',
+  ].join('\n'));
+  assert.strictEqual(warnings().length, 0, 'T2 已被更正，冲突该随之消失');
+
+  // [correction] 标签轮次的 Corrects 引用同样能抑制（与 fix 块同一份更正定义）
+  const { pocketDir: byTag } = makePocket('conflict-corrected-tag');
+  record(byTag, '第一轮');
+  writer.addDecision(byTag, {
+    title: 'use react for the frontend',
+    context: 'c', options: 'o', decision: 'react', consequences: 'x', supersedes: 'none', createdAt: 1,
+  });
+  record(byTag, '首页改用 vue 重写');
+  record(byTag, '更正技术栈', {
+    tags: ['correction'],
+    // 不带具体技术名：更正轮自己提到替代技术也会被技术栈检查看上，那就不是在测抑制了
+    action: ['Corrects T2: 前一轮换框架的说法记错了，实际没有换'],
+  });
+  const tagWarnings = () => query.checkConflicts(byTag).categories
+    .reduce((acc, c) => acc.concat(c.items), [])
+    .filter((i) => i.severity === 'warning' && i.message.includes('ADR-1'));
+  assert.strictEqual(tagWarnings().length, 0, '[correction] 轮的 Corrects 引用也要能抑制');
+});
+
+test('verify: 创建后被删/改名不再报漂移，删除发生在创建之前的仍报', () => {
+  // 创建 → 删除：生命周期走完，历史没错、账本也没错
+  const { pocketDir } = makePocket('claim-removed');
+  writeCodeMap(pocketDir, ['└── app.js → 入口']);
+  record(pocketDir, '建了又删', { action: ['创建 src/tmp.js — 起头'] });
+  record(pocketDir, '删掉了', { action: ['删除 src/tmp.js — 不要了'] });
+  assert.strictEqual(
+    verify(pocketDir).results.filter((r) => r.category === 'action-code-map-drift').length,
+    0,
+    '创建后被删除是正常生命周期，不是漂移'
+  );
+
+  // 创建 → 改名：原路径从此不存在，与删除同款抑制
+  const { pocketDir: renamed } = makePocket('claim-renamed');
+  writeCodeMap(renamed, ['└── app.js → 入口']);
+  record(renamed, '建了又改名', { action: ['创建 src/old.js — 起头'] });
+  record(renamed, '改了名', { action: ['改名 src/old.js → src/new.js'] });
+  assert.strictEqual(
+    verify(renamed).results.filter((r) => r.category === 'action-code-map-drift').length,
+    0,
+    '创建后被改名同样是生命周期走完'
+  );
+
+  // 反例：删除发生在创建之前（删了重建却没记第二次删除）——创建声明仍该在账本里
+  const { pocketDir: before } = makePocket('claim-removed-before');
+  writeCodeMap(before, ['└── app.js → 入口']);
+  record(before, '删旧的', { action: ['删除 src/tmp.js — 清理'] });
+  record(before, '重建', { action: ['创建 src/tmp.js — 重建'] });
+  const hits = verify(before).results.filter((r) => r.category === 'action-code-map-drift');
+  assert.strictEqual(hits.length, 1, JSON.stringify(hits));
+  assert.ok(hits[0].message.includes('src/tmp.js'), hits[0].message);
+});

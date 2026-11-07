@@ -1,0 +1,26 @@
+name: CI
+
+# 四道发版门禁与本地完全一致（零依赖，不需要 npm install）：
+#   lint        全部 .js 过 node --check（语法）
+#   tests       单元 + 集成回归（tests/run.js）
+#   smoke       MCP 协议冒烟（mcp-smoke.js）
+#   smoke-live  真实 CLI 子进程整链路活测（tests/smoke-live.js，全程临时目录，不碰 ~/.contextpocket）
+# 发版前本地跑的就是这四条，CI 再兜一遍 —— 两边跑的命令一字不差，避免"本地绿、CI 红"的口径漂移。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm run lint
+      - run: node tests/run.js
+      - run: npm run smoke
+      - run: npm run smoke-live
