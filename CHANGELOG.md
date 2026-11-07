@@ -11,6 +11,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-11-07
+
+### ⚡ 时间窗口搜索：`--since` / `--until` / `--from` / `--to`
+
+> `search` 以前只能按关键词 + T 号过滤，跨天的口袋越积越多、翻"昨天做了什么"就得全量扫。
+> 现在按时间段切口袋——T 号窗口（`--since 10 --until 20`）或自然日窗口
+> （`--from 2026-10-01 --to 2026-10-31`），四种可以混用。索引版本升到 v6，老缓存自动作废
+> 重建（无感）。数据格式未变（仍是 v2），老口袋直接能用。
+
+- **核心层 `lib/query.js`**：新导出 `parseDateOpt` / `whenDateInt` / `filterByTime`。
+  `filterByTime` 是唯一过滤实现，T/FIX 用自身 `when` + T 号，FIX 自己没有 WHEN 行、
+  用它更正的那轮 targetId 的时间；ADR 和 R 文档只有 T 号（`createdAt` / `openedAt`），
+  日期窗口下被排除（它们本身就不带日期）、T 号窗口下保留；pref 既没 tId 也没 when，
+  有任何过滤条件直接排除。窗口闭区间（`>= sinceT && <= untilT`，日期同理）。
+- **`searchAny` 改造**：签名不变，新增 `opts.sinceT/untilT/fromDate/toDate`。时间过滤
+  施加在分页之前，所以 `total` 是过滤后的真实总数，口径一致。倒排索引和扫描双路径
+  共用同一个 `filterByTime`，`viaIndex` 标志不变。
+- **索引文档结构升级 `lib/indexer.js`**：`INDEX_VERSION` 5 → 6。T 文档 block.when
+  直接带进索引；FIX 文档查 `whenByTId` Map 拿它更正那轮的时间；R 文档补 `openedAt/
+  completedAt/cancelledAt` 三个时间字段（`collectDocs` 和 `formatDocHit` 同步）。
+  旧口袋不触发 migrate——只有 `.context-pocket-index.json` 会因版本号跳变自动重建。
+- **CLI 入口 `bin/context-pocket.js`**：`VALUE_OPTIONS` Set 补 `'from'` / `'since'` /
+  `'until'`（`'to'` 已存在）。`cmdSearch` 用 `textOption(options, 'from')` 取值
+  （注意第一个参数是 options 对象，不是 `options.from` 值本身）。人类输出头部加 dim
+  小字的时间窗口说明；`--json` 回包新增 `sinceT/untilT/fromDate/toDate` 四个字段。
+- **MCP `mcp-server.js`**：`context_pocket_search` inputSchema 加四个参数
+  （`sinceT/untilT` number、`fromDate/toDate` string，YYYY-MM-DD），tool body 直接
+  透传给 `searchAny`。
+- **帮助文本 `lib/help.js`**：search 命令 Usage 行补齐四个旗标，正文新增 `Time window`
+  段落讲清楚"双路径语义不变量"和"ADR/R 在日期窗口下被排除"这两个容易踩的点。
+- **Tests**：`tests/pocket.js` +5 条（四个窗口各自过滤、双路径同结果、日期窗口排除
+  无 WHEN 的损坏 T 块、非 T/FIX 文档的行为矩阵、`search --json` 回包字段）。全量
+  **271 条通过 / 0 失败**（unit 63 / pocket 77 / hooks 16 / importer 17 / migrate 16
+  / repair 19 / cli 31 / help 7 / mcp 20）。
+
+---
+
 ## [1.3.1] - 2026-11-07
 
 ### ⚡ 查询侧更正闭环 + verify 降噪与提速 + CI 门禁（2026-11-07）

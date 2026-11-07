@@ -89,10 +89,10 @@ const {
 const VALUE_OPTIONS = new Set([
   'action', 'append-summary', 'attachments', 'author', 'commits', 'conflicts', 'consequences',
   'context', 'decision', 'decisions', 'dir', 'drift-last-n', 'f', 'file', 'file-path',
-  'gist', 'id', 'impl', 'key', 'keyword', 'keep-last', 'language', 'last-n', 'limit',
+  'from', 'gist', 'id', 'impl', 'key', 'keyword', 'keep-last', 'language', 'last-n', 'limit',
   'mode', 'next-step', 'offset', 'options', 'pitfall', 'pitfalls', 'preferences', 'project-type', 'recent-keep', 'source',
-  'status', 'summary', 'supersedes', 't', 't-a', 't-b', 't-id', 'tags', 'text', 'title', 'to', 'truncate', 'uncertain',
-  'user', 'value', 'when', 'gitignore',
+  'since', 'status', 'summary', 'supersedes', 't', 't-a', 't-b', 't-id', 'tags', 'text', 'title', 'to', 'truncate', 'uncertain',
+  'until', 'user', 'value', 'when', 'gitignore',
 ]);
 
 // 纯开关型选项：绝不吞掉后面的裸词（旧实现会把 `--quiet rebuild` 里的
@@ -838,6 +838,14 @@ function cmdSearch(options, positional) {
     process.exit(1);
   }
 
+  // 4 个过滤旗标：两两等价（T 号窗口 / 日期窗口）。值选项由 intOption/textOption 统一收，
+  // 垃圾值（非数字 / 空字符串）一律回落成 null，让 filterByTime 按"没给过滤条件"处理。
+  // 注意：textOption(obj, ...keys) —— 第一个参数是 options 对象，后面是键名
+  const sinceT = intOption(options.since, 0) > 0 ? intOption(options.since, 0) : null;
+  const untilT = intOption(options.until, 0) > 0 ? intOption(options.until, 0) : null;
+  const fromDate = textOption(options, 'from') || null;
+  const toDate = textOption(options, 'to') || null;
+
   // 优先走倒排索引（历史增长后依然即时）。缓存缺失 / 坏 JSON / INDEX_VERSION 对不上 / 签名过期
   // 都是当场重建然后继续走索引，只有连重建都做不成（只读盘、索引路径被别的东西占住）才真的
   // viaIndex:false 去扫 Markdown；--no-index 是显式声明"这一次不信缓存"。
@@ -846,12 +854,20 @@ function cmdSearch(options, positional) {
     useIndex: !options['no-index'],
     limit: options.limit,
     offset: options.offset,
+    sinceT,
+    untilT,
+    fromDate,
+    toDate,
   });
 
   if (options.json) {
     emitJson({
       ok: true,
       keyword,
+      sinceT,
+      untilT,
+      fromDate,
+      toDate,
       count: results.length,
       total,
       offset,
@@ -862,8 +878,27 @@ function cmdSearch(options, positional) {
     });
   }
 
+  // 时间窗口说明（人类输出头部）
+  const range = [];
+  if (sinceT !== null || untilT !== null) {
+    range.push(
+      'T号: ' +
+      (sinceT !== null ? `>= T${sinceT}` : '') +
+      (sinceT !== null && untilT !== null ? ' 且 ' : '') +
+      (untilT !== null ? `<= T${untilT}` : '')
+    );
+  }
+  if (fromDate !== null || toDate !== null) {
+    range.push(
+      '日期: ' +
+      (fromDate !== null ? `>= ${fromDate}` : '') +
+      (fromDate !== null && toDate !== null ? ' 且 ' : '') +
+      (toDate !== null ? `<= ${toDate}` : '')
+    );
+  }
+
   console.log('');
-  console.log(colorize(`  Search: "${keyword}"`, 'bold'));
+  console.log(colorize(`  Search: "${keyword}"`, 'bold') + (range.length ? colorize('  ( ' + range.join(' · ') + ' )', 'dim') : ''));
   const shown = limit !== null && results.length < total
     ? colorize(` · showing ${offset + 1}–${offset + results.length}`, 'dim')
     : '';

@@ -319,6 +319,22 @@ const TOOLS = [
           description: 'Skip the cached inverted index and scan the markdown (CLI equivalent: --no-index). Use to cross-check index freshness.',
           default: false,
         },
+        sinceT: {
+          type: 'number',
+          description: 'Time window — only turns with T-id >= this number (CLI equivalent: --since)',
+        },
+        untilT: {
+          type: 'number',
+          description: 'Time window — only turns with T-id <= this number (CLI equivalent: --until)',
+        },
+        fromDate: {
+          type: 'string',
+          description: 'Time window — only turns whose WHEN is on or after this day (YYYY-MM-DD; CLI equivalent: --from)',
+        },
+        toDate: {
+          type: 'string',
+          description: 'Time window — only turns whose WHEN is on or before this day (YYYY-MM-DD; CLI equivalent: --to)',
+        },
       },
     },
   },
@@ -1342,10 +1358,15 @@ function toolSearch(args) {
   // 缓存缺失 / 坏 JSON / INDEX_VERSION 对不上 / 签名过期都是当场重建然后继续走索引，
   // 只有连重建都做不成才是全量扫描；noIndex:true 是显式要这一次不信缓存。
   // 与 CLI 的 --no-index 同一份逻辑，两条路径的命中与排序相同，所以 limit/offset 翻的是同一份结果。
+  // 时间窗口过滤（sinceT/untilT/fromDate/toDate）在分页之前施加，分页口径就是过滤后的总数。
   const { results, total, hasMore, offset, limit } = searchAny(pocketDir, keyword, {
     useIndex: args.noIndex !== true,
     limit: args.limit,
     offset: args.offset,
+    sinceT: typeof args.sinceT === 'number' && args.sinceT > 0 ? args.sinceT : null,
+    untilT: typeof args.untilT === 'number' && args.untilT > 0 ? args.untilT : null,
+    fromDate: typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null,
+    toDate: typeof args.toDate === 'string' && args.toDate ? args.toDate : null,
   });
 
   const lines = [];

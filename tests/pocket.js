@@ -1806,3 +1806,189 @@ test('verify: 创建后被删/改名不再报漂移，删除发生在创建之�
   assert.strictEqual(hits.length, 1, JSON.stringify(hits));
   assert.ok(hits[0].message.includes('src/tmp.js'), hits[0].message);
 });
+
+// ============================================================
+// 1.4.0：时间窗口搜索（search --since/--until/--from/--to）
+// ============================================================
+
+test('search: sinceT / untilT / fromDate / toDate 四组窗口各自过滤', () => {
+  const { pocketDir } = makePocket('time-windows');
+  // 三个块，两个不同时间区间
+  record(pocketDir, 'alpha', { when: '2026-10-01 → 2026-10-03' });
+  record(pocketDir, 'beta', { when: '2026-10-10 → 2026-10-12' });
+  record(pocketDir, 'gamma', { when: '2026-11-01 → 2026-11-03' });
+  resetIndexMemo();
+  buildIndex(pocketDir, { rebuild: true });
+
+  // 1) T 号下界：>= T2
+  assert.deepStrictEqual(
+    query.searchAny(pocketDir, '测试', { sinceT: 2 }).results.map((r) => r.type + ':' + r.id).sort(),
+    ['T:2', 'T:3'],
+    '--since 2 应该只留 T2/T3'
+  );
+
+  // 2) T 号上界：<= T1
+  assert.deepStrictEqual(
+    query.searchAny(pocketDir, '测试', { untilT: 1 }).results.map((r) => r.type + ':' + r.id),
+    ['T:1'],
+    '--until 1 应该只留 T1'
+  );
+
+  // 3) T 号闭区间：T2..T2
+  assert.deepStrictEqual(
+    query.searchAny(pocketDir, '测试', { sinceT: 2, untilT: 2 }).results.map((r) => r.type + ':' + r.id),
+    ['T:2'],
+    '--since 2 --until 2 应该只留 T2'
+  );
+
+  // 4) 日期下界：>= 2026-10-05（T1 的 from 是 2026-10-01，被排除）
+  assert.deepStrictEqual(
+    query.searchAny(pocketDir, '测试', { fromDate: '2026-10-05' }).results.map((r) => r.type + ':' + r.id).sort(),
+    ['T:2', 'T:3'],
+    '--from 2026-10-05 应该排除 T1'
+  );
+
+  // 5) 日期上界：<= 2026-10-31（T3 的 from 是 2026-11-01，被排除）
+  assert.deepStrictEqual(
+    query.searchAny(pocketDir, '测试', { toDate: '2026-10-31' }).results.map((r) => r.type + ':' + r.id).sort(),
+    ['T:1', 'T:2'],
+    '--to 2026-10-31 应该排除 T3'
+  );
+
+  // 6) 日期闭区间：2026-10-05..2026-10-15
+  assert.deepStrictEqual(
+    query.searchAny(pocketDir, '测试', { fromDate: '2026-10-05', toDate: '2026-10-15' }).results.map((r) => r.type + ':' + r.id),
+    ['T:2'],
+    '闭区间应该只留 T2'
+  );
+
+  // 7) 无过滤 → 三条全在
+  assert.strictEqual(query.searchAny(pocketDir, '测试').results.length, 3, '无过滤三条全在');
+
+  // 8) 过滤后全空：--from 2026-12-01
+  assert.strictEqual(query.searchAny(pocketDir, '测试', { fromDate: '2026-12-01' }).results.length, 0, '超出范围返回空');
+});
+
+test('search: 时间窗口走索引与走扫描同结果（双路径同语义不变量不破坏）', () => {
+  const { pocketDir } = makePocket('time-windows-dualpath');
+  record(pocketDir, 'foo', { when: '2026-09-01 → 2026-09-03' });
+  record(pocketDir, 'bar', { when: '2026-09-10 → 2026-09-12' });
+  record(pocketDir, 'baz', { when: '2026-10-01 → 2026-10-03' });
+  resetIndexMemo();
+  buildIndex(pocketDir, { rebuild: true });
+
+  const cases = [
+    { sinceT: 2 },
+    { untilT: 2 },
+    { fromDate: '2026-09-15' },
+    { toDate: '2026-09-15' },
+    { fromDate: '2026-09-15', toDate: '2026-09-20' },
+    { sinceT: 1, untilT: 2 },
+    {}, // 空过滤
+  ];
+
+  for (const opts of cases) {
+    const indexed = query.searchAny(pocketDir, '测试', Object.assign({ useIndex: true }, opts));
+    const scanned = query.searchAny(pocketDir, '测试', Object.assign({ useIndex: false }, opts));
+    assert.strictEqual(indexed.total, scanned.total, JSON.stringify(opts));
+    assert.deepStrictEqual(
+      indexed.results.map((r) => r.type + ':' + r.id),
+      scanned.results.map((r) => r.type + ':' + r.id),
+      JSON.stringify(opts)
+    );
+  }
+});
+
+test('search: 日期窗口排除没有 WHEN 的 T 块（格式 v1 或损坏块）', () => {
+  const { pocketDir } = makePocket('time-windows-v1');
+  // v1 pocket：块没有 --- WHEN: 结构行
+  const { pocketDir: v1 } = makeV1Pocket('v1-pocket');
+  // 用 appendLogBlock 手工写 v1 块 —— writer 会自动升级，但我们要 raw v1
+  writePocketFile(v1, 'log.md', [
+    '# ContextPocket · LOG', '',
+    '--- SESSION: 2026-11-01 ---', '',
+    '## T1 · old-block · [测试]', '',
+    '### User', '- u',
+    '### Action', '- 做了某事',
+    '',
+    '--- SESSION: 2026-11-10 ---', '',
+    '## T2 · new-block · [测试]',
+    '--- WHEN: 2026-11-10 → 2026-11-12 ---',
+    '',
+    '### User', '- u',
+    '### Action', '- 做了另一件事',
+    '',
+  ].join('\n'));
+  resetIndexMemo();
+  buildIndex(v1, { rebuild: true });
+
+  // --from 2026-11-05：T2 的 from 是 2026-11-10 应该命中；T1 没 when → 日期窗口下排除
+  const r = query.searchAny(v1, '测试', { fromDate: '2026-11-05' });
+  assert.strictEqual(r.total, 1, JSON.stringify(r));
+  assert.strictEqual(r.results[0].id, 2);
+
+  // 但 --since 1（T 号窗口）：T 号是稳定的，不管有没有 when 都能过滤
+  const r2 = query.searchAny(v1, '测试', { sinceT: 1 });
+  assert.strictEqual(r2.total, 2, JSON.stringify(r2));
+});
+
+test('filterByTime: 非 T/FIX 文档在日期窗口下被排除、在 T 号窗口下保留', () => {
+  const { pocketDir } = makePocket('time-windows-mixed');
+  record(pocketDir, 'a');
+  record(pocketDir, 'b');
+  writer.addDecision(pocketDir, {
+    title: 'ADR one test-keyword', context: 'c', options: 'o', decision: 'd', consequences: 'x', supersedes: 'none', createdAt: 1,
+  });
+  writer.addRequirement(pocketDir, { text: 'REQ test-keyword item', createdAt: 2, priority: 'P2' });
+  resetIndexMemo();
+  buildIndex(pocketDir, { rebuild: true });
+
+  // 搜能命中 T + ADR + R 的关键词（tag "测试" + title "test-keyword"）
+  const kw = 'test-keyword';
+
+  // 先看不加过滤有多少条
+  const all = query.searchAny(pocketDir, kw);
+  const types = all.results.map((r) => r.type).sort();
+  console.error('ALL RESULTS:', types);
+
+  // 日期窗口：ADR/R 没有日期字段 → 被排除；只留 T/FIX
+  const byDate = query.searchAny(pocketDir, kw, { fromDate: '2026-11-01' });
+  assert.ok(byDate.results.every((r) => r.type === 'T' || r.type === 'FIX'),
+    '日期窗口只留 T/FIX，实际:' + byDate.results.map((r) => r.type));
+
+  // T 号窗口：ADR 有 createdAt=1、R 有 openedAt=2 → sinceT 1 应该都保留
+  const byT = query.searchAny(pocketDir, kw, { sinceT: 1 });
+  const tTypes = byT.results.map((r) => r.type);
+  console.error('sinceT RESULTS:', tTypes);
+  assert.ok(byT.results.some((r) => r.type === 'ADR'), 'sinceT 应该保留 ADR');
+  assert.ok(byT.results.some((r) => r.type === 'R'), 'sinceT 应该保留 R');
+});
+
+test('search --json: 时间窗口字段正确出现在回包里', () => {
+  // 这条走真实 CLI（和 smoke-live 同风格），验证旗标链路打通
+  const { pocketDir } = makePocket('cli-timewin-json');
+  record(pocketDir, 'hit-one', { when: '2026-10-01 → 2026-10-03' });
+  record(pocketDir, 'hit-two', { when: '2026-10-10 → 2026-10-12' });
+  const projectDir = path.dirname(pocketDir);
+  const CLI = path.join(ROOT, 'bin', 'context-pocket.js');
+
+  function runCli(args) {
+    try {
+      return { code: 0, stdout: spawnSync('node', [CLI, ...args], { cwd: projectDir, encoding: 'utf-8' }).stdout };
+    } catch (e) {
+      return { code: e.status, stdout: String(e.stdout || ''), stderr: String(e.stderr || '') };
+    }
+  }
+  // gist 是 hit-one / hit-two 不是 tag "测试"
+  const out = runCli(['search', 'hit', '--from', '2026-10-05', '--to', '2026-10-20', '--since', '1', '--until', '5', '--json']).stdout.trim();
+  const jsonLine = out.split('\n').pop();
+  const parsed = JSON.parse(jsonLine);
+
+  assert.strictEqual(parsed.ok, true);
+  assert.strictEqual(parsed.fromDate, '2026-10-05', 'fromDate 回包要保真');
+  assert.strictEqual(parsed.toDate, '2026-10-20', 'toDate 回包要保真');
+  assert.strictEqual(parsed.sinceT, 1, 'sinceT 回包要保真');
+  assert.strictEqual(parsed.untilT, 5, 'untilT 回包要保真');
+  assert.strictEqual(parsed.results.length, 1, JSON.stringify(parsed.results));
+  assert.strictEqual(parsed.results[0].id, 2, 'T1 from=2026-10-01 被 --from 排除，只剩 T2');
+});
