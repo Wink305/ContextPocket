@@ -1993,3 +1993,174 @@ test('search --json: 时间窗口字段正确出现在回包里', () => {
   assert.strictEqual(parsed.results.length, 1, JSON.stringify(parsed.results));
   assert.strictEqual(parsed.results[0].id, 2, 'T1 from=2026-10-01 被 --from 排除，只剩 T2');
 });
+
+// ------------------------------------------------------------
+// code-map update：变更分类 / 改名 / 描述建议（1.5.0）
+// ------------------------------------------------------------
+
+const CODE_MAP_CACHE = (pocketDir) => path.join(pocketDir, 'assets', 'code-map-cache.json');
+const TODO_MARK = '⚠️ TODO: add description';
+
+test('code-map update: 首扫全 added，二扫零变化全 existing，缓存落盘', () => {
+  const { pocketDir } = makePocket('codemap-cache-basics');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'a.ts'), '// a');
+
+  const first = writer.updateCodeMap(pocketDir);
+  assert.ok(first.wrote);
+  assert.ok(first.added.includes('src/a.ts'), '首扫无缓存，全部按新增报');
+  assert.deepStrictEqual(first.modified, []);
+  assert.deepStrictEqual(first.renamed, []);
+  const cache = JSON.parse(fs.readFileSync(CODE_MAP_CACHE(pocketDir), 'utf-8'));
+  assert.strictEqual(cache.version, 1);
+  assert.ok(cache.files['src/a.ts'].size > 0);
+
+  const second = writer.updateCodeMap(pocketDir);
+  assert.deepStrictEqual(second.added, [], '缓存对齐后不该再报新增');
+  assert.deepStrictEqual(second.modified, []);
+  assert.deepStrictEqual(second.removed, []);
+  assert.ok(second.existingCount >= 1);
+});
+
+test('code-map update: 改大小报 modified，删文件/删目录报 deleted', () => {
+  const { pocketDir } = makePocket('codemap-cache-mr');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'keep'));
+  fs.mkdirSync(path.join(projectDir, 'gone'));
+  fs.writeFileSync(path.join(projectDir, 'keep', 'a.ts'), '// a');
+  fs.writeFileSync(path.join(projectDir, 'gone', 'b.ts'), '// b');
+  writer.updateCodeMap(pocketDir);
+
+  // 内容长度变了 → size 变（不靠 mtime 时间精度）
+  fs.writeFileSync(path.join(projectDir, 'keep', 'a.ts'), '// a with a much longer body now');
+  fs.unlinkSync(path.join(projectDir, 'gone', 'b.ts'));
+  fs.rmdirSync(path.join(projectDir, 'gone'));
+
+  const diff = writer.updateCodeMap(pocketDir, { diffOnly: true });
+  assert.deepStrictEqual(diff.modified, ['keep/a.ts']);
+  assert.ok(diff.removed.includes('gone/b.ts'));
+  assert.ok(diff.removedDirs.includes('gone/'));
+  assert.strictEqual(diff.wrote, false);
+  // diff 不动缓存：真更新时 modified 信号必须还在（没被提前抹掉）
+  const cacheBefore = fs.readFileSync(CODE_MAP_CACHE(pocketDir), 'utf-8');
+  writer.updateCodeMap(pocketDir, { diffOnly: true });
+  assert.strictEqual(fs.readFileSync(CODE_MAP_CACHE(pocketDir), 'utf-8'), cacheBefore);
+});
+
+test('code-map update: rename 按 size+mtime 配对，描述跟着走，无描述的落地带 TODO', () => {
+  const { pocketDir } = makePocket('codemap-cache-rename');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'named.ts'), '// keep me');
+  fs.writeFileSync(path.join(projectDir, 'src', 'plain.ts'), '// no desc');
+  // 给 named.ts 落一条真实描述
+  writer.updateCodeMap(pocketDir, {
+    descOverrides: { 'src/named.ts': '有名字的模块' },
+  });
+
+  fs.renameSync(path.join(projectDir, 'src', 'named.ts'), path.join(projectDir, 'src', 'renamed.ts'));
+  fs.renameSync(path.join(projectDir, 'src', 'plain.ts'), path.join(projectDir, 'src', 'plain2.ts'));
+
+  const result = writer.updateCodeMap(pocketDir);
+  const pair = result.renamed.find((r) => r.from === 'src/named.ts' && r.to === 'src/renamed.ts');
+  assert.ok(pair, JSON.stringify(result.renamed));
+  assert.ok(result.renamed.some((r) => r.from === 'src/plain.ts' && r.to === 'src/plain2.ts'));
+  assert.deepStrictEqual(result.added, [], '配对成功的不该再出现在 added/removed');
+  assert.deepStrictEqual(result.removed, []);
+  assert.ok(result.carriedDescriptions.includes('src/renamed.ts'));
+
+  const map = fs.readFileSync(path.join(pocketDir, 'code-map.md'), 'utf-8');
+  assert.ok(map.includes('renamed.ts → 有名字的模块'), '旧描述必须随改名带走');
+  // 注意不能用 includes('named.ts') —— 'renamed.ts' 本身含这个子串
+  assert.ok(!map.split('\n').some((l) => l.includes('named.ts') && !l.includes('renamed.ts')),
+    '旧路径整行都该消失');
+  assert.ok(map.includes('plain2.ts → ' + TODO_MARK), '没描述的改名新路径必须挂 TODO，不能渲染成裸路径');
+});
+
+test('code-map update: 配对歧义时宁可不报改名（A+D 比误判 R 安全）', () => {
+  const { pocketDir } = makePocket('codemap-cache-ambiguous');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'a.ts'), '// same same');
+  writer.updateCodeMap(pocketDir);
+
+  // 白盒造歧义：缓存里塞两个"已删除"幽灵，size/mtime 与磁盘上唯一的新文件全等
+  fs.renameSync(path.join(projectDir, 'src', 'a.ts'), path.join(projectDir, 'src', 'b.ts'));
+  const st = fs.statSync(path.join(projectDir, 'src', 'b.ts'));
+  const cache = JSON.parse(fs.readFileSync(CODE_MAP_CACHE(pocketDir), 'utf-8'));
+  cache.files['src/ghost.ts'] = { size: st.size, mtimeMs: st.mtimeMs };
+  fs.writeFileSync(CODE_MAP_CACHE(pocketDir), JSON.stringify(cache));
+
+  const diff = writer.updateCodeMap(pocketDir, { diffOnly: true });
+  assert.deepStrictEqual(diff.renamed, [], 'b.ts 对 a.ts / ghost.ts 双向不唯一，不能配成改名');
+  assert.ok(diff.added.includes('src/b.ts'));
+  assert.ok(diff.removed.includes('src/a.ts'));
+  assert.ok(diff.removed.includes('src/ghost.ts'));
+});
+
+test('code-map update: 缓存损坏不炸，回退首扫语义', () => {
+  const { pocketDir } = makePocket('codemap-cache-corrupt');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'a.ts'), '// a');
+  writer.updateCodeMap(pocketDir);
+  fs.writeFileSync(CODE_MAP_CACHE(pocketDir), '{ not json');
+
+  const result = writer.updateCodeMap(pocketDir);
+  assert.strictEqual(result.success, true, '坏缓存绝不能拦住更新');
+  // 回退路径拿 map 比对：a.ts 上轮已在地图里 → existing；关键是不炸、没有 M/R
+  assert.ok(!result.removed.includes('src/a.ts'));
+  assert.deepStrictEqual(result.modified, []);
+  assert.deepStrictEqual(result.renamed, []);
+});
+
+test('code-map update: autoSuggest 结构化行取 desc，自由格式回退 gist，不写盘', () => {
+  const { pocketDir } = makePocket('codemap-suggest');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'hit.ts'), '// hit');
+  fs.writeFileSync(path.join(projectDir, 'src', 'free.ts'), '// free');
+  fs.writeFileSync(path.join(projectDir, 'src', 'silent.ts'), '// no log mention');
+  record(pocketDir, '登录超时修复', {
+    action: ['新增 src/hit.ts — 处理登录空指针', '新增 src/free.ts'],
+  });
+
+  const preview = writer.updateCodeMap(pocketDir, { diffOnly: true, autoSuggest: true });
+  assert.ok(preview.suggestions['src/hit.ts'], '结构化 Action 必须有候选');
+  assert.strictEqual(preview.suggestions['src/hit.ts'].text, '处理登录空指针（T1）');
+  assert.strictEqual(preview.suggestions['src/hit.ts'].source, 'action');
+  // 自由格式行整行带路径，不能直接当描述 → 回退该轮 gist
+  assert.ok(preview.suggestions['src/free.ts'].text.includes('登录超时修复'));
+  assert.strictEqual(preview.suggestions['src/free.ts'].source, 'gist');
+  assert.ok(!preview.suggestions['src/silent.ts'], 'log 没提过的文件不该有候选');
+  assert.strictEqual(preview.wrote, false);
+
+  const mapBefore = fs.readFileSync(path.join(pocketDir, 'code-map.md'), 'utf-8');
+  assert.ok(!mapBefore.includes('处理登录空指针'), '只看候选时一个字都不许落盘');
+
+  // descOverrides 是 --apply / --interactive 的落地通道；结构注入要被洗掉
+  const applied = writer.updateCodeMap(pocketDir, {
+    descOverrides: { 'src/hit.ts': '## 伪造标题注入' },
+  });
+  assert.ok(applied.applied.includes('src/hit.ts'));
+  const mapAfter = fs.readFileSync(path.join(pocketDir, 'code-map.md'), 'utf-8');
+  // escapeStructureLines 的洗法是行首加反斜杠降级（不删字）：
+  // 树里该出现 \## ，而不能出现一个真能被解析成标题的 ## 行
+  assert.ok(mapAfter.includes('hit.ts → \\## 伪造标题注入'),
+    '结构伪造必须被反斜杠降级，实际:' + mapAfter.split('\n').filter((l) => l.includes('hit.ts')).join('|'));
+});
+
+test('code-map update: undescribed 只报真没描述的，已描述/已采纳的不打扰', () => {
+  const { pocketDir } = makePocket('codemap-undescribed');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'done.ts'), '// d');
+  fs.writeFileSync(path.join(projectDir, 'src', 'todo.ts'), '// t');
+  writer.updateCodeMap(pocketDir, { descOverrides: { 'src/done.ts': '已描述模块' } });
+
+  const again = writer.updateCodeMap(pocketDir, { diffOnly: true, autoSuggest: true });
+  assert.ok(again.undescribed.includes('src/todo.ts'));
+  assert.ok(!again.undescribed.includes('src/done.ts'), '有真实描述的不进待补名单');
+});
+

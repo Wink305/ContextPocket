@@ -98,7 +98,7 @@ const VALUE_OPTIONS = new Set([
 // 纯开关型选项：绝不吞掉后面的裸词（旧实现会把 `--quiet rebuild` 里的
 // "rebuild" 当成 quiet 的值，导致开关失效）
 const BOOL_OPTIONS = new Set([
-  'apply-refs', 'auto', 'drift', 'dry-run', 'help', 'h', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
+  'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'help', 'h', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
   'quiet', 'rebuild', 'verify', 'version', 'v',
 ]);
 
@@ -1561,35 +1561,199 @@ function cmdPreferencesUpdate(options) {
 
 function cmdCodeMapUpdate(options) {
   const pocketDir = ensurePocket(options);
+  const diffOnly = !!options.diff;
+  // --apply 是"采纳建议"，本身就意味着要先有建议 —— 自动带上 autoSuggest
+  const autoSuggest = !!(options['auto-suggest'] || options.apply);
+  const interactive = !!options.interactive;
+
+  if (interactive && options.json) {
+    failJson(options, '--interactive needs a human at the keyboard; use --auto-suggest [--apply] --json for machine mode');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --interactive 不能与 --json 同用，机器模式请走 --auto-suggest [--apply]');
+    console.error('');
+    process.exit(1);
+    return;
+  }
 
   try {
-    const result = updateCodeMap(pocketDir);
+    if (interactive) {
+      // async 路径：同步 try 接不住 readline 期间的抛错，自己兜
+      runCodeMapInteractive(pocketDir, options).catch((e) => {
+        failJson(options, e.message);
+        console.error(colorize('\n  ❌ Error:', 'red') + ' ' + e.message);
+        console.error('');
+        process.exit(1);
+      });
+      return;
+    }
+
+    // --apply：把建议当描述采纳；其余旗标原样透传
+    const previewOpts = { diffOnly, autoSuggest };
+    let result;
+    if (options.apply) {
+      const preview = updateCodeMap(pocketDir, { diffOnly: true, autoSuggest: true });
+      const descOverrides = {};
+      for (const [p, sug] of Object.entries(preview.suggestions || {})) descOverrides[p] = sug.text;
+      result = updateCodeMap(pocketDir, { autoSuggest: true, descOverrides });
+      // 写后这些路径已脱离 undescribed，result.suggestions 会空——
+      // 展示采纳名单用 preview 那份，只留真正落盘的
+      const appliedSet = new Set(result.applied || []);
+      result.suggestions = Object.fromEntries(
+        Object.entries(preview.suggestions || {}).filter(([p]) => appliedSet.has(p))
+      );
+    } else {
+      result = updateCodeMap(pocketDir, previewOpts);
+    }
 
     if (options.json) emitJson(Object.assign({ ok: true }, result));
 
-    console.log('');
-    console.log(colorize('  ✅ code-map.md updated', 'green'));
-    console.log(`     Added: ${result.addedCount} files`);
-    console.log(`     Removed: ${result.removedCount} files`);
-    console.log(`     Existing: ${result.existingCount} files`);
-    console.log('');
-
-    if (result.added.length > 0) {
-      console.log(colorize('  New files (⚠️ add descriptions):', 'yellow'));
-      for (const f of result.added.slice(0, 10)) {
-        console.log(`     + ${f}`);
-      }
-      if (result.added.length > 10) {
-        console.log(colorize(`     ... and ${result.added.length - 10} more`, 'dim'));
-      }
-      console.log('');
-    }
+    printCodeMapChanges(result, { diffOnly, autoSuggest, applied: !!options.apply });
   } catch (e) {
     failJson(options, e.message);
     console.error(colorize('\n  ❌ Error:', 'red') + ' ' + e.message);
     console.error('');
     process.exit(1);
   }
+}
+
+// 变更清单：git-status 风格的一行一个。写 / 不写都复用这份渲染。
+function codeMapChangeLines(result) {
+  const lines = [];
+  for (const d of result.addedDirs || []) lines.push('  ' + colorize(' A+ ', 'green') + d);
+  for (const f of result.added || []) lines.push('  ' + colorize(' A  ', 'green') + f);
+  for (const f of result.modified || []) lines.push('  ' + colorize(' M  ', 'yellow') + f);
+  for (const rn of result.renamed || []) {
+    lines.push('  ' + colorize(' R  ', 'cyan') + rn.from + colorize(' → ', 'dim') + rn.to);
+  }
+  for (const d of result.removedDirs || []) lines.push('  ' + colorize(' D- ', 'red') + d);
+  for (const f of result.removed || []) lines.push('  ' + colorize(' D  ', 'red') + f);
+  return lines;
+}
+
+function printCodeMapChanges(result, mode) {
+  const changeCount = (result.added || []).length + (result.addedDirs || []).length
+    + (result.modified || []).length + (result.renamed || []).length
+    + (result.removed || []).length + (result.removedDirs || []).length;
+
+  console.log('');
+  if (changeCount > 0) {
+    console.log(colorize(mode.diffOnly ? '  📋 code-map diff (not written)' : '  📋 code-map changes', 'bold'));
+    for (const line of codeMapChangeLines(result)) console.log(line);
+    console.log('');
+  }
+
+  if (!mode.diffOnly) {
+    console.log(colorize('  ✅ code-map.md updated', 'green'));
+    console.log(`     Added: ${result.addedCount} files · Modified: ${(result.modified || []).length} · Renamed: ${(result.renamed || []).length} · Removed: ${result.removedCount} files · Existing: ${result.existingCount} files`);
+    console.log('');
+  } else {
+    console.log(colorize('  ℹ️  dry run — code-map.md not written. Run without --diff to apply.', 'dim'));
+    console.log('');
+  }
+
+  const sugEntries = Object.entries(result.suggestions || {});
+  if (mode.autoSuggest && sugEntries.length > 0) {
+    console.log(colorize(mode.applied ? '  💡 Applied description candidates:' : '  💡 Description candidates (from log):', 'cyan'));
+    for (const [p, sug] of sugEntries.slice(0, 15)) {
+      console.log(`     ${p} ${colorize('→', 'dim')} ${sug.text}`);
+    }
+    if (sugEntries.length > 15) console.log(colorize(`     ... and ${sugEntries.length - 15} more`, 'dim'));
+    if (!mode.applied) {
+      console.log(colorize('     (nothing written — re-run with --apply to accept, or --interactive to choose one by one)', 'dim'));
+    }
+    console.log('');
+  }
+
+  if (!mode.diffOnly && (result.carriedDescriptions || []).length > 0) {
+    console.log(colorize('  📎 Descriptions carried with renamed files:', 'cyan'));
+    for (const rn of result.renamed || []) {
+      if ((result.carriedDescriptions || []).includes(rn.to)) {
+        console.log(`     ${rn.from} ${colorize('→', 'dim')} ${rn.to}`);
+      }
+    }
+    console.log('');
+  }
+}
+
+// 交互式补全：每条无描述文件一轮提问，回车采纳建议、s 跳过、打字给自定义描述。
+// readline 走 stdin，管道输入也成立（测试用 spawnSync input 驱动）；遇 EOF 余下全跳过。
+async function runCodeMapInteractive(pocketDir, options) {
+  const readline = require('readline');
+  const preview = updateCodeMap(pocketDir, { diffOnly: true, autoSuggest: true });
+  const targets = preview.undescribed || [];
+
+  if (targets.length === 0) {
+    // 没有要补的，仍然正常落一次盘（标题行 / 变更清单该更新还是更新）
+    const result = updateCodeMap(pocketDir, {});
+    printCodeMapChanges(result, { diffOnly: false, autoSuggest: false, applied: false });
+    console.log(colorize('  ℹ️  没有待补描述的文件，交互结束。', 'dim'));
+    console.log('');
+    return;
+  }
+
+  // 不能用 rl.question：管道喂入时，一个 chunk 里的多行被 readline 在同一个同步
+  // 周期连发，question 的一次性监听器只来得及接第一行，其余静默丢弃。
+  // 自己挂持久 'line' 监听 + 队列，ask 先消费队列再等新行；close 时队列空才给 null。
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const lineQueue = [];
+  let waitResolve = null;
+  let closed = false;
+  rl.on('line', (line) => {
+    if (waitResolve) { const w = waitResolve; waitResolve = null; w(line); }
+    else lineQueue.push(line);
+  });
+  rl.on('close', () => {
+    closed = true;
+    if (waitResolve) { const w = waitResolve; waitResolve = null; w(null); }
+  });
+  const ask = (promptText) => new Promise((resolve) => {
+    rl.output.write(promptText);
+    if (lineQueue.length > 0) resolve(lineQueue.shift());
+    else if (closed) resolve(null);
+    else waitResolve = resolve;
+  });
+  const descOverrides = {};
+  let accepted = 0;
+  let manual = 0;
+  let skipped = 0;
+  let eof = false;
+
+  console.log('');
+  console.log(colorize(`  📝 code-map interactive — ${targets.length} file(s) need a description`, 'bold'));
+  console.log(colorize('     Enter = 接受建议 · s = 跳过 · 直接打字 = 自定义描述 · Ctrl+C = 中止', 'dim'));
+  console.log('');
+
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      const p = targets[i];
+      const sug = (preview.suggestions || {})[p];
+      console.log(`  ${colorize(`[${i + 1}/${targets.length}]`, 'dim')} ${p}`);
+      if (sug) console.log(colorize('     💡 建议: ', 'cyan') + sug.text);
+      const hint = sug ? '[Enter 接受 / s 跳过 / 输入描述]' : '[s 跳过 / 输入描述，Enter 等同跳过]';
+      const raw = await ask(colorize('     ' + hint + ' > ', 'dim'));
+      if (raw === null) { eof = true; skipped += targets.length - i; break; }
+      const answer = raw.trim();
+      if (answer === '' && sug) {
+        descOverrides[p] = sug.text;
+        accepted++;
+      } else if (answer === '' || answer.toLowerCase() === 's') {
+        skipped++;
+      } else {
+        descOverrides[p] = answer;
+        manual++;
+      }
+    }
+  } catch (e) {
+    rl.close();
+    throw e;
+  }
+  rl.close();
+
+  const result = updateCodeMap(pocketDir, { descOverrides });
+  if (options.json) emitJson(Object.assign({ ok: true }, result, { accepted, manual, skipped }));
+  printCodeMapChanges(result, { diffOnly: false, autoSuggest: false, applied: false });
+  console.log(colorize(`  📝 交互补全完成：采纳建议 ${accepted} · 手写 ${manual} · 跳过 ${skipped}`, 'green'));
+  if (eof) console.log(colorize('  ℹ️  输入已结束，未回答的文件按跳过处理。', 'dim'));
+  console.log('');
 }
 
 // ============================================================

@@ -11,6 +11,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2026-11-07
+
+### 🧠 code-map update 智能增强：`--diff` / `--auto-suggest` / `--apply` / `--interactive`
+
+> 以前 `code-map update` 只会"重扫目录，新文件打 ⚠️ TODO"——哪些是改的、哪些是改名、
+> 哪些被删，全靠人眼 diff；TODO 写什么也得凭空想。现在它学会三件事：像 git status
+> 一样报 **A / M / R / D** 变更清单；从 log 的 Action 记录给每个没描述的文件**建议
+> 一句话描述**（自带 T 号出处）；以及一条**交互式补全**通道。
+>
+> 新增一个 per-pocket 扫描缓存 `ContextPocket/assets/code-map-cache.json`（v1，仿
+> search-index 惯例）。数据格式仍是 v2，code-map.md 结构不变，老口袋零迁移。
+
+- **变更分类**（`lib/writer.js`）：新缓存记录每个路径的 `size + mtimeMs`——code-map.md
+  只存"路径→描述"，想区分修改/改名只能靠上一次扫描的 stat。
+  - `A` 新增：在磁盘不在缓存；`M` 修改：size 或 mtime 变化；`D` 删除：在缓存不在磁盘
+    （文件和目录分开报，目录行带 `/` 与 `A+` / `D-` 记号）。
+  - `R` 改名：删除项与新增项 **size 与 mtimeMs 全等且双向唯一**才配对。改名/移动保留
+    mtime，而两个独立文件同 size 又同毫秒级 mtime 的概率可忽略；**任何一端歧义就不配**，
+    老老实实报 A+D——误判改名比误报增删危险（白盒测试钉死这条）。
+  - 首扫 / 缓存损坏 / 缓存版本跳变：自动回退 1.4.x 的"地图集合 vs 磁盘集合"比对
+    （那一路没有 M/R），绝不拦住更新。
+  - **`--diff` 不写盘也不刷缓存**：先看后做，且看完再做时 modified 信号还在（信号不能
+    被一次 dry run 提前消费）。
+- **描述随改名继承**（git mv 语义）：旧路径有真实描述就搬到新路径；TODO 标记不继承。
+  开发时实测抓到一个 bug——改名目标最初既不在 added 名单也没旧描述，树里渲染成一行
+  **没有 TODO 标记的裸路径**；现按"新面孔"对待，必挂 TODO。
+- **Action 建议引擎**：`suggestCodeMapDescriptions` 倒序扫一遍 `parseLogAll` 的
+  `block.actions`（与 `query.why` 同一数据源，但 why 每文件重解析一次 log，这里一遍建
+  "路径→最近 Action"表）。结构化行 `<类型> <路径> — <做了什么>` 取破折号后 desc；
+  自由格式行整行带路径不能直接当描述，回退该轮 gist；统一 `（T<n>）` 后缀、截到 40 字。
+  log 没提过的文件不给候选。
+- **四个旗标**：
+  - `code-map update --diff`：git-status 风格清单，dry run 不落盘。
+  - `--auto-suggest`：正常更新 + 列出每个无描述文件的候选（只看，不写）。
+  - `--apply`：把候选全部采纳进 code-map.md（隐含 auto-suggest）。
+  - `--interactive`：逐条提问——**Enter 采纳建议 / s 跳过 / 打字给自定义描述**；
+    Ctrl+D 或管道 EOF 时已收集的照写、余下按跳过，绝不再静默挂死退出。
+- **CLI / MCP / help 同步**：`bin/context-pocket.js` 四个新布尔旗标，人类输出 A/M/R/D
+  清单 + 候选 + 改名继承提示，`--json` 回包带 `wrote/added/modified/renamed/removed/
+  undescribed/suggestions/applied/carriedDescriptions`；MCP `context_pocket_code_map_update`
+  加 `diff / autoSuggest / apply` 三个布尔参数；`lib/help.js` 单源 help 加 Change
+  detection 与 Options 段，主命令表与 MCP 描述同步。
+- **交互管道的 readline 坑**：`rl.question` 的一次性监听器在管道喂入多行时，同一 chunk
+  的后续 `line` 事件在 await 间隙无人接听、静默丢弃（实测三行只收到第一行）。改为持久
+  `line` 监听 + 队列，`ask` 先消费队列再等新行。
+- **Tests**：+10 条——pocket 7（缓存生命周期、M/D 检测与 diff 不刷缓存、改名配对+描述
+  继承+TODO 渲染、配对歧义、坏缓存回退、结构化/自由格式建议与注入清洗、undescribed
+  口径）、cli 2（`--diff --json` 不写盘不消费信号；交互回车/s/EOF 全路径与
+  `--interactive --json` 拒绝）、mcp 1（diff/autoSuggest/apply 过线）。全量
+  **277 条通过 / 0 失败**（unit 64 / pocket 84 / hooks 16 / importer 17 / migrate 16
+  / repair 19 / cli 33 / help 7 / mcp 21）。
+
+---
+
 ## [1.4.1] - 2026-11-07
 
 ### 🛡️ 1.4.0 的教训落成回归锁

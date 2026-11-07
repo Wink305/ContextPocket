@@ -858,3 +858,73 @@ test('cli: distill --json reports the window it actually applied', () => {
   assert.strictEqual(fromFlag.recentKeep, 4, '旗标压过 config');
   assert.ok(fromFlag.scannedBlocks <= fromConfig.scannedBlocks, '窗口变大，扫到的旧块不会变多');
 });
+
+// 子进程 + stdin 管道：交互命令的测试专用
+function runCliWithInput(args, pocketDir, input) {
+  const argv = [...args, '--dir', pocketDir];
+  try {
+    const stdout = execFileSync(process.execPath, [CLI, ...argv], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      input,
+    });
+    return { code: 0, stdout };
+  } catch (e) {
+    return { code: typeof e.status === 'number' ? e.status : 1, stdout: e.stdout || '', stderr: e.stderr || '' };
+  }
+}
+
+test('cli: code-map update --diff --json 报变更清单但不写盘', () => {
+  const { pocketDir } = makePocket('cli-codemap-diff');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'a.ts'), '// a');
+  // 先落一版缓存
+  runCli(['code-map', 'update', '--quiet'], pocketDir);
+  fs.writeFileSync(path.join(projectDir, 'src', 'a.ts'), '// a changed body with different size');
+  fs.writeFileSync(path.join(projectDir, 'src', 'b.ts'), '// b new');
+
+  const dry = parseJsonLine(runCli(['code-map', 'update', '--diff', '--json'], pocketDir));
+  assert.strictEqual(dry.ok, true);
+  assert.strictEqual(dry.wrote, false, '--diff 一个字节都不许写');
+  assert.deepStrictEqual(dry.modified, ['src/a.ts']);
+  assert.ok(dry.added.includes('src/b.ts'));
+
+  const mapAfter = fs.readFileSync(path.join(pocketDir, 'code-map.md'), 'utf-8');
+  assert.ok(!mapAfter.includes('b.ts'), '--diff 后新文件不该出现在地图里');
+
+  // 不带 --diff 再跑一次：真写，变更还在（证明 diff 没偷刷缓存）
+  const applied = parseJsonLine(runCli(['code-map', 'update', '--json'], pocketDir));
+  assert.strictEqual(applied.wrote, true);
+  assert.deepStrictEqual(applied.modified, ['src/a.ts'], 'diff 不得提前消费 modified 信号');
+  assert.ok(applied.added.includes('src/b.ts'));
+});
+
+test('cli: code-map update --interactive 回车采纳建议、s 跳过、EOF 不挂起', () => {
+  const { pocketDir } = makePocket('cli-codemap-interactive');
+  const projectDir = path.dirname(pocketDir);
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'accept.ts'), '// accept');
+  fs.writeFileSync(path.join(projectDir, 'src', 'skip.ts'), '// skip');
+  fs.writeFileSync(path.join(projectDir, 'src', 'silent.ts'), '// silent');
+  runCli(['log', 'append', '--gist', 'g', '--user', 'u',
+    '--action', '新增 src/accept.ts — 交互式建议文本', '--quiet'], pocketDir);
+
+  // makePocket 自带一个 app.js（同样无描述），字母序下目标是：
+  // app.js → s 跳过；accept.ts → 空行采纳；skip.ts → s；silent.ts 直接 EOF
+  const r = runCliWithInput(['code-map', 'update', '--interactive'], pocketDir, 's\n\ns\n');
+  assert.strictEqual(r.code, 0, r.stderr);
+  assert.match(r.stdout, /采纳建议 1/, r.stdout);
+  assert.match(r.stdout, /跳过 3/, 'app.js/skip 显式跳过 + silent EOF 跳过都要计数');
+  assert.match(r.stdout, /输入已结束/, 'EOF 要给人话提示而不是静默退出');
+
+  const map = fs.readFileSync(path.join(pocketDir, 'code-map.md'), 'utf-8');
+  assert.ok(map.includes('accept.ts → 交互式建议文本（T1）'), '回车必须把建议写进地图');
+  assert.ok(map.includes('skip.ts → ⚠️ TODO: add description'));
+  assert.ok(map.includes('silent.ts → ⚠️ TODO: add description'));
+
+  // --interactive --json 是矛盾组合，必须拒绝而不是在半道等输入
+  const bad = runCli(['code-map', 'update', '--interactive', '--json'], pocketDir);
+  assert.strictEqual(bad.code, 1);
+});
+

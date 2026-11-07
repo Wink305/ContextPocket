@@ -699,7 +699,23 @@ const TOOLS = [
     description: TOOL_DESCRIPTIONS.context_pocket_code_map_update,
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        diff: {
+          type: 'boolean',
+          description: 'Report the A/M/R/D change list only; do not write code-map.md or refresh the scan cache',
+          default: false,
+        },
+        autoSuggest: {
+          type: 'boolean',
+          description: 'Attach a description candidate per undescribed file, from the most recent log Action touching it',
+          default: false,
+        },
+        apply: {
+          type: 'boolean',
+          description: 'Accept every autoSuggest candidate and write it into code-map.md (implies autoSuggest)',
+          default: false,
+        },
+      },
     },
   },
   // --- Maintenance ---
@@ -950,7 +966,7 @@ function handleToolsCall(id, params) {
         result = toolPreferencesUpdate(args || {});
         break;
       case 'context_pocket_code_map_update':
-        result = toolCodeMapUpdate();
+        result = toolCodeMapUpdate(args || {});
         break;
 
       // Maintenance
@@ -1833,24 +1849,74 @@ function toolPreferencesUpdate(args) {
   };
 }
 
-function toolCodeMapUpdate() {
+function toolCodeMapUpdate(args = {}) {
   const pocketDir = getPocketDir();
-  const result = updateCodeMap(pocketDir);
+  const autoSuggest = !!(args.autoSuggest || args.apply);
+  let result;
+  let appliedCandidates = null;
+  if (args.apply) {
+    const preview = updateCodeMap(pocketDir, { diffOnly: true, autoSuggest: true });
+    const descOverrides = {};
+    for (const [p, sug] of Object.entries(preview.suggestions || {})) descOverrides[p] = sug.text;
+    result = updateCodeMap(pocketDir, { autoSuggest: true, descOverrides });
+    // 第二次扫描时这些文件已带描述、不再算 undescribed，result.suggestions 会是空的；
+    // 展示"采纳了什么"要用 preview 那份候选，按实际落盘名单过滤
+    appliedCandidates = preview.suggestions || {};
+  } else {
+    result = updateCodeMap(pocketDir, { diffOnly: !!args.diff, autoSuggest });
+  }
 
   const lines = [];
-  lines.push('✅ **code-map.md updated**');
-  lines.push(`- Added: ${result.addedCount} files`);
-  lines.push(`- Removed: ${result.removedCount} files`);
-  lines.push(`- Existing: ${result.existingCount} files`);
-
-  if (result.added.length > 0) {
+  const changeCount = (result.added || []).length + (result.addedDirs || []).length
+    + (result.modified || []).length + (result.renamed || []).length
+    + (result.removed || []).length + (result.removedDirs || []).length;
+  if (changeCount > 0) {
+    lines.push(args.diff ? '**code-map diff (not written):**' : '**code-map changes:**');
+    for (const f of result.addedDirs || []) lines.push(`- A+ ${f}`);
+    for (const f of result.added || []) lines.push(`- A ${f}`);
+    for (const f of result.modified || []) lines.push(`- M ${f}`);
+    for (const rn of result.renamed || []) lines.push(`- R ${rn.from} → ${rn.to}`);
+    for (const f of result.removedDirs || []) lines.push(`- D- ${f}`);
+    for (const f of result.removed || []) lines.push(`- D ${f}`);
     lines.push('');
-    lines.push('**New files (add descriptions):**');
-    for (const f of result.added.slice(0, 10)) {
-      lines.push(`- ${f}`);
+  }
+
+  if (args.diff) {
+    lines.push('Dry run — code-map.md not written. Call again without diff to apply.');
+  } else {
+    lines.push('✅ **code-map.md updated**');
+    lines.push(`- Added: ${result.addedCount} files`);
+    lines.push(`- Modified: ${(result.modified || []).length}`);
+    lines.push(`- Renamed: ${(result.renamed || []).length}`);
+    lines.push(`- Removed: ${result.removedCount} files`);
+    lines.push(`- Existing: ${result.existingCount} files`);
+  }
+
+  const sugEntries = Object.entries(result.suggestions || {});
+  if (args.apply) {
+    const appliedSet = new Set(result.applied || []);
+    const entries = Object.entries(appliedCandidates).filter(([p]) => appliedSet.has(p));
+    if (entries.length > 0) {
+      lines.push('');
+      lines.push('**Applied description candidates:**');
+      for (const [p, sug] of entries) lines.push(`- ${p} → ${sug.text}`);
     }
-    if (result.added.length > 10) {
-      lines.push(`- ... and ${result.added.length - 10} more`);
+  } else if (autoSuggest && sugEntries.length > 0) {
+    lines.push('');
+    lines.push('**Description candidates (from log):**');
+    for (const [p, sug] of sugEntries) {
+      lines.push(`- ${p} → ${sug.text}`);
+    }
+    lines.push('_(shown only — call with apply=true to accept)_');
+  }
+
+  if (!args.diff && (result.carriedDescriptions || []).length > 0) {
+    lines.push('');
+    lines.push('**Descriptions carried with renamed files:**');
+    for (const rn of result.renamed || []) {
+      if ((result.carriedDescriptions || []).includes(rn.to)) {
+        lines.push(`- ${rn.from} → ${rn.to}`);
+      }
     }
   }
 

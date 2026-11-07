@@ -807,3 +807,30 @@ test('mcp: log_append names the required section it could not write', () => {
     srv.child.kill();
   });
 });
+
+test('mcp: code_map_update diff/autoSuggest/apply over the wire', () => {
+  const { projectDir, pocketDir } = makePocket('mcp-codemap-smart');
+  cliAppend(pocketDir, {
+    gist: '一轮记录', user: 'u', action: '新增 src/wired.ts — 线上建议文本', tags: 'x',
+  });
+  fs.mkdirSync(path.join(projectDir, 'src'));
+  fs.writeFileSync(path.join(projectDir, 'src', 'wired.ts'), '// wired');
+
+  // diff + autoSuggest：只报清单和候选，不写
+  return mcpCall(projectDir, 'context_pocket_code_map_update',
+    { diff: true, autoSuggest: true }, 2).then((dry) => {
+    assert.match(dry, /not written/i, 'diff 模式要明说没写：\n' + dry);
+    assert.match(dry, /A src\/wired\.ts/, 'git-status 风格的 A 行：\n' + dry);
+    assert.match(dry, /线上建议文本（T1）/, 'log Action 里的候选要带 T 出处：\n' + dry);
+    const map = readPocketFile(pocketDir, 'code-map.md');
+    assert.ok(!/wired\.ts\s*→/.test(map), '只看候选不许落盘');
+
+    // apply=true：候选写进地图
+    return mcpCall(projectDir, 'context_pocket_code_map_update', { apply: true }, 2);
+  }).then((applied) => {
+    assert.match(applied, /Applied description candidates/i);
+    const map = readPocketFile(pocketDir, 'code-map.md');
+    assert.match(map, /wired\.ts → 线上建议文本（T1）/, 'apply 必须把候选写进树');
+  });
+});
+
