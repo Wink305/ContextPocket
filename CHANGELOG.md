@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.3.1] - 2026-11-07
+
 ### ⚡ 查询侧更正闭环 + verify 降噪与提速 + CI 门禁（2026-11-07）
 
 > 1.3.0 发出后的第一批优化，四项一起走：更正块从"verify 能看见"闭环到"查询侧能看见"，
@@ -36,7 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   多半是"删了重建"，创建声明仍该体现在账本里，照报。
 - **④ CI + 小修**：新增 `.github/workflows/ci.yml`——push main / PR 跑与本地一字不差的四道
   发版门禁（lint、tests、smoke、smoke-live；零依赖，不需要 npm install）；
-  `docs/MIGRATION.md` 的版本示例 1.2.1 → 1.3.0。
+  随版把会过期的说法改准：`docs/MIGRATION.md` 的版本示例、`docs/FAQ.md` 的 `--version --json`
+  示例回包、`docs/COMPATIBILITY.md` 的"对应 skill 1.2.1"，全部同步到 1.3.1。
 
 ---
 
