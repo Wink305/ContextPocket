@@ -110,7 +110,7 @@ test('six Lite metrics stay below the full package and their absolute baselines 
     ['MCP tools', liteMcpTools, mainMcpTools, 8, 28],
     ['package files', litePack.files, mainPack.files, 27, 61],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 96.8, 403.3],
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 96.8, 407.8],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

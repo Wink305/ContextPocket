@@ -222,8 +222,8 @@ The new agent picks recording back up automatically — up and running in 5 seco
 | Check whether changed code went unrecorded | `verify --drift` | The files whose mtime is later than the last record (works without git; never blocks a commit) |
 | Fill in a missing turn | `log amend` | T7 filled in |
 | Record an explicit time for a turn | `log append --when` / `log amend <Tn> --when` | The turn's time line, echoed back as `⏱ <date> 09:00 → <date> 11:30` — a day it only knows as a day stays `(day)`, and the stated wording stays verbatim |
-| Find who changed a file | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
-| Find an earlier turn by keyword or window | `search <keyword>` | The matching T-blocks |
+| Find who changed a file | `why <path>` (`--expand <1–3>` for graph context; `--as-of <T>` for a historical slice) | Matching turns labelled by evidence, plus related graph nodes when requested |
+| Find an earlier turn by keyword or window | `search <keyword>` (`--expand <1–3>` for graph context) | The matching T-blocks; graph context does not alter match order |
 | Recall one turn | `recall T<n>` | The full T-block |
 | Recall one turn **with its surroundings** | `recall T<n> --with-context` | The turn plus its inbound context: who referenced it, later changes to the same files, related ADRs |
 | List turns inside a window | `recall --from … --to …` / `recall --since T5 --until T9` | The turns in that window, oldest first |
@@ -241,7 +241,7 @@ The new agent picks recording back up automatically — up and running in 5 seco
 
 > 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket verify`) also works if you want zero ambiguity.
 
-**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs — rebuilt on the fly from `log.md`, `decisions.md` and `code-map.md`. Nothing is written, and every edge names the file it came from. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
+**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing the order of the original text matches; `--as-of <T>` filters that context to facts valid at a past T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close the old fact's validity interval. Every edge retains its source. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
 
 ---
 

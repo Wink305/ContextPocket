@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Phase 3 graph context**: `search` and `why` can expand matching nodes through up to
+  three sourced graph hops without changing text-match order. Optional `--as-of <T>`
+  slices graph context using recorded/valid intervals: `Corrects T<n>` closes the
+  corrected turn's factual edges, and ADR `Supersedes` closes the prior decision.
+  Graph cache schema is now `graph/2`; Lite derives the same temporal Node schema at
+  runtime and still writes no graph cache.
+
 ---
 
 ## [2.2] - 2026-11-08

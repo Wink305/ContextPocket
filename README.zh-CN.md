@@ -220,8 +220,8 @@ Agent 会自动：
 | 检查代码改动是否漏记 | `verify --drift` | 列出 mtime 晚于最近记录的文件（不需要 git，也不拦提交） |
 | 补齐某一轮 | `log amend` | T7 补齐 |
 | 给某一轮记明确时间 | `log append --when` / `log amend <Tn> --when` | 这一轮的时间行，回话时念成 `⏱ <日期> 09:00 → <日期> 11:30`；只知道是哪天的就写成 `(day)`，原话逐字保留 |
-| 查某个文件是谁改的 | `why <path>` | 命中的轮次，按证据强弱标注：`[changed]`（这轮的 Action 小节里有它）/ `[mentioned only]`（只在 Uncertain、Attachments、Conflicts 里被谈到过，不等于改过）；改过的排在前面 |
-| 按关键词或窗口找历史 | `search <关键词>` | 命中的 T-block |
+| 查某个文件是谁改的 | `why <path>`（`--expand <1–3>` 展开关联图；`--as-of <T>` 回看历史切片） | 按证据标注命中轮次；可选追加关联图节点 |
+| 按关键词或窗口找历史 | `search <关键词>`（`--expand <1–3>` 展开关联图） | 命中的 T-block；图上下文不改变文本命中顺序 |
 | 回看某一轮 | `recall T<n>` | 完整 T-block |
 | 回看某一轮**连同它的上下文** | `recall T<n> --with-context` | 这一轮 + 入向上下文：谁引用过它、同一文件后来被谁改过、关联到哪些 ADR |
 | 按窗口列轮次 | `recall --from … --to …` / `recall --since T5 --until T9` | 这个窗口里的轮次，按 T 号从早到晚 |
@@ -239,7 +239,7 @@ Agent 会自动：
 
 > 💡 用大白话比记命令名更顺；如果你想要零歧义，直接把子命令名说出来也行（`context-pocket verify`）。
 
-**关联图层。** `recall --with-context` 与 `graph` 读的是一张**派生**出来的关联图——轮次 ↔ 文件 ↔ ADR——每次都从 `log.md`、`decisions.md`、`code-map.md` 现场重建，不写任何东西，每条边都标得出来源。问题落在**关系**上时用它（「这轮前后发生了什么」「哪些决策碰过这个文件」）；问题落在**内容**上时别用（「T7 当时说了什么」），`recall` / `search` 更快而且已经是完整答案。
+**关联图层。** `recall --with-context` 与 `graph` 读取由口袋源文件派生的关联图——轮次 ↔ 文件 ↔ ADR。`search <关键词> --expand 2` 和 `why <文件> --expand 2` 可追加最多两跳、带来源的图上下文，不改变原有文本命中顺序；`--as-of <T>` 可按历史 T 号筛选当时有效的事实。显式的 `Corrects T<n>` 和 ADR `Supersedes` 关系会关闭旧事实的有效区间，每条边仍保留来源。问题落在**关系**上时用它（「这轮前后发生了什么」「哪些决策碰过这个文件」）；问题落在**内容**上时别用（「T7 当时说了什么」），普通 `recall` / `search` 更快且答案完整。
 
 ---
 
