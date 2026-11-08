@@ -369,7 +369,7 @@ function cmdBootstrap(options) {
   const noHub = !!options['no-hub'];
 
   // 幂等：已经有 ContextPocket/ 不是"失败"，而是"早就在记了"。激活方式是全自动的
-  // （SKILL.md：用户永远不需要执行命令），用户说「开始记一下」时项目大概率已有 pocket，
+  // （SKILL.md：用户永远不需要执行命令），用户表达开始记录的意图时项目大概率已有 pocket，
   // 退 1 会让 Agent 以为自己没资格继续记录。库层那道"拒绝覆盖"保护原样保留。
   const existingPocket = path.join(projectDir, POCKET_DIR_NAME);
   if (fs.existsSync(existingPocket) && fs.statSync(existingPocket).isDirectory()) {

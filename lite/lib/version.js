@@ -6,16 +6,16 @@
  * 与主包 lib/version.js 同一套实现（读到什么就报什么，读不到才用兜底值），
  * 差别只在常量：lite/package.json、兜底值与对外展示串。
  *
- * 展示规则（ROADMAP §12 拍板 + hotfix 追加）：稳定版对外两位加产品后缀
+ * 展示规则（ROADMAP §12 + hotfix 追加）：稳定版对外两位加产品后缀
  * （2.1.0 → `2.1-lite`）；带 `-` 的预发布/hotfix 版显示完整串
  * （`2.0.1-Lite-hotfix1`）——后缀有语义，不能砍。npm 包内永远是合法 semver。
  */
 
 /** 拿不到 package.json 时的兜底值。改动它必须同时改 lite/package.json。 */
-const FALLBACK_VERSION = '2.0.1-Lite-hotfix1';
+const FALLBACK_VERSION = '2.1.0-Lite-preview';
 
 /** 对外展示版本（--version 标题行 / version --json 的 display），不进任何包元数据。 */
-const DISPLAY_VERSION = '2.0.1-Lite-hotfix1';
+const DISPLAY_VERSION = '2.1.0-Lite-preview';
 
 /**
  * @param {string} [dir] 包根目录（默认本文件所在 lib 的上一级）

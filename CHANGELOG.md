@@ -7,12 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+---
+
+## [2.1.0-preview] - 2026-11-08
+
+### 提示词话术清理：写死的口语触发词与「用户拍板」式来源标注全部清掉
+
+> 2.1 preview 通道的汇总：三批尚未发布的改动一起发。包内版本是三位 semver
+> （`2.1.0-preview` / `2.1.0-Lite-preview`），对外发行物与 tag 用两位渠道名
+> （`2.1-preview` / `2.1-Lite-preview`）。
+
+- **产品文档里的口语触发话术**：`SKILL.md` 与两份 README 的「意图 → 动作」映射表原本把
+  用户会怎么说写死成一列（"开始记一下"、"查一下有没有漏"、"交接一下"、"这玩意儿怎么用"…），
+  中英各一份。现在列头改成纯**意图**（First time in this project / 第一次进这个项目…），
+  意图到工具的映射一条不少，只是不再规定用户得怎么开口；`SKILL-advanced.md` /
+  `SKILL-reference.md` / `docs/FAQ.md` / `CONTRIBUTING.md` 与代码注释里的同类举例一并中性化。
+- **CHANGELOG 与路线图里的来源标注**：「用户拍板「以后不要v了」」「本次经维护者授权」
+  「待拍板问题」这类记录"谁在什么时候拍的"的句子全部改成中性表述——**结论保留，来源去掉**；
+  「维护者」作为角色称谓保留。
+- **README 中英双语的下载链接**：第 34 行原先指向 v2.0 的两个 ZIP，现指向当前预发布通道
+  `2.1-preview` / `2.1-Lite-preview` 的资产（`ContextPocket-2.1-preview.zip` /
+  `ContextPocket-2.1-Lite-preview.zip`），同时保留 v2.0 稳定通道入口，并标明哪条是预发布、
+  哪条是稳定版。第 82 行「尚未发布到 npm registry」的说法不变。
+- **Lite 冷启动模块数指标**（`lite/tests/metrics.js`）：此前统计 `require.cache` 的全部条目，
+  把 IDE / 运行时注入的 shim（fs 代理、ipc 客户端）也算成这个包的重量 —— 同一条锁在
+  ubuntu runner 上是 17、在注入 shim 的编辑器里是 21，本地红而 CI 绿。现在只统计项目目录内的
+  模块，两边数的是同一批文件，基线 17 不动。
+- **体积基线容差** 0.1 → 1.0 kB（主包基线 401.5 kB）：压缩后的 tarball 大小会随 README /
+  CHANGELOG 这类文本改动浮动零点几 kB，0.1 的容差等于「每写一句 CHANGELOG 都要追一次基线」，
+  追着追着锁就变成噪声；1 kB（约 0.25%）仍能挡住真正的体积膨胀。`lite` 包体积 96.8 kB 不变。
+- **版本**：包内七处抄本同步到 `2.1.0-preview`（Lite `2.1.0-Lite-preview`）；对外发行物与
+  tag 用两位渠道名。产品代码零改动（只改注释与文档）。
+- CONTRIBUTING 的用例计数口径补上 lite 套件：302 → 333。
+
+**验证**：`npm test` 333/0、lint 63 个 js、smoke ALL PASS、smoke-live 6/6，
+两个包的 `npm pack --dry-run` 文件数与体积核对通过。
+
+---
+
 ## [2.0.1-hotfix1] - 2026-11-08
 
 ### 🩹 2.0 review 修复（主包 `2.0.1-hotfix1` / Lite `2.0.1-Lite-hotfix1`）
 
 - **主包补上对外展示层**：`--version` / `version` 标题行此前直接打 `package.json` 的
-  三位 semver，违反路线图 §12「对外两位」拍板。现在 `lib/version.js` 增加
+  三位 semver，违反路线图 §12「对外两位」的决定。现在 `lib/version.js` 增加
   `DISPLAY_VERSION`，标题行打展示版、下一行打完整 semver，`--json` 增加 `display`
   字段——与 Lite 入口同形。展示规则由 `tests/unit.js` 钉死：稳定版两位（`2.1`），
   带 `-` 的 hotfix/预发布显示完整串（后缀有语义，砍掉就丢了「第几个 hotfix」）。
@@ -23,9 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FALLBACK_VERSION` / `DISPLAY_VERSION` / SKILL frontmatter 同步；
   Lite 测试新增自己的版本抄本锁（package.json ↔ lib/version.js ↔ SKILL.md）。
 - **文档纠偏**：ROADMAP §13 的 Phase 2 状态从「未提交、待确认」改为已发行
-  （commit `e7cff19`、tag `v2.0`、已推送）；§12 追加 hotfix 展示拍板。
+  （commit `e7cff19`、tag `v2.0`、已推送）；§12 追加 hotfix 展示规则。
 - **测试清理**：删掉 lite/tests/core.js 里一行原样重复的断言。
-- **tag 去 v 前缀**（用户拍板「以后不要v了」）：本次起 tag 直接用版本号
+- **tag 去 v 前缀**：本次起 tag 直接用版本号
   （`2.0.1-hotfix1` / `2.0.1-Lite-hotfix1`）；CI 闸门改认 `['[0-9]*', 'v*']`，
   新命名与历史 tag 都触发四道门禁，unit.js 触发条件锁与 CONTRIBUTING 第 6 步同步。
 
@@ -56,13 +96,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > Lite 只做确定性单跳邻接，2.0 做图索引 / 多跳 / 时间有效性。本轮只落 Phase 0 ——
 > 先验证「入向上下文」到底有没有人看；不值就停，后面全部不做。
 > **不改数据格式、不写盘、不动版本号、不发版。**
-> 2026-11-08 追加拍板（记入路线图 §8 / §12）：Lite 定为独立 npm 包（同仓独立目录起步），
+> 2026-11-08 追加（记入路线图 §8 / §12）：Lite 定为独立 npm 包（同仓独立目录起步），
 > Lite 与 2.0 各自独立版本线；对外版本号统一两位（`2.0`、`2.0-lite`），
 > npm 包内仍为三位 semver（`2.0.0`）。
 
 - **规划**（`docs/ROADMAP-2.0.md`）：基线家底、目标与非目标、Node schema v2 的节点/边/
   证据等级、确定性派生规则、hybrid 检索契约、两版分化矩阵、v1→v2 迁移、五阶段里程碑与
-  退出 gate、版本计划、测试策略、风险与反面证据、六个参考项目对照、六个待拍板问题。
+  退出 gate、版本计划、测试策略、风险与反面证据、六个参考项目对照、六个待决问题。
 - **核心层**（`lib/links.js`，新增）：从 `log.md` / `log-archive.md` / `decisions.md` /
   `code-map.md` 确定性派生 `modifies` / `mentions` / `references` / `decided-in` /
   `supersedes` / `last-changed` 六种边；每条带 `source` + `tId` 可溯源；强/弱证据沿用
@@ -84,7 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🧩 Phase 1：graph 命令 + `assets/graph.jsonl` 缓存（Node schema v2 定稿）
 
-> §12 六个待决问题全部拍板（graph.jsonl / 不做 LLM / v1 零改动可读 / 加 `graph --json` /
+> §12 六个待决问题全部确定（graph.jsonl / 不做 LLM / v1 零改动可读 / 加 `graph --json` /
 > Lite 独立包 / 两位版本号），Phase 1 进入实现。缓存是**可删的派生索引**，与
 > `assets/search-index.json` 同一定位：真值永远在四份源 Markdown 里，
 > 删掉缓存 `graph rebuild` 逐字重建（有字节级回归锁）。**不动 `format:` 戳、
@@ -132,7 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > 按 size+mtime 配对`，Linux 同毫秒写入撞键）。1.5.2 已把用例改成确定性，但 tag 仍停在
 > 没有修复的那个提交上。
 
-- **维护：force-move `v1.5.1`**（外部动作，本次经维护者授权）。先试 `gh run rerun 42384076770`，
+- **维护：force-move `v1.5.1`**（外部动作，需维护者授权）。先试 `gh run rerun 42384076770`，
   attempt #2 仍挂在同一条用例——旧代码里没修，重跑不会变绿；于是把 tag 强推到 `97d2b91`
   （test-only 修复提交，`package.json` 仍是 1.5.1，其 CI `42440112047` 为 `success`）。
   `v1.5.1` 的 Release 没动、仍是非草稿；`3c818c2` 那条历史失败 run 本身无法改写，只是不再
@@ -762,7 +802,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - v1 的读取器看 v2 的 log 只会"看不见时间"，别的什么都不变：`parseLogText` 丢掉标题与小节标题之间的散行，这一点由 `tests/unit.js` 直接断言（同一份内容加不加时间行，`sections` 必须逐字节相等，`when` 分别是对象与 `null`）。
 - `templates/readme.md:1` 抬到 `format: v2` —— 这是新建 pocket 出生格式的唯一真相源；`CURRENT_VERSION` 同步为 `v2`（`lib/migrate.js:25`）。
-- 存量 v1 目录**不会被任何写动作偷偷抬版本**：`log append` / `log amend` / `import` 在 v1 里都不写这一行。为了让"没写"不等于"没说"，`log append` 现在会把用户明确给过的 `--when` 的去处讲出来（人类输出多一行 `⚠️ pocket 还是 v1 格式：先 context-pocket migrate --to latest 才记时间`，`--json` 里是 `whenSkipped` 字段，MCP 同一句话），块照记不误——`log.md` 永远是 P0。
+- 存量 v1 目录**不会被任何写动作偷偷抬版本**：`log append` / `log amend` / `import` 在 v1 里都不写这一行。为了让"没写"不等于"没说"，`log append` 现在会把明确给过的 `--when` 的去处讲出来（人类输出多一行 `⚠️ pocket 还是 v1 格式：先 context-pocket migrate --to latest 才记时间`，`--json` 里是 `whenSkipped` 字段，MCP 同一句话），块照记不误——`log.md` 永远是 P0。
 - 没登记降级跳：升上去之后，`describeWhen` 与 `whenLine` 都能读旧 pocket，但 v1 的 pocket 不会再长出 v2 字段，`--when` 在那边永远是"说清楚为什么不写"。
 
 **`verify` 第 14 项：`format-upgrade`（`checkFormatUpgrade`，`lib/validator.js:74`）**
@@ -782,7 +822,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `docs/MIGRATION.md`：版本表与自动检测一节改写，"v1 → v2（预留）"整节换成已发布的一跳说明（四种形状表、这一跳做了什么 5 条、三条诚实规矩、5 条向后兼容）。
 - `docs/FAQ.md`：「数据格式会变吗」重写（v2 已发布，且**数据格式版本 ≠ skill 版本**——v2 随 1.1.0 发布，skill 主版本号没动，`SKILL.md` frontmatter 的 `format: v1` 是这份文档自己的排版版本）；「数据迁移怎么处理」从"只有 v1 → v1、格式还没变过"改成两跳的真实现状；verify 清单一行 13 项 → 14 项；新增「中文关键词怎么匹配的？为什么换个顺序就搜不到」一问（二字组 + 每个词必中 + 单字限制 + 为什么不加单字词元），索引体积/缓存收益那两行换成上面重测的数字并附测量步骤。
-- `SKILL.md` 新增一条 MUST-rule：只在用户说了别的时间时才传 `--when`，并写死四不（不猜、不换算、不覆盖历史、不给 v1 塞 v2 字段）。`SKILL-reference.md` 补 Time line 规范与填好的样例；`SKILL-advanced.md` 的版本迁移节改成两跳 + 升级三行命令。
+- `SKILL.md` 新增一条 MUST-rule：只在明确给了别的时间时才传 `--when`，并写死四不（不猜、不换算、不覆盖历史、不给 v1 塞 v2 字段）。`SKILL-reference.md` 补 Time line 规范与填好的样例；`SKILL-advanced.md` 的版本迁移节改成两跳 + 升级三行命令。
 - README 中英两份：T-block 样例加时间行并加一段解释；`--when` 进速查表与 `log append` / `log amend` 两行；`search` 行写明匹配语义（二字组合、全词必中、短语在内可以、换序不行、单字限制）；`migrate` 行与 `verify` 行（13 → 14 项）改成现状。
 - `templates/on-demand/log-archive.md` 的归档样例加时间行，`templates/readme.md` 抬 `format: v2`。
 - `CONTRIBUTING.md`：登记表样例换成真两跳 + 一条未来的 `v2 → v3`；`run()` 的规矩由四条扩到六条（新字段两侧同时落地、迁移不许无中生有）；"同一笔提交必须一起改的地方"补 `CURRENT_VERSION` 与 `SKILL-reference.md`，模板行号与 `lib/migrate.js` 行号对齐；测试要求新增"相邻断言"和"重跑幂等"两类；项目结构树补 `lib/when.js`；用例总数 143 → 179。
@@ -861,7 +901,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **▶️ `bootstrap` 第二次运行变成无害 no-op**
 
 - CLI 与 MCP 在调用 `bootstrap()` 前先判断 `ContextPocket/` 是否已存在：存在就**什么都不写**、退 0 并报出路径与"read index.md + state.md 继续记"（`bin/context-pocket.js` `cmdBootstrap`、`mcp-server.js` `toolBootstrap`）。
-- 旧行为是抛错 + `exit 1`，而激活方式是全自动的（用户说"开始记一下"时项目很可能已有 pocket）——Agent 于是收到"初始化失败"，转而放弃记录或去手改 markdown。`lib/bootstrap.js` 里"拒绝覆盖"的库层保护原样保留，任何直接调库的代码仍然会报错。
+- 旧行为是抛错 + `exit 1`，而激活方式是全自动的（激活请求到来时项目很可能已有 pocket）——Agent 于是收到"初始化失败"，转而放弃记录或去手改 markdown。`lib/bootstrap.js` 里"拒绝覆盖"的库层保护原样保留，任何直接调库的代码仍然会报错。
 
 **📝 `config.md` 不再记录撒谎的 gitignore**
 
@@ -1000,7 +1040,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - hindsight 在它的整合提示里把这条写成硬约束（`hindsight-api-slim/hindsight_api/engine/consolidation/prompts.py:53`，`NO COMPUTATION`）：用户先说"我有 2 只狗"、后说"我有一只叫 Rex 的狗"，**不许**把计数改成 3 —— 你无法知道 Rex 是不是那 2 只之一。它宁可让记忆少合并不合并。
 - 这条对 ContextPocket 同样成立，而且更容易踩：`state.md` 的待办数、接口数、"还剩几个 bug"都是 Agent 顺手算出来的，而它每次只看到最近几十轮。算错之后没有任何工具能发现——`verify` 检查编号连续与文件存在，检查不了"3 是不是应该等于 3"。
-- 现在写成 MUST-rule：**只写用户说过的数字**，推导出来的量放 `### Uncertain` 并明说是推断。没有配套代码检查（无法从 Markdown 判断一个数是引述还是算出来的），所以它是一条约定而不是闸门 —— 与"归档从不自动发生"同一类。
+- 现在写成 MUST-rule：**只写明确陈述过的数字**，推导出来的量放 `### Uncertain` 并明说是推断。没有配套代码检查（无法从 Markdown 判断一个数是引述还是算出来的），所以它是一条约定而不是闸门 —— 与"归档从不自动发生"同一类。
 - 文档同步：`SKILL.md` MUST-rules 新增一条；hindsight 的其余可借机制的取舍记录见本轮的结合点评估（结论摘要在同条目末）。
 
 **📚 文档与代码对表（这次改的全是被代码证伪的句子）**

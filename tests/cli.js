@@ -193,7 +193,7 @@ test('cli: past-the-end offset is an empty page, not an error', () => {
 });
 
 test('cli: a second bootstrap is a no-op, not an error', () => {
-  // 激活是全自动的（SKILL.md：用户永远不需要执行命令）。用户说「开始记一下」时
+  // 激活是全自动的（SKILL.md：用户永远不需要执行命令）。用户表达开始记录的意图时
   // 项目往往已经有 ContextPocket/：旧实现在这里退 1，--json 还会吐出带 emoji 的
   // 人读文本，Agent 于是以为"初始化失败"，转而放弃记录或去手改 markdown。
   const { projectDir, pocketDir } = makePocket('cli-init-twice');

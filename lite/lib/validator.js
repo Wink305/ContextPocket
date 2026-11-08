@@ -266,7 +266,7 @@ function checkTBlockFormat(logData) {
         severity: SEVERITY.ERROR,
         category: 'tblock-format',
         message: `T${block.id} has a broken time line: ${block.when.text}`,
-        fix: `那是 1.1.0 的写入缺陷，不是用户说过的话（这一行没有 \`stated: \` 前缀，工具从不用这种形状写原话）。删掉这一行 \`--- WHEN: … ---\`，手补一行正确的时间（或用 full 包的 log amend --when 重新记）。如果这句话你确实要留着，写成 \`--- WHEN: stated: 原话 ---\`。`,
+        fix: `那是 1.1.0 的写入缺陷，不是用户原话行（这一行没有 \`stated: \` 前缀，工具从不用这种形状写原话）。删掉这一行 \`--- WHEN: … ---\`，手补一行正确的时间（或用 full 包的 log amend --when 重新记）。如果这句话你确实要留着，写成 \`--- WHEN: stated: 原话 ---\`。`,
       });
     }
 

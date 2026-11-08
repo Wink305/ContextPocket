@@ -55,7 +55,7 @@ context-pocket migrate --dir <project-root> --to v2             # 真写：先�
 
 ### Q: 怎么确认我装的 context-pocket 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"2.0.1-hotfix1","display":"2.0.1-hotfix1","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内完整 semver，`display` 是对外展示版（稳定版两位如 `2.1`，hotfix 预发布显示完整串）。
+**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"2.1.0-preview","display":"2.1.0-preview","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内完整 semver，`display` 是对外展示版（稳定版两位如 `2.1`，hotfix 预发布显示完整串）。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余六处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、`CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 三处说明与示例里写着的那串号。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 
@@ -148,7 +148,7 @@ context-pocket import --file <session.jsonl> --dry-run --dir <root>
 context-pocket import --file <session.jsonl> --dir <root>
 ```
 
-T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标签。工具调用噪音（tool_use / tool_result / 命令标记 / 系统注入）自动跳过。源类型默认嗅探，可用 `--source claude-code` 或 `--source codex` 强制指定。轮次与长度也能调：`--limit N`（默认 100，最多导几轮）、`--truncate N`（默认 400，每条原话/摘要截断到几个字，`--dry-run` 的 preview gist 另有 60 字上限）。导入后建议问一次「查一下有没有漏」（`context-pocket verify`），看有没有 import-shaped 漏填项。
+T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标签。工具调用噪音（tool_use / tool_result / 命令标记 / 系统注入）自动跳过。源类型默认嗅探，可用 `--source claude-code` 或 `--source codex` 强制指定。轮次与长度也能调：`--limit N`（默认 100，最多导几轮）、`--truncate N`（默认 400，每条原话/摘要截断到几个字，`--dry-run` 的 preview gist 另有 60 字上限）。导入后建议跑一次 `context-pocket verify`，看有没有 import-shaped 漏填项。
 
 ***
 
@@ -186,7 +186,7 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 
 取舍说明：反过来做（把弱证据也算覆盖）会静默放过真实漏记；只认严格 `<操作> <文件> — <描述>` 格式则会让自然语言的 Action（`新增 src/a.ts 和 src/b.ts`）被误判，于是每次提交多出一个冗余 `[auto]` 块。分级是这两者之间唯一不撒谎的位置：**谈过 ≠ 改过**，但"谈过"值得告诉你去哪儿补。
 
-如果怀疑漏记，说「git 有没有漏记的」（`context-pocket sync`）。如果只是新会话接入，说「开始记一下」即可（bootstrap 是幂等的）。
+如果怀疑漏记，跑 `context-pocket sync`。新会话接入时 bootstrap 即可（它是幂等的）。
 
 ### Q: 怎么让 Agent 主动问🔒？
 
@@ -327,13 +327,13 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 
 **A**: 能——而且这是唯一的用法。ContextPocket 没有斜杠命令，Agent 按 [SKILL.md](../SKILL.md) 的「快速响应」表把大白话映射到具体子命令：
 
-- "开始记一下" → `context-pocket bootstrap`
+- 首次进入项目 → `context-pocket bootstrap`
 
-- "上一轮进绝对保留" → `context-pocket absolute add`
+- 把某条规则设为绝对保留 → `context-pocket absolute add`
 
-- "状态怎么样" → `context-pocket status`
+- 查看当前状态 → `context-pocket status`
 
-- "T5 那轮说了啥" → `context-pocket recall T5`
+- 回看某一轮 → `context-pocket recall T5`
 
 想要零歧义就把子命令名直接说出来，Agent 会照着执行。
 
@@ -358,7 +358,7 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 1. 检查 Agent 是否真的加载了本 skill（看它怎么回应"读 SKILL.md"）
 2. 检查工作目录是否在项目根（不是子目录）
 3. 检查 ContextPocket/ 是否已存在（已存在时 `bootstrap` 是无害 no-op：退 0 并告诉你路径，接着改读 `index.md` + `state.md` 就能继续）
-4. 问「现在什么情况」（`context-pocket status`）看是否识别
+4. 触发一次状态查询（`context-pocket status`）看是否识别
 
 ### Q: log.md 里出现重复内容？
 
@@ -367,7 +367,7 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 - 报 `Duplicate T-id: T9`（error）→ 是撞号。用 `context-pocket repair --dry-run` 看方案，再 `context-pocket repair` 执行；它把撞号那块及其后的块整体后移，正文一个字不动，还会列出哪些地方仍写着旧号（确认后用 `--apply-refs` 改写；`GPT4` 这类词和 `assets/T04-x.png` 这类文件名不在替换范围内，文件名那条给你现成的 `mv` 命令）。**不要手改 markdown**，那是唯一别的工具查不出来的改法。
 - 内容重复但 T 号不撞（同一个 Agent 把一轮写了两遍、块号分别是 T9 和 T10）→ repair 不管这件事，因为"哪一份是该留的"是判断而不是算法：保留信息更全的那一块，另一块用 `context-pocket log amend` 把缺的小节补进去，或直接删掉多余那块再 `verify` 确认序列仍然合法。
 
-无论哪种，之后都问一句「查一下有没有漏」（`context-pocket verify`）确认恢复干净。下次：在 Agent 回复前如果提示"output truncated"或类似信号，主动要求"先 append log.md 再继续"。
+无论哪种，之后都跑一次 `context-pocket verify` 确认恢复干净。下次：在 Agent 回复前如果提示"output truncated"或类似信号，主动要求"先 append log.md 再继续"。
 
 ### Q: 我想完全重置 ContextPocket/，但保留配置？
 
@@ -501,6 +501,6 @@ context-pocket migrate --dir <project-root> --to latest
 
 - [GitHub Discussions](/discussions)
 
-- 或直接问 Agent「ContextPocket 常见故障排查」，它会内联回答
+- 或直接让 Agent 内联排查常见故障，它会逐条回答
 
 最后更新：2026

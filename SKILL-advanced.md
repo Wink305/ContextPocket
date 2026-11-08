@@ -6,7 +6,7 @@
 
 ## Bootstrapping from templates
 
-**Trigger is automatic — the user runs nothing.** On the first substantive turn in a project that has no `ContextPocket/`, the agent offers to bootstrap and then runs `context-pocket bootstrap` (MCP: `context_pocket_bootstrap`) itself. The user may say "开始记一下" / "给我建个记录" / "接手这个项目", or say nothing at all. In a project that already has a `ContextPocket/`, the agent skips the offer, reads `index.md` + `state.md`, and keeps recording. Never tell the user to type a command to activate.
+**Trigger is automatic — the user runs nothing.** On the first substantive turn in a project that has no `ContextPocket/`, the agent offers to bootstrap and then runs `context-pocket bootstrap` (MCP: `context_pocket_bootstrap`) itself. The user may ask for it in any wording, or say nothing at all. In a project that already has a `ContextPocket/`, the agent skips the offer, reads `index.md` + `state.md`, and keeps recording. Never tell the user to type a command to activate.
 
 The Skill ships a `templates/` folder alongside this file. **When creating a new `ContextPocket/`, copy the corresponding template file and fill it in** instead of handwriting from prose. This keeps first-use format consistent and reduces drift.
 
@@ -58,7 +58,7 @@ Pre-fill as `· (not set)` placeholders; replace as the project clarifies.
 
 **触发条件**：
 - 提示：log.md 行数（含 SESSION 分隔线）≥ `archive_at` → `status` / `verify` 报警，由用户决定何时归档
-- 手动：用户说「把旧的归档」「log 太长了」→ `context-pocket archive`（无参数时按 `recent_keep` 保留；带 `--keep-last <N>` 时本轮强制保留 N 个块）。用户说「重新开始」时先跟用户确认，再用 `context-pocket archive --keep-last <N>` 然后重建
+- 手动：用户表达归档意图时 → `context-pocket archive`（无参数时按 `recent_keep` 保留；带 `--keep-last <N>` 时本轮强制保留 N 个块）。用户表达重开意图时先跟用户确认，再用 `context-pocket archive --keep-last <N>` 然后重建
 
 **实际流程（`lib/writer.js` 的 `archiveLog`，Agent 必读）**：
 1. 读 `config.md` 的 `recent_keep`（缺省 30）作为保留数，除非调用方显式给了 `keepLast`
@@ -81,11 +81,11 @@ Pre-fill as `· (not set)` placeholders; replace as the project clarifies.
 - Duplicate T-id (`log.md` 里两个 `## T9`，来自两台机器各写一轮) → `context-pocket repair --dry-run` 看方案再执行；不手改 markdown、不 `--no-verify`。见下面「并发与撞号（多 Agent）」
 - R-id reuse → never reuse; if a gap appears, continue from the highest existing R-id.
 - `assets/` file not found → `[missing: T<n> <file>]`; don't block. 这条标注不只是礼貌：`verify` 会检查 `### Attachments` 声明的文件在不在磁盘上（找不到 = error，会拦住 pre-commit），已经带 `[missing: …]` 的那一条它跳过不报。
-- bootstrap run twice (the user repeats "开始记一下") → idempotent no-op: exit 0, prints the existing path, writes nothing.
+- bootstrap run twice (the request is repeated) → idempotent no-op: exit 0, prints the existing path, writes nothing.
 - No git → skip .gitignore and Commits sections silently.
 - Large attachments → save; note size; don't truncate.
 - `index.md` corrupted → rebuild from directory listing.
-- `handoff.md` stale → regenerate the next time the user asks to hand off ("交接一下" → `context-pocket handoff`); note in `index.md`.
+- `handoff.md` stale → regenerate the next time the user asks to hand off (`context-pocket handoff`); note in `index.md`.
 - `code-map.md` out of date → receiving agent **must** compare with actual tree and update before starting work.
 - `pocket-snapshot-*.md` → keep latest 3, delete older the next time the user asks to export ("导出给同事" — the agent writes the snapshot file itself, no tool) (tell the user).
 - User says "undo that requirement" → mark `[x] (cancelled, T<n>)` in requirements.md, note in log.md.

@@ -1,6 +1,6 @@
 {
   "name": "context-pocket-lite",
-  "version": "2.0.1-Lite-hotfix1",
+  "version": "2.1.0-Lite-preview",
   "description": "The lightweight sibling of context-pocket: same pocket format, 8 commands, 8 MCP tools, zero caches, zero dependencies. Records AI coding conversation turns into a project-local ContextPocket/ folder of plain Markdown.",
   "keywords": [
     "context",

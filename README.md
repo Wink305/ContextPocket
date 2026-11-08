@@ -31,7 +31,7 @@
 | **2.0** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
 | **2.0 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
+Download the GitHub Release archives: [ContextPocket 2.1 preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-preview/ContextPocket-2.1-preview.zip) · [ContextPocket 2.1 Lite preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-Lite-preview/ContextPocket-2.1-Lite-preview.zip) — the current pre-release channel (tags `2.1-preview` / `2.1-Lite-preview`). The stable channel stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
 🚀 **How to use**
 
@@ -208,24 +208,30 @@ The new agent picks recording back up automatically — up and running in 5 seco
 
 **There are no slash commands to memorize.** Say what you want in plain language — the agent infers the intent and runs the right `context-pocket` subcommand or MCP tool, then answers in one line. The full intent → action mapping lives in [SKILL.md](SKILL.md).
 
-| You say (any phrasing) | The agent runs | It replies |
+| Intent | The agent runs | It replies |
 |------------------------|-----------------|------------|
-| First time in this project · "start recording here" · "set up this project" · "onboard me to this repo" | `bootstrap` (idempotent) | `✅ ContextPocket ready, auto-recording on` |
-| "What's the status?" · "How far along are we?" | `status` | One-line summary |
-| "This is a red line — never change X" · "This must be preserved" | `absolute add` | Written to `absolute.md`, never compressed |
-| "Hand this off" · "I'm switching models" · "Give this to someone else" | `handoff` | `handoff.md` generated |
-| "Check for anything missing" · "Check before I commit" · "Is it healthy?" | `verify` | Pass — or each issue with a runnable fix command |
-| "Fill in T7" · "I forgot to tell you that line" | `log amend` | T7 filled in |
-| "That turn was yesterday afternoon" · "It took us from 9 to 11" | `log append --when` / `log amend <Tn> --when` | The turn's time line, echoed back as `⏱ <date> 09:00 → <date> 11:30` — a day it only knows as a day stays `(day)`, and the user's own words stay verbatim |
-| "Who changed this file?" · "Why does it look like this?" | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
-| "How did we fix that bug last time?" · "Search for X" | `search <keyword>` | The matching T-blocks |
-| "What did T7 actually say?" | `recall T<n>` | The full T-block |
-| "What did we do last week?" · "Show me everything from T5 to T9" | `recall --from … --to …` / `recall --since T5 --until T9` | The turns in that window, oldest first |
-| "What changed between T5 and T9?" | `diff Ta Tb` | The delta |
-| "Anything I should confirm?" · "Anything I'm unsure about?" | Reads the `❓` lines directly (no tool) | The list, then "Confirm one by one?" |
-| "Any contradictions?" | `check-conflicts` | Severity-ranked result |
-| "Did git miss anything?" | `sync` (`--auto` to write) | How many turns were backfilled |
-| "How do I use this thing?" | Answers inline — **never** "see README.md" | An inline answer |
+| First time in this project | `bootstrap` (idempotent) | `✅ ContextPocket ready, auto-recording on` |
+| Current status | `status` | One-line summary |
+| Mark something as an absolute rule | `absolute add` | Written to `absolute.md`, never compressed |
+| Hand off to another agent or model | `handoff` | `handoff.md` generated |
+| Check for missing or malformed records | `verify` | Pass — or each issue with a runnable fix command |
+| Check whether changed code went unrecorded | `verify --drift` | The files whose mtime is later than the last record (works without git; never blocks a commit) |
+| Fill in a missing turn | `log amend` | T7 filled in |
+| Record an explicit time for a turn | `log append --when` / `log amend <Tn> --when` | The turn's time line, echoed back as `⏱ <date> 09:00 → <date> 11:30` — a day it only knows as a day stays `(day)`, and the stated wording stays verbatim |
+| Find who changed a file | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
+| Find an earlier turn by keyword or window | `search <keyword>` | The matching T-blocks |
+| Recall one turn | `recall T<n>` | The full T-block |
+| List turns inside a window | `recall --from … --to …` / `recall --since T5 --until T9` | The turns in that window, oldest first |
+| Compare two turns | `diff Ta Tb` | The delta |
+| List open questions | Reads the `❓` lines directly (no tool) | The list, then "Confirm one by one?" |
+| Check for contradictions | `check-conflicts` | Severity-ranked result |
+| Repair duplicated or stale T-numbers | `repair --dry-run` first | The renumber plan + the prose still naming an old id |
+| Check for commits that went unrecorded | `sync` (`--auto` to write) | How many turns were backfilled |
+| Import an earlier session | `import` | How many turns were imported |
+| Distill older turns | `distill` | The report; the agent then merges it by hand |
+| Export a snapshot for a teammate | the agent writes the file itself | The file path |
+| Archive and start over | `archive --keep-last N` | Confirm with the user first |
+| Explain how this works | Answers inline — **never** "see README.md" | An inline answer |
 
 > 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket verify`) also works if you want zero ambiguity.
 

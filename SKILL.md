@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.0.1-hotfix1
+version: 2.1.0-preview
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -63,31 +63,31 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 
 > **There are no ContextPocket slash commands.** Users talk to the agent in natural language; the agent infers intent and calls the right tool. This is deliberate: short command names like `/verify`, `/import`, `/diff`, `/search` collide with agent built-ins, and forcing users to memorize a command table is friction with no payoff.
 >
-> **Rule: never tell the user to "type /xxx".** If the user asks how to use this skill, answer inline. If they say `/openpocket` or any other slash name out of habit, treat it as the nearest intent below and just do it.
+> **Rule: never tell the user to "type /xxx".** If the user asks how to use this skill, answer inline. Any slash-style name the user reaches for should be mapped to the nearest intent below and simply executed.
 
-| What the user says (any phrasing) | What the agent does | One-line reply |
+| Intent | What the agent does | One-line reply |
 |---|---|---|
-| First time in a project · "开始记一下" · "给我建个记录" · "接手这个项目" | `bootstrap` (idempotent) | `✅ ContextPocket ready, auto-recording on` |
-| "现在什么情况" · "进度到哪了" · "什么状态" | `status` | one-line summary |
-| "这条记成红线" · "绝不能改 X" · "这个必须保留" | `absolute add` | `✅ written to absolute.md — never compressed` |
-| "交接一下" · "我要换模型了" · "把这个交给别人" | `handoff` | `✅ handoff.md generated` |
-| "查一下有没有漏" · "提交前检查一下" · "健康吗" | `verify` | pass / or a list of issues **each with a runnable fix command** |
-| "代码是不是改了没记" · "没进 git 的项目也能查漏了吗" | `verify` with `drift: true` (`--drift`) | warning naming the files whose mtime is later than the last record (works without git; never blocks a commit) |
-| "补一下 T7" · "刚才漏了用户那句话" | `log amend` | `✅ T7 filled: User` |
-| "这文件谁改的" · "为什么长这样" | `why <path>` | matching turns, split by evidence: `[changed]` (in that turn's Action) vs `[mentioned only]` (Uncertain / Attachments / Conflicts — talked about, not modified) |
-| "上次那个 bug 怎么修的" · "搜一下 X" · "只看 T12 之后的" | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`) | matching T-blocks, window applied before paging |
-| "T7 当时说了什么" · "回看一下那轮" | `recall T<n>` | the full T-block |
-| "上周都干了啥" · "把 T5 到 T9 列出来" | `recall --since T5 --until T9` / `recall --from <date> --to <date>` (MCP: `context_pocket_recall` **without `tId`**, with the four window params) | turns in the window, oldest first, archived ones marked; page with `--limit/--offset`. No keyword needed. A `tId` and a window cannot be combined |
-| "T5 到 T9 变了啥" | `diff Ta Tb` | the delta |
-| "有什么待确认的" · "有没有我不确定的" | read `❓` lines directly (no tool) | the list, then "逐条确认吗?" |
-| "有没有前后矛盾" | `check-conflicts` | severity-ranked result |
-| "log.md 里有两个 T9" · "两个 Agent 写的号撞了" · "合并之后编号乱了" | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
-| "git 有没有漏记的" | `sync` (`--auto` to write) | "补了 N 个" |
-| "把旧会话导进来" | `import` | "导入了 N 轮" |
-| "把旧的提炼一下" | `distill` | report written; **agent then judges + merges by hand** |
-| "导出给同事" | agent writes the snapshot file itself (no tool) | the file path |
-| "重新开始" | `archive --keep-last N`, then rebuild | **confirm with the user first** |
-| "这玩意儿怎么用" | answer inline from this table + `docs/FAQ.md` — **never** reply "see README.md" |
+| First time in a project | `bootstrap` (idempotent) | `✅ ContextPocket ready, auto-recording on` |
+| Current status | `status` | one-line summary |
+| Mark something as an absolute rule | `absolute add` | `✅ written to absolute.md — never compressed` |
+| Hand off to another agent or model | `handoff` | `✅ handoff.md generated` |
+| Check for missing or malformed records | `verify` | pass / or a list of issues **each with a runnable fix command** |
+| Check whether changed code went unrecorded | `verify` with `drift: true` (`--drift`) | warning naming the files whose mtime is later than the last record (works without git; never blocks a commit) |
+| Fill in a missing turn | `log amend` | `✅ T7 filled: User` |
+| Find who changed a file | `why <path>` | matching turns, split by evidence: `[changed]` (in that turn's Action) vs `[mentioned only]` (Uncertain / Attachments / Conflicts — talked about, not modified) |
+| Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`) | matching T-blocks, window applied before paging |
+| Recall one turn | `recall T<n>` | the full T-block |
+| List turns inside a window | `recall --since T5 --until T9` / `recall --from <date> --to <date>` (MCP: `context_pocket_recall` **without `tId`**, with the four window params) | turns in the window, oldest first, archived ones marked; page with `--limit/--offset`. No keyword needed. A `tId` and a window cannot be combined |
+| Compare two turns | `diff Ta Tb` | the delta |
+| List open questions | read `❓` lines directly (no tool) | the list, then "逐条确认吗?" |
+| Check for contradictions | `check-conflicts` | severity-ranked result |
+| Repair duplicated or stale T-numbers | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
+| Check for commits that went unrecorded | `sync` (`--auto` to write) | "补了 N 个" |
+| Import an earlier session | `import` | "导入了 N 轮" |
+| Distill older turns | `distill` | report written; **agent then judges + merges by hand** |
+| Export a snapshot for a teammate | agent writes the snapshot file itself (no tool) | the file path |
+| Archive and start over | `archive --keep-last N`, then rebuild | **confirm with the user first** |
+| Explain how this skill works | answer inline from this table + `docs/FAQ.md` — **never** reply "see README.md" |
 
 > Bare names above are the CLI subcommand (`context-pocket <name>`) and the MCP tool (`context_pocket_<name>`) for the same capability. Prefer MCP > CLI > pure-skill, per Execution modes.
 
@@ -142,7 +142,7 @@ No command to run. Activation is automatic:
 **NOT substantive** (skip append):
 - Pure acknowledgment: "好的" / "继续" / "ok" / "嗯" / "yes" / "go ahead"
 - Repeating a previous question
-- Meta-conversation about ContextPocket itself (e.g. "这玩意儿怎么用")
+- Meta-conversation about ContextPocket itself (e.g. how it is used)
 
 If the turn is NOT substantive → do nothing to ContextPocket files, consume no T-number. Move on.
 
@@ -235,7 +235,7 @@ Because every command above relies on the agent following this prose, the bigges
 - **The agent MUST NOT respond to the next user message until missing T-blocks are appended.**
 - **The agent MUST append at least the T-block (P0) even if token budget is nearly exhausted.** Defer P1-P6 if needed, but P0 is non-negotiable.
 - **Never record a credential verbatim — including in a 🔒 entry.** When the user pastes an error containing a key/token, `verify` reports it as an ERROR (`secret-leak`), the pre-commit hook then blocks the commit, and `archive`/`migrate` refuse to run while any error exists. Quote the sentence around it and leave the value out ("报错原文：401 using <Anthropic key，已略> 调用失败"). This deliberately does *not* apply to `absolute add`: a 🔒 entry is by definition the user's exact words, so the tool never rewrites text — a pocket that is *supposed* to hold such a string (a key-rotation runbook) sets `- secret_scan: false` in `config.md` instead. Scan output only ever shows a masked prefix (`sk-ant…(30 chars)`) because your own tool output gets copied into the next T-block.
-- **Never do arithmetic on the user's numbers.** You don't have the full picture, so a stated quantity is data you record, not a counter you maintain. When the user says "本地起 3 个 worker" and later "其中一个改成 5 个", `state.md` gets the new sentence quoted in `log.md` and the *stated* value written — never `3 - 1 + 5 = 7`. Same for counts of endpoints, tests, deps, or TODOs: only update a number when the user states a number. Deductions ("he said two of the three are done, so one is left") belong in `### Uncertain`, phrased as an inference, not in `state.md`.
+- **Never do arithmetic on the user's numbers.** You don't have the full picture, so a stated quantity is data you record, not a counter you maintain. When a stated count changes (3 workers becomes 5), `state.md` gets the new sentence quoted in `log.md` and the *stated* value written — never `3 - 1 + 5 = 7`. Same for counts of endpoints, tests, deps, or TODOs: only update a number when the user states a number. Deductions (two of the three are done, so one is left) belong in `### Uncertain`, phrased as an inference, not in `state.md`.
 - **Never archive on your own initiative.** `archive_at` is a *warning* threshold, not a trigger: `status` says "archive is due" and `verify` emits a `log-size` warning once `log.md` passes it. When you see it, tell the user in one line and offer `archive`; moving history is their call (the tool refuses to archive while `verify` has errors, and rolls back if the post-archive check fails).
 - This hook makes auto-save **explicit** rather than purely memory-based — the agent re-checks itself instead of trusting it "remembered".
 

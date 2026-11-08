@@ -208,13 +208,13 @@ Phase 0 是**验证价值**的阶段：如果入向上下文在实际使用里�
 - `1.7.x`：Phase 1 schema + 缓存
 - `2.0-lite`：Phase 2 独立轻量包；`2.0`：Phase 3 完整节点式上下文能力（同源 schema，见 §12）
 
-**已拍板（2026-11-08）**：对外版本号统一两位（`2.0`、`2.1`、`2.0-lite`），不再写 `2.0.0`。
+**已确定（2026-11-08）**：对外版本号统一两位（`2.0`、`2.1`、`2.0-lite`），不再写 `2.0.0`。
 npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不接受两位版本串），
 两位只用于 tag（`v2.0`）、CHANGELOG 标题、README 与帮助文本；六处版本号抄本锁相应
 把「对外两位、包内三位」一起钉死。发版仍走 `.trae/skills/context-pocket-release/SKILL.md`：
 抄本 → CHANGELOG 切节 → 四道门禁 → tag → 等 tag CI 绿 → Release。
 
-**Hotfix 追加拍板（2026-11-08，`2.0.1-hotfix1`）**：带 `-` 后缀的预发布/hotfix 版
+**Hotfix 追加规则（2026-11-08，`2.0.1-hotfix1`）**：带 `-` 后缀的预发布/hotfix 版
 **对外显示完整串**（主包 `2.0.1-hotfix1`、Lite `2.0.1-Lite-hotfix1`）——后缀本身有语义，
 砍成两位就丢了「第几个 hotfix」。稳定版仍两位。两包 `lib/version.js` 的 `DISPLAY_VERSION`
 按这条规则取值，主包 `tests/unit.js` 与 Lite 测试各自锁规则本身（不是锁某个具体号），
@@ -237,7 +237,7 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 
 - **图不总比倒排好**：2025 年有系统评估发现 GraphRAG 在很多真实任务上不如普通 RAG，优势集中在多跳 / 时序 / 关系查询，平均延迟约 2.4 倍，早期索引成本极高（LazyGraphRAG 才降到 0.1%）。所以是 hybrid，不是 replace。
 - **弱边污染**：`weakMentions` 的分层必须照搬，否则「待确认里提了一句」会被当成「这轮改了」。
-- **LLM 成本**：每个 episode 多次 LLM 调用是 Graphiti/Cognee 的常态，会直接毁掉零依赖与离线可跑；已拍板 2.0 与 Lite 都不带 LLM 路径。
+- **LLM 成本**：每个 episode 多次 LLM 调用是 Graphiti/Cognee 的常态，会直接毁掉零依赖与离线可跑；已确定 2.0 与 Lite 都不带 LLM 路径。
 - **复杂度反噬**：17,995 行已经不小。Lite 若只是「再加一层抽象」而不是真减文件、真减命令，就是失败。
 - **schema 分裂**：两版格式不一致是最容易发生的架构事故。
 - **既有尾巴**：npm 包仍未发布（`npm adduser` + 2FA 必须维护者本人）；`v1.5.1` tag 已 force-move 到 `97d2b91`，已 clone 旧 tag 的人需 `git fetch --tags --force`；CI 有 Node 20 / Ubuntu 26 两条无害 warning。
@@ -257,27 +257,27 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 
 ---
 
-## 12. 待决问题（需要拍板）
+## 12. 待决问题（需要确定）
 
-1. **~~Lite 的形态~~ 已拍板（2026-11-08）：独立包**。Lite 以独立 npm 包（候选名
+1. **~~Lite 的形态~~ 已确定（2026-11-08）：独立包**。Lite 以独立 npm 包（候选名
    `context-pocket-lite`）发行，建立在 ContextPocket 2.0 节点式上下文设计之上，
    与完整 2.0 共用 Node schema v2；Lite 面向小型项目与日常对话记忆，优先减少读写路径与维护负担。
    代码先放**同一仓库的独立目录**（如 `lite/` 自带 `package.json`），不发 monorepo 工具、
    不拆仓库：schema 一致性靠同仓测试互查（Lite 的用例直接读 2.0 仓库的口袋样本），
    「schema 分裂」这个最大架构风险用同仓锁住；将来若体积或发布流程冲突再拆仓库，
    拆的时候 schema 版本号必须双向断言。
-2. **~~图缓存载体~~ 已拍板（2026-11-08）：`graph.jsonl`****（一行一边，定位成可删的索引缓存）**。
+2. **~~图缓存载体~~ 已确定（2026-11-08）：`graph.jsonl`****（一行一边，定位成可删的索引缓存）**。
    真值永远在源 Markdown；删缓存后 `graph rebuild` 必须逐字重建。
-3. **~~版本号关系~~ 已拍板（2026-11-08）**：Lite 独立版本线（`2.0-lite`、`2.1-lite`…），
+3. **~~版本号关系~~ 已确定（2026-11-08）**：Lite 独立版本线（`2.0-lite`、`2.1-lite`…），
    与 2.0 主线各自递增，不共用 major 通道；对外展示统一两位，见 §8。
-4. **~~LLM 增强~~ 已拍板（2026-11-08）：不做**。2.0 不带任何 LLM 路径，
+4. **~~LLM 增强~~ 已确定（2026-11-08）：不做**。2.0 不带任何 LLM 路径，
    不设 `graph enrich` 命令——零模型调用、离线可跑是 Lite「更便宜」与 2.0 零依赖的共同底线；
    语义相似类边彻底不进图。将来真有需求再单独立项评审。
-5. **~~breaking change 容忍度~~ 已拍板（2026-11-08）：v1 口袋必须零改动可读**（维持本文设计）。
-6. **~~Phase 0 的观测方式~~ 已拍板（2026-11-08）：加 `graph --json`**，
+5. **~~breaking change 容忍度~~ 已确定（2026-11-08）：v1 口袋必须零改动可读**（维持本文设计）。
+6. **~~Phase 0 的观测方式~~ 已确定（2026-11-08）：加 `graph --json`**，
    它同时是 Phase 1 `graph` 命令的输出底座，人工验边与程序断言共用一份结构。
 
-六个问题全部拍板完毕，Phase 1 进入实现。
+六个问题全部确定，Phase 1 进入实现。
 
 ---
 
@@ -292,7 +292,7 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 
 ### Phase 1（已完成，未提交）
 
-- §12 六个待决问题全部拍板（见该节），本文 §8 / §12 已回填。
+- §12 六个待决问题全部确定（见该节），本文 §8 / §12 已回填。
 - `lib/links.js` 缓存层：`assets/graph.jsonl`（`schema: "graph/1"`，一行一条记录，
   meta 第一行带四源 sha1 签名）、`writeGraphCache` / `graphCacheStatus` /
   `verifyGraphCache`（逐字节比对，抓签名未动的篡改）/ `readGraph`（读取时自愈）。
@@ -333,12 +333,12 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
   `DISPLAY_VERSION` 展示层（标题行打展示版、次行打完整 semver、`--json` 加 `display`），
   与 Lite 入口同形；② 本节 Phase 2 状态停留在「未提交、待确认」，与已发行事实矛盾——已纠偏；
   ③ lite/tests/core.js 一行断言原样重复——已删。
-- 展示规则追加拍板：稳定版对外两位（`2.1`），带 `-` 的 hotfix/预发布显示完整串
+- 展示规则追加：稳定版对外两位（`2.1`），带 `-` 的 hotfix/预发布显示完整串
   （`2.0.1-hotfix1` / `2.0.1-Lite-hotfix1`）——后缀有语义，砍掉就丢了「第几个 hotfix」。
   主包 `tests/unit.js` 与 Lite 测试各自把这条规则钉死；docs 三处锚点正则整串匹配
   semver（含 prerelease），不再截断误报。
 - Lite 新增自己的版本抄本锁（package.json ↔ lib/version.js ↔ SKILL.md）。
-- tag 命名追加拍板：「以后不要v了」——自本次起 tag 直接用版本号（`2.0.1-hotfix1` /
+- tag 命名追加：「以后不要v了」——自本次起 tag 直接用版本号（`2.0.1-hotfix1` /
   `2.0.1-Lite-hotfix1`），CI 闸门改认 `['[0-9]*', 'v*']`（新命名 + 历史兼容），
   unit.js 的触发条件锁与 CONTRIBUTING 第 6 步同步更新。
 - 文档与 CHANGELOG 增长后复测包体积：Lite **96.8 kB** / 主包 **400.8 kB**（文件数不变

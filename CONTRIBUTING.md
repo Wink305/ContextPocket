@@ -36,14 +36,14 @@
    - 修改 `templates/` 时,确保新模板符合"占位符用 `<...>` 包裹"的约定
    - 修改 README/CHANGELOG 时同步更新相关章节
 4. **本地验证**（三条都要过，`package.json` 里已配好脚本）:
-   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 67+91+16+17+16+19+42+7+27 = 302 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
+   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 67+97+16+17+18+20+45+7+31+15 = 333 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约 / lite（含 core·metrics·compat））。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
    - `npm run lint` — 对仓库内每个 `.js` 跑 `node --check`
    - `npm run smoke` — 用真实 stdio 跑一遍 MCP server（`initialize` / `tools/list` / 27 个工具里的 append、amend、absolute add、index、distill、hub、verify 等；`repair` 不在冒烟覆盖里——它要先人为造出撞号的目录，这件事由 `tests/repair.js` 与 `tests/mcp.js` 盯着）。不带参数时它会在 OS 临时目录里现造一个一次性 pocket 并把 `CONTEXTPOCKET_HOME` 隔离到同一目录，退出即删，所以可以直接跑；想对着指定项目跑就写 `npm run smoke -- /path/to/project`（此时若没设 `CONTEXTPOCKET_HOME`，hub 写入会落到你真实的 `~/.contextpocket`，脚本会先打印一行提示）。收尾断言是 `verify` 必须返回 `All checks passed`——所以往冒烟步骤里加任何声明（尤其是 `### Attachments` 那条路径）都得把文件真的写出来，否则第 15 项检查会让冒烟红）
    - `node tests/run.js pocket` 之类的前缀参数可以只跑某个文件
    - `tests/hooks.js` 里有五条 `git init` + 真提交的端到端用例（健康放行、坏 pocket 拦住、无 pocket 不禁用、带密钥拦住、只有 PII 放行），本机缺 `git` 或 `sh` 时它们会打印 `(skipped…)` 并跳过；**跳过不算通过**，改 hook 逻辑请在有 git 的机器上至少跑一次。其中"坏 pocket 必须拦住提交"这条是另外几条端到端用例的对照开关：它一红就说明 hook 根本没被执行，此时"放行"的结论不可信
 5. **再跑一遍人的链路**:
-   - 在一个真实项目里跑完整条链路: 首次进项目时自动 `bootstrap`（用户无需执行任何命令）→ 用户说「交接一下」时跑 `context-pocket handoff` → 用户说「查一下有没有漏」时跑 `context-pocket verify`
-   - 用自然语言把「现在什么情况」「有什么待确认的」「这玩意儿怎么用」等意图各问一遍，确认 Agent 都走对工具、回复仍然合理
+   - 在一个真实项目里跑完整条链路: 首次进项目时自动 `bootstrap`（用户无需执行任何命令）→ 交接意图触发 `context-pocket handoff` → 查漏意图触发 `context-pocket verify`
+   - 用自然语言把各类意图（状态、待确认项、使用方式等）各走一遍，确认 Agent 都走对工具、回复仍然合理
 6. **Commit message** 建议遵循 [Conventional Commits](https://www.conventionalcommits.org/):
    - `feat: 归档后 index 的起始 T-id 计算修正`
    - `fix: context-pocket recall 在归档 T 块时找不到附件`
@@ -54,7 +54,7 @@
 ### PR 合并标准
 
 - ✅ `npm test` 与 `npm run lint` 全绿（新增行为要带用例，否则不算完成）
-- ✅ 通过基本流程（自动 bootstrap → 用户说「交接一下」时 `handoff` → 用户说「查一下有没有漏」时 `verify`）
+- ✅ 通过基本流程（自动 bootstrap → 交接意图 → `handoff`，查漏意图 → `verify`）
 - ✅ 不破坏现有意图映射与 CLI 子命令的语义
 - ✅ 更新 CHANGELOG.md（如果是用户可见的变更）
 - ✅ 至少 1 位维护者 review 通过
@@ -226,7 +226,7 @@ context-pocket/
 5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单真的把它带上了。
    落在 `bin/` `lib/` `templates/` `assets/` `docs/` `scripts/` 里的会自动带上；白名单外的目录要显式加，
    否则发布出去的包缺文件，用户拿到的就是"读不到 package.json、只能报兜底版本"那种安装。
-6. 创建 Git tag: `git tag X.Y.Z`（2.0.1-hotfix1 起拍板「以后不要v了」，tag 不再带 v 前缀；
+6. 创建 Git tag: `git tag X.Y.Z`（2.0.1-hotfix1 起改为「以后不要v了」，tag 不再带 v 前缀；
    历史 tag 全是 lightweight，别用 `-a` 另外造出 annotated tag 让口径分叉），
    再 `git push origin X.Y.Z`。`.github/workflows/ci.yml` 的
    `on.push.tags: ['[0-9]*', 'v*']` 会让这次 tag 推送自己也跑一遍四道门禁

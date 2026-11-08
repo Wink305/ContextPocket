@@ -31,7 +31,7 @@
 | **2.0** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
 | **2.0 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
 
-下载 GitHub Release 压缩包：[ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
+下载 GitHub Release 压缩包：[ContextPocket 2.1 preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-preview/ContextPocket-2.1-preview.zip) · [ContextPocket 2.1 Lite preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-Lite-preview/ContextPocket-2.1-Lite-preview.zip)——当前预发布通道（tag `2.1-preview` / `2.1-Lite-preview`）。稳定通道仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
 
 🚀 **方法**
 
@@ -208,24 +208,30 @@ Agent 会自动：
 
 **没有斜杠命令要背。** 直接用大白话说你要什么，Agent 判断意图、去调对应的 `context-pocket` 子命令（或 MCP 工具），然后一行回复。完整的「意图 → 动作」映射见 [SKILL.md](SKILL.md)。
 
-| 你说（随便怎么说都行） | Agent 执行 | Agent 回复 |
+| 意图 | Agent 执行 | Agent 回复 |
 |------|------|------|
-| 第一次进这个项目 · "开始记一下" · "给我建个记录" · "接手这个项目" | `bootstrap`（幂等） | `✅ ContextPocket ready, auto-recording on` |
-| "现在什么情况" · "进度到哪了" · "什么状态" | `status` | 一行摘要 |
-| "这条记成红线" · "绝不能改 X" · "这个必须保留" | `absolute add` | 写入 absolute.md，永不压缩 |
-| "交接一下" · "我要换模型了" · "把这个交给别人" | `handoff` | 生成 handoff.md |
-| "查一下有没有漏" · "提交前检查一下" · "健康吗" | `verify` | 通过；有问题则每条给出可执行的修复命令 |
-| "补一下 T7" · "刚才漏了用户那句话" | `log amend` | T7 补齐 |
-| "那轮是昨天下午做的" · "从 9 点做到 11 点" | `log append --when` / `log amend <Tn> --when` | 这一轮的时间行，回话时念成 `⏱ <日期> 09:00 → <日期> 11:30`；只知道是哪天的就写成 `(day)`，用户怎么说的就怎么存 |
-| "这文件谁改的" · "为什么长这样" | `why <path>` | 命中的轮次，按证据强弱标注：`[changed]`（这轮的 Action 小节里有它）/ `[mentioned only]`（只在 Uncertain、Attachments、Conflicts 里被谈到过，不等于改过）；改过的排在前面 |
-| "上次那个 bug 怎么修的" · "搜一下 X" | `search <关键词>` | 命中的 T-block |
-| "T7 当时说了什么" · "回看一下那轮" | `recall T<n>` | 完整 T-block |
-| "上周都干了啥" · "把 T5 到 T9 的记录列出来" | `recall --from … --to …` / `recall --since T5 --until T9` | 这个窗口里的轮次，按 T 号从早到晚 |
-| "T5 到 T9 变了啥" | `diff Ta Tb` | 差异 |
-| "有什么待确认的" · "有没有我不确定的" | 直接读 `❓` 行（无工具） | 列出清单，然后问"逐条确认吗？" |
-| "有没有前后矛盾" | `check-conflicts` | 按严重度分级的结果 |
-| "git 有没有漏记的" | `sync`（加 `--auto` 才写入） | 补记了几轮 |
-| "这玩意儿怎么用" | 内联回答——**绝不**回"见 README.md" | 内联答案 |
+| 第一次进这个项目 | `bootstrap`（幂等） | `✅ ContextPocket ready, auto-recording on` |
+| 当前状态 | `status` | 一行摘要 |
+| 标记为绝对红线 | `absolute add` | 写入 absolute.md，永不压缩 |
+| 交接给另一个 Agent 或模型 | `handoff` | 生成 handoff.md |
+| 检查漏记与格式缺陷 | `verify` | 通过；有问题则每条给出可执行的修复命令 |
+| 检查代码改动是否漏记 | `verify --drift` | 列出 mtime 晚于最近记录的文件（不需要 git，也不拦提交） |
+| 补齐某一轮 | `log amend` | T7 补齐 |
+| 给某一轮记明确时间 | `log append --when` / `log amend <Tn> --when` | 这一轮的时间行，回话时念成 `⏱ <日期> 09:00 → <日期> 11:30`；只知道是哪天的就写成 `(day)`，原话逐字保留 |
+| 查某个文件是谁改的 | `why <path>` | 命中的轮次，按证据强弱标注：`[changed]`（这轮的 Action 小节里有它）/ `[mentioned only]`（只在 Uncertain、Attachments、Conflicts 里被谈到过，不等于改过）；改过的排在前面 |
+| 按关键词或窗口找历史 | `search <关键词>` | 命中的 T-block |
+| 回看某一轮 | `recall T<n>` | 完整 T-block |
+| 按窗口列轮次 | `recall --from … --to …` / `recall --since T5 --until T9` | 这个窗口里的轮次，按 T 号从早到晚 |
+| 对比两轮 | `diff Ta Tb` | 差异 |
+| 列出待确认项 | 直接读 `❓` 行（无工具） | 列出清单，然后问"逐条确认吗？" |
+| 检查前后矛盾 | `check-conflicts` | 按严重度分级的结果 |
+| 修复重复或错位的 T 号 | 先 `repair --dry-run` | 改号方案 + 仍在指旧号的文字 |
+| 检查 git 漏记 | `sync`（加 `--auto` 才写入） | 补记了几轮 |
+| 导入旧会话 | `import` | 导入了几轮 |
+| 提炼旧记录 | `distill` | 报告已生成；由 Agent 自行判断并手工合并 |
+| 导出快照给同事 | Agent 自己写快照文件 | 文件路径 |
+| 归档并重新开始 | `archive --keep-last N` | 先跟用户确认 |
+| 说明这个工具怎么用 | 内联回答——**绝不**回"见 README.md" | 内联答案 |
 
 > 💡 用大白话比记命令名更顺；如果你想要零歧义，直接把子命令名说出来也行（`context-pocket verify`）。
 
@@ -365,7 +371,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 
 完整字段说明（含本例省略掉的小节）见 [SKILL-reference.md](SKILL-reference.md)。
 
-标题下面那行 `--- WHEN: … ---`（格式 v2）就是这一轮实际发生的时间。`log append` 默认写你记录它的那一刻；用户说了别的时间才用 `--when`——一段区间写 `--when "09:00 → 11:30"`，只知道哪天写 `--when "<YYYY-MM-DD>"`（存成 `(day)`，绝不编一个零点出来），要原样留下用户说的就写 `--when "<用户原话>"`，用户怎么说的就怎么存。`recall` 会把它念出来；还停在 v1 的文件夹里根本没有这一行，跑一次 `migrate --to latest` 才有——在 v1 里传 `--when`，块照记（`log.md` 永远是 P0），但工具会说明时间为什么没落盘（`--json` 里是 `whenSkipped`），不会把它悄悄吞掉。
+标题下面那行 `--- WHEN: … ---`（格式 v2）就是这一轮实际发生的时间。`log append` 默认写你记录它的那一刻；明确给了另一个时间才用 `--when`——一段区间写 `--when "09:00 → 11:30"`，只知道哪天写 `--when "<YYYY-MM-DD>"`（存成 `(day)`，绝不编一个零点出来），要原样留下就写 `--when "<用户原话>"`，怎么说的就怎么存。`recall` 会把它念出来；还停在 v1 的文件夹里根本没有这一行，跑一次 `migrate --to latest` 才有——在 v1 里传 `--when`，块照记（`log.md` 永远是 P0），但工具会说明时间为什么没落盘（`--json` 里是 `whenSkipped`），不会把它悄悄吞掉。
 
 `### Author` 只在有人被告知这一轮是谁记的时候才出现（`log append --author`）。它和其它小节一样是**小节**，不是结构性行，所以不涉及格式版本：v1 的 pocket 里同样可以合法地有一条 `### Author`，而没有它也不算缺——工具不会替你补一个没被给过的名字。
 
@@ -378,7 +384,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 | **Completeness > Brevity** | 宁可多记不要漏记——漏掉一轮就是断了的交接链 |
 | **永远 P0 记录 log.md** | 即使 token 不够，对话时间线也不能停 |
 | **T 编号永久递增** | T1、T2、T3……绝不重置，便于追溯 |
-| **🔒 强需求必须确认** | 用户说"必须"时，Agent 会主动问"要不要标🔒" |
+| **🔒 强需求必须确认** | 用户强调「必须」时，Agent 会主动问"要不要标🔒" |
 | **冲突可见不静默覆盖** | 发现矛盾时同时保留新旧，标 superseded |
 | **Agent-agnostic** | 所有文件是纯文本 Markdown，任何 Agent 都能读 |
 

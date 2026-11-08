@@ -531,7 +531,7 @@ test('parseWhen refuses to compute: durations and vague words are stored verbati
   assert.deepStrictEqual(parseWhen('花了两个小时'), { kind: 'text', text: '花了两个小时' });
   assert.deepStrictEqual(parseWhen(''), null);
   assert.strictEqual(whenLine(parseWhen('花了两个小时')), '--- WHEN: stated: 花了两个小时 ---');
-  // 原话要能被原样读回来，否则"记下了用户说的话"这件事就是假的
+  // 原话要能被原样读回来，否则"记下了用户原话"这件事就是假的
   assert.deepStrictEqual(parseWhenLine('--- WHEN: stated: 上周三下午 ---'), { kind: 'text', text: '上周三下午' });
 });
 
@@ -924,7 +924,7 @@ test('every copy of the skill version says the same number as package.json', () 
   assert.strictEqual(FALLBACK_VERSION, pkg.version,
     'lib/version.js 的 FALLBACK_VERSION 与 package.json 不一致：兜底值本该就是当前版本号');
 
-  // 对外展示规则（ROADMAP §12 + hotfix 追加拍板）：带 `-` 的预发布/hotfix 显示完整串，
+  // 对外展示规则（ROADMAP §12 + hotfix 追加）：带 `-` 的预发布/hotfix 显示完整串，
   // 稳定版只显示前两位。这条锁盯的是「规则」而不是某个具体号——升版本时不用改用例。
   const expectedDisplay = pkg.version.includes('-')
     ? pkg.version
