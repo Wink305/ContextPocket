@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.3] - 2026-11-08
+
+### 🛡️ 版本号的六处抄本，现在六处都锁住了
+
+> 发版流程一直列着六处要同步的位置，但 `tests/unit.js` 的「every copy of the skill version」
+> 只盯了其中三处：docs 里的三串版本号（兼容性脚注、FAQ 的 `--version --json` 示例、
+> MIGRATION 的版本表格）全靠发版时手工改。漏一处不会在任何入口报错，只会让不同页面
+> 各说一个号；CONTRIBUTING / FAQ / MIGRATION 还都写着"其余三处 / 四处"，与实操对不上。
+
+- **回归锁**（`tests/unit.js`）：`every copy…` 用例新增 docs 三处锚点，并且每处都用
+  「把抄本换成 9.9.9」反证这条断言真的会报红——防止正则写宽、或锚到不含版本号的字符串上
+  让用例变成永远通过的摆设。产品代码零改动，用例数也不变（仍 289 条）。
+- **口径对齐**：`CONTRIBUTING.md` 发布流程改成「真值 1 处 + 静态抄本 6 处」，写明哪条用例
+  盯哪几处；tag 步骤从 `git tag -a …`（annotated）改成 `git tag vX.Y.Z`——`refs/tags/` 下
+  历史 tag 全是 lightweight，文档不该再教出第二种口径。`docs/FAQ.md` 与
+  `docs/MIGRATION.md` 里"其余三处 / 四处同值"的描述一并改对。
+
+---
+
 ## [1.5.2] - 2026-11-08
 
 ### 🛡️ CI 加固：code-map rename 用例不再赌文件系统的时间精度

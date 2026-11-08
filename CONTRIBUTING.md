@@ -204,13 +204,14 @@ context-pocket/
 
 版本号在本包只有一处真值：`package.json` 的 `version`。CLI 的 `context-pocket --version` 与 MCP
 `initialize` 回包的 `serverInfo.version` 都经 `lib/version.js` 的 `pkgVersion()` 读它，
-其余三处（`FALLBACK_VERSION`、`SKILL.md` 的 `version:`、CHANGELOG 的节标题）是静态抄本，
-所以定版顺序是固定的：
+**其余六处都是静态抄本**：`FALLBACK_VERSION`、`SKILL.md` 的 `version:`、CHANGELOG 的节标题，
+以及 `docs/COMPATIBILITY.md` 的"对应 skill …"、`docs/FAQ.md` 的 `--version --json` 示例、
+`docs/MIGRATION.md` 的版本表格。所以定版顺序是固定的：
 
-1. 改 `package.json` 的 `version`，同时改两处抄本：`lib/version.js` 的 `FALLBACK_VERSION`、
-   `SKILL.md` frontmatter 的 `version:`。这三处加上下面 CHANGELOG 的节标题一共四个位置，
-   `tests/unit.js` 有两条用例逐个比对（`tests/mcp.js` 还有一条断 CLI 与 MCP 报的是同一个号）——
-   漏改任何一处都不会在入口报错，只会让不同地方各说一个号，所以报警器只能长在测试里。
+1. 先改 `package.json` 的 `version`（真值），再改那六处抄本。`tests/unit.js` 的
+   `every copy of the skill version…` 逐处比对全部六处，还会把抄本换成 9.9.9 反证每条锚点
+   真的会报红；`tests/mcp.js` 另有一条断 CLI 与 MCP 报的是同一个号。1.5.3 之前 docs 那三处
+   没有任何用例盯着，全靠发版时手工同步——漏改不会在入口报错，只会让不同页面各说一个号。
 2. 把 `CHANGELOG.md` 顶部 `[Unreleased]` 累积的条目切成 `## [<新版本>] - <YYYY-MM-DD>` 一节，
    上面留一个空的 `[Unreleased]` 占位。日期写真实发布当天；已经发生但没有留档的历史版本
    （1.0.0）宁可标"日期未留档"，也不要编一个日期。
@@ -225,7 +226,8 @@ context-pocket/
 5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单（`:36`）真的把它带上了。
    落在 `bin/` `lib/` `templates/` `assets/` `docs/` `scripts/` 里的会自动带上；白名单外的目录要显式加，
    否则发布出去的包缺文件，用户拿到的就是"读不到 package.json、只能报兜底版本"那种安装。
-6. 创建 Git tag: `git tag -a v1.2.0 -m "Release 1.2.0"`
+6. 创建 Git tag: `git tag v1.2.0`（`refs/tags/` 下现有 tag 全是 lightweight，别用 `-a`
+   另外造出 annotated tag 让口径分叉）
 7. 创建 GitHub Release,粘贴 CHANGELOG 摘要
 8. 在社区/Discord 发公告（如果有）
 

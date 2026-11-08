@@ -903,9 +903,15 @@ test('pkgVersion reads package.json and degrades to the fallback without one', (
   assert.strictEqual(bare.version, FALLBACK_VERSION);
 });
 
-// package.json 是唯一真值，其余三处都是它的抄本：静态文件没法自己算，所以只能靠用例逐处比对。
-// 少这一条，升级版本号漏改的那处不会在任何入口报错，只会让 CLI、MCP、SKILL.md、CHANGELOG
-// 各说一个号——1.1.0 定版之前就是 CHANGELOG 停在 [Unreleased] 而被发现的。
+// package.json 是唯一真值，其余六处都是它的抄本：静态文件没法自己算，所以只能靠用例逐处比对。
+// 1.5.3 之前这条锁只盯 SKILL.md / FALLBACK_VERSION / CHANGELOG 三处，docs 里的三串版本号
+// 全靠发版时手工同步，漏改不会在任何入口报错，只会让不同页面各说一个号——报警器必须长在测试里。
+function assertVersionStamp(text, re, label, expected) {
+  const hit = text.match(re);
+  assert.ok(hit, label + ' 里找不到版本号锚点（正则写宽了，或文档改版了）');
+  assert.strictEqual(hit[1], expected, label + ' 的版本号抄本与 package.json 漂开了');
+}
+
 test('every copy of the skill version says the same number as package.json', () => {
   const { FALLBACK_VERSION } = require(path.join(ROOT, 'lib', 'version'));
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
@@ -922,4 +928,19 @@ test('every copy of the skill version says the same number as package.json', () 
   assert.ok(changelog.includes('## [' + pkg.version + '] - '),
     'package.json 已是 ' + pkg.version + '，CHANGELOG 却没有 `## [' + pkg.version + '] - <日期>` 这节定版标题'
     + '（CONTRIBUTING「发布流程」第 2 步没做完）');
+
+  // docs 三处：先用真实文本比对，再把版本号替换成 9.9.9 反证这条锁真的会报红——
+  // 免得有人把正则写宽、或锚到不含版本号的字符串上，让用例变成永远通过的摆设。
+  const docStamps = [
+    ['docs/COMPATIBILITY.md', /对应 skill (\d+\.\d+\.\d+)/],
+    ['docs/FAQ.md', /"version":"(\d+\.\d+\.\d+)"/],
+    ['docs/MIGRATION.md', /\|\s*`(\d+\.\d+\.\d+)`\s*\|\s*遵循 \[语义化版本\]/],
+  ];
+  for (const [rel, re] of docStamps) {
+    const text = fs.readFileSync(path.join(ROOT, rel), 'utf-8');
+    assertVersionStamp(text, re, rel, pkg.version);
+    const drifted = text.replace(re, (m) => m.replace(pkg.version, '9.9.9'));
+    assert.throws(() => assertVersionStamp(drifted, re, rel, pkg.version),
+      /漂开了/, rel + ' 的锚点必须在抄本漂开时真的报红');
+  }
 });

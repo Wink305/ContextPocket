@@ -94,4 +94,4 @@ read: [CONVENTIONS.md]  # 创建一个 CONVENTIONS.md,内容写"用大白话提�
 
 ---
 
-最后更新:2026（对应 skill 1.5.2；CLI 子命令与 MCP 工具各 27 个）
+最后更新:2026（对应 skill 1.5.3；CLI 子命令与 MCP 工具各 27 个）
