@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.5.2] - 2026-11-08
+
 ### 🛡️ CI 加固：code-map rename 用例不再赌文件系统的时间精度
 
 - `tests/pocket.js` 的 `rename 按 size+mtime 配对` 造出的两个文件都是 10 字节；Linux CI runner
