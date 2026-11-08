@@ -349,4 +349,4 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 
 - Phase 0 的价值确认（真实口袋上人工用 `recall --with-context` / `graph`）。
 - Phase 3：完整 2.0 的图索引、多跳与时间有效性（§7 退出 gate）。
-- Phase 4：npm 首发收尾（`npm view context-pocket` 不再是 404）。
+- Phase 4：以 `ContextPocket-2.3` / `ContextPocket-2.3-Lite` 为发布名称，完成示例口袋、双语文档与发布收尾。

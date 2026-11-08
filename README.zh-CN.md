@@ -20,18 +20,20 @@
 - 下次任何 Agent 读一遍，5 秒续上进度。
 - 记录内容：需求、代码变更、决策、踩坑、偏好。
 
-## ContextPocket 2.0 与 2.0 Lite
+## ContextPocket 2.2 与 2.2 Lite
 
-**ContextPocket 2.0** 加入节点式上下文：把轮次、文件和决策连接成可追溯的图，`recall --with-context` 可展示关联历史；完整包还可查看、重建和校验图索引。它保留更完整的 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。
+**ContextPocket 2.2** 加入节点式上下文：把轮次、文件和决策连接成可追溯的图，`recall --with-context` 可展示关联历史；完整包还可查看、重建和校验图索引。它保留更完整的 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。
 
-**ContextPocket 2.0 Lite** 建立在相同的节点 schema 和口袋格式之上，为小型项目和日常对话记忆简化读写路径。它使用 5 个核心 Markdown 文件、8 条 CLI 命令 / MCP 工具；搜索现场扫描、关联图运行时派生，不创建搜索索引或图缓存。
+**ContextPocket 2.2 Lite** 建立在相同的节点 schema 和口袋格式之上，为小型项目和日常对话记忆简化读写路径。它使用 5 个核心 Markdown 文件、8 条 CLI 命令 / MCP 工具；搜索现场扫描、关联图运行时派生，不创建搜索索引或图缓存。
 
 | 版本 | 适用场景 | 上下文关联图 | 规模 |
 |---|---|---|---|
-| **2.0** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
-| **2.0 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
+| **2.2** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
+| **2.2 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
 
 下载 GitHub Release 压缩包：[ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip)——当前发行版（tag `2.2` / `2.2-lite`）。上一版仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
+
+下一次计划发布名称为 **ContextPocket-2.3** 和 **ContextPocket-2.3-Lite**。
 
 🚀 **方法**
 

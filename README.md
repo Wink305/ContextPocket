@@ -35,6 +35,8 @@
 
 Download the GitHub Release archives: [ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip) — the current release (tags `2.2` / `2.2-lite`). The previous stable release stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
+The next planned release names are **ContextPocket-2.3** and **ContextPocket-2.3-Lite**.
+
 🚀 **How to use**
 
 1. **Install** — pick one of the three methods in [Quick Start](#1-install) (CLI command, no-install script call, or skill-directory copy)
