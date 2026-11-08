@@ -1,0 +1,11 @@
+# Index · T<n> · <date>
+- state.md → state, next steps, run commands, environment, pitfalls
+- requirements.md → open/done/cancelled/❓ (N items, R1–R<m>)
+- preferences.md → M prefs
+- decisions.md → N ADRs
+- code-map.md → K files/modules documented
+- absolute.md → N 🔒 entries
+- log.md → T<a>–T<b>
+- log-archive.md → T1–T<a-1> (if exists)
+- handoff.md → last generated: <date or "(not yet generated)">
+- assets/ → T<nn>-<slug>.<ext>

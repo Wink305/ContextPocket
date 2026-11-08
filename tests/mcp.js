@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
-const { assert, test, makePocket, makeV1Pocket, readPocketFile, writePocketFile, tmpProject, ROOT } = require('./harness');
+const { assert, test, makePocket, makeLinkedPocket, makeV1Pocket, readPocketFile, writePocketFile, tmpProject, ROOT } = require('./harness');
 
 const migrate = require(path.join(ROOT, 'lib', 'migrate'));
 
@@ -908,3 +908,113 @@ test('mcp: tools/list advertises the window parameters on recall', async () => {
   }
 });
 
+// ------------------------------------------------------------
+// Phase 0：withContext（与 CLI --with-context 同一份派生）
+// ------------------------------------------------------------
+
+test('mcp: recall withContext appends inbound context, and the plain call stays unchanged', async () => {
+  const { projectDir } = makeLinkedPocket('mcp-links-context');
+  const plain = await mcpCall(projectDir, 'context_pocket_recall', { tId: 1 }, 2);
+  assert.ok(plain.includes('T1 · 初版索引'), plain);
+  assert.ok(!plain.includes('Inbound context'), '不给 withContext 时不能凭空多出一段');
+
+  const rich = await mcpCall(projectDir, 'context_pocket_recall', { tId: 1, withContext: true }, 2);
+  assert.ok(rich.includes('### Inbound context (derived, read-only)'), rich);
+  assert.ok(rich.includes('Referenced by: T2'), rich);
+  assert.ok(rich.includes('Later change: src/a.ts'), rich);
+  assert.ok(rich.includes('Decision: ADR-1'), rich);
+});
+
+test('mcp: recall rejects withContext combined with a window', async () => {
+  const { projectDir } = makeLinkedPocket('mcp-links-conflict');
+  const err = await mcpCallRaw(projectDir, 'context_pocket_recall', { sinceT: 1, withContext: true });
+  assert.strictEqual(err.isError, true);
+  assert.ok(/withContext/.test(err.content[0].text), err.content[0].text);
+});
+
+test('mcp: tools/list advertises withContext on recall', async () => {
+  const { projectDir } = makePocket('mcp-links-schema');
+  const srv = startServer(projectDir);
+  srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
+  srv.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  await srv.waitFor(2);
+  const listed = srv.messages.find((m) => m.id === 2).result.tools.find((t) => t.name === 'context_pocket_recall');
+  srv.child.kill();
+  assert.strictEqual(listed.inputSchema.properties.withContext.type, 'boolean');
+});
+
+
+// ------------------------------------------------------------
+// Phase 1：context_pocket_graph（与 CLI graph 同一份派生与缓存）
+// ------------------------------------------------------------
+
+test('mcp: graph view returns the derived graph and writes the cache', async () => {
+  const { projectDir, pocketDir } = makeLinkedPocket('mcp-graph-view');
+  assert.ok(!fs.existsSync(path.join(pocketDir, 'assets', 'graph.jsonl')), '起点：没有缓存');
+
+  const text = await mcpCall(projectDir, 'context_pocket_graph', {}, 2);
+  assert.ok(text.includes('Derived link graph'), text);
+  assert.ok(text.includes('modifies'), text);
+  assert.ok(text.includes('`T1` —modifies→ `file:src/a.ts`'), '边要带节点与类型：' + text);
+  assert.ok(/source log\.md · T1/.test(text), '每条边要带来源与 T 号');
+  assert.ok(fs.existsSync(path.join(pocketDir, 'assets', 'graph.jsonl')), 'view 落了缓存');
+
+  // 再看一次：报 fresh，不再重写
+  const again = await mcpCall(projectDir, 'context_pocket_graph', { action: 'view' }, 2);
+  assert.ok(again.includes('Cache: fresh'), again);
+});
+
+test('mcp: graph type/limit filters and unknown action/type are errors', async () => {
+  const { projectDir } = makeLinkedPocket('mcp-graph-filter');
+
+  const onlyModifies = await mcpCall(projectDir, 'context_pocket_graph', { type: 'modifies', limit: 2 }, 2);
+  assert.ok(onlyModifies.includes('modifies edges'), onlyModifies);
+  assert.ok(!onlyModifies.includes('—references→'), 'type 过滤后不该混入其它类型：' + onlyModifies);
+
+  const badType = await mcpCallRaw(projectDir, 'context_pocket_graph', { type: 'wires' });
+  assert.strictEqual(badType.isError, true);
+  assert.ok(/unknown edge type/.test(badType.content[0].text), badType.content[0].text);
+
+  const badAction = await mcpCallRaw(projectDir, 'context_pocket_graph', { action: 'enrich' });
+  assert.strictEqual(badAction.isError, true);
+  assert.ok(/unknown action/.test(badAction.content[0].text), badAction.content[0].text);
+});
+
+test('mcp: graph rebuild and verify mirror the CLI semantics', async () => {
+  const { projectDir, pocketDir } = makeLinkedPocket('mcp-graph-verify');
+
+  // 没有缓存：verify 通过并说明缓存是可选物
+  const missing = await mcpCall(projectDir, 'context_pocket_graph', { action: 'verify' }, 2);
+  assert.ok(missing.includes('not present'), missing);
+
+  const rb = await mcpCall(projectDir, 'context_pocket_graph', { action: 'rebuild' }, 2);
+  assert.ok(rb.includes('Graph cache rebuilt'), rb);
+
+  // 篡改缓存：verify 要 isError，修法指向 rebuild
+  const cachePath = path.join(pocketDir, 'assets', 'graph.jsonl');
+  fs.writeFileSync(cachePath, fs.readFileSync(cachePath, 'utf-8').replace('"tId":1', '"tId":999'), 'utf-8');
+  const broken = await mcpCallRaw(projectDir, 'context_pocket_graph', { action: 'verify' });
+  assert.strictEqual(broken.isError, true, '篡改过的缓存要报错：' + JSON.stringify(broken));
+  assert.ok(/rebuild/.test(broken.content[0].text), broken.content[0].text);
+
+  // rebuild 之后回到绿
+  const fixed = await mcpCall(projectDir, 'context_pocket_graph', { action: 'rebuild' }, 2);
+  assert.ok(fixed.includes('Graph cache rebuilt'), fixed);
+  const ok = await mcpCall(projectDir, 'context_pocket_graph', { action: 'verify' }, 2);
+  assert.ok(ok.includes('matches the sources'), ok);
+});
+
+test('mcp: tools/list advertises context_pocket_graph with action/type/limit', async () => {
+  const { projectDir } = makePocket('mcp-graph-schema');
+  const srv = startServer(projectDir);
+  srv.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tests', version: '0' } } });
+  srv.send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  await srv.waitFor(2);
+  const listed = srv.messages.find((m) => m.id === 2).result.tools.find((t) => t.name === 'context_pocket_graph');
+  srv.child.kill();
+
+  assert.ok(listed, 'tools/list 要有 context_pocket_graph');
+  assert.deepStrictEqual(listed.inputSchema.properties.action.enum, ['view', 'rebuild', 'verify']);
+  assert.strictEqual(listed.inputSchema.properties.limit.default, 100);
+  assert.strictEqual(listed.description.length > 100, true, '描述要讲清缓存语义与三个 action');
+});

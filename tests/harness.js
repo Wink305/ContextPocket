@@ -53,6 +53,64 @@ function writePocketFile(pocketDir, file, content) {
 }
 
 /**
+ * Phase 0 关联图测试口袋：手写固定编号的 T-block / ADR / code-map，覆盖全部
+ * 强证据边与一条弱证据边。核心层、CLI、MCP 三个套件共用同一份夹具，
+ * 免得各自造一份、语义慢慢漂开。
+ *
+ *  T1 改 src/a.ts，被 ADR-1 引用
+ *  T2 写 `Corrects T1`，也改 src/a.ts
+ *  T3 改 src/a.ts，被 ADR-2 引用，Uncertain 里弱提到 src/b.ts
+ */
+function makeLinkedPocket(tag) {
+  const { projectDir, pocketDir } = makePocket(tag);
+  writePocketFile(pocketDir, 'log.md', [
+    '# ContextPocket · LOG', '',
+    '--- SESSION: 2026-11-01 ---', '',
+    '## T1 · 初版索引 · [架构]',
+    '--- WHEN: 2026-11-01 ---', '',
+    '### User', '- 用户原话：先做初版',
+    '### Action', '- 新增 src/a.ts — 建倒排索引',
+    '### Decisions & Constraints', '- 用倒排索引', '',
+    '--- SESSION: 2026-11-02 ---', '',
+    '## T2 · 修正窗口边界 · [correction]',
+    '--- WHEN: 2026-11-02 ---', '',
+    '### User', '- 用户原话：边界不对',
+    '### Action', '- Corrects T1: 窗口应为闭区间', '- 修改 src/a.ts — 修边界', '',
+    '--- SESSION: 2026-11-03 ---', '',
+    '## T3 · 重构索引 · [测试]',
+    '--- WHEN: 2026-11-03 ---', '',
+    '### User', '- 用户原话：重构一下',
+    '### Action', '- 修改 src/a.ts — 重构',
+    '### Uncertain', '- 要不要一起改 src/b.ts', '',
+  ].join('\n'));
+  writePocketFile(pocketDir, 'decisions.md', [
+    '# Decisions · T3', '',
+    '## ADR-1 · 用倒排索引 · T1',
+    '- Context: 检索需求',
+    '- Options: 倒排 / 向量',
+    '- Decision: 倒排，零依赖',
+    '- Consequences: 多跳暂时答不了',
+    '- Supersedes: none', '',
+    '## ADR-2 · 改成混合检索 · T3',
+    '- Context: 需要多跳',
+    '- Options: 图 / 社区摘要',
+    '- Decision: 图扩展保留倒排',
+    '- Consequences: 复杂度上升',
+    '- Supersedes: ADR-1', '',
+  ].join('\n'));
+  writePocketFile(pocketDir, 'code-map.md', [
+    '# Code Map · T3 · 2026-11-03', '',
+    '## Structure',
+    '```',
+    'src/',
+    '├── a.ts     → 倒排索引',
+    '│              T3: 重构',
+    '```', '',
+  ].join('\n'));
+  return { projectDir, pocketDir };
+}
+
+/**
  * 改写 readme.md 的格式戳，把一个新 bootstrap 出来的 pocket 变成"老版本留下来的项目"。
  *
  * 为什么需要：今天的模板出生就是 v2，而迁移测的恰恰是"从 v1 升上来"这条路径。
@@ -200,6 +258,7 @@ module.exports = {
   tmpProject,
   tmpDirs,
   makePocket,
+  makeLinkedPocket,
   writePocketFile,
   readPocketFile,
   setPocketFormat,

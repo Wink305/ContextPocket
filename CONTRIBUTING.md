@@ -36,7 +36,7 @@
    - 修改 `templates/` 时,确保新模板符合"占位符用 `<...>` 包裹"的约定
    - 修改 README/CHANGELOG 时同步更新相关章节
 4. **本地验证**（三条都要过，`package.json` 里已配好脚本）:
-   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 67+87+16+17+16+19+39+7+24 = 292 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
+   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 67+91+16+17+16+19+42+7+27 = 302 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
    - `npm run lint` — 对仓库内每个 `.js` 跑 `node --check`
    - `npm run smoke` — 用真实 stdio 跑一遍 MCP server（`initialize` / `tools/list` / 27 个工具里的 append、amend、absolute add、index、distill、hub、verify 等；`repair` 不在冒烟覆盖里——它要先人为造出撞号的目录，这件事由 `tests/repair.js` 与 `tests/mcp.js` 盯着）。不带参数时它会在 OS 临时目录里现造一个一次性 pocket 并把 `CONTEXTPOCKET_HOME` 隔离到同一目录，退出即删，所以可以直接跑；想对着指定项目跑就写 `npm run smoke -- /path/to/project`（此时若没设 `CONTEXTPOCKET_HOME`，hub 写入会落到你真实的 `~/.contextpocket`，脚本会先打印一行提示）。收尾断言是 `verify` 必须返回 `All checks passed`——所以往冒烟步骤里加任何声明（尤其是 `### Attachments` 那条路径）都得把文件真的写出来，否则第 15 项检查会让冒烟红）
    - `node tests/run.js pocket` 之类的前缀参数可以只跑某个文件

@@ -1,0 +1,54 @@
+{
+  "name": "context-pocket-lite",
+  "version": "2.0.0",
+  "description": "The lightweight sibling of context-pocket: same pocket format, 8 commands, 8 MCP tools, zero caches, zero dependencies. Records AI coding conversation turns into a project-local ContextPocket/ folder of plain Markdown.",
+  "keywords": [
+    "context",
+    "memory",
+    "handoff",
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "agent",
+    "cli",
+    "markdown",
+    "zero-dependency",
+    "no-dependencies",
+    "lite",
+    "session-log",
+    "claude-code",
+    "cursor"
+  ],
+  "license": "MIT",
+  "author": "ContextPocket Contributors",
+  "homepage": "https://github.com/Wink305/ContextPocket/tree/main/lite#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wink305/ContextPocket.git",
+    "directory": "lite"
+  },
+  "bugs": {
+    "url": "https://github.com/Wink305/ContextPocket/issues"
+  },
+  "bin": {
+    "context-pocket-lite": "bin/context-pocket-lite.js",
+    "context-pocket-lite-mcp": "mcp-server-lite.js"
+  },
+  "main": "lib/core.js",
+  "engines": {
+    "node": ">=14"
+  },
+  "scripts": {
+    "test": "node tests/run.js",
+    "lint": "node -e \"var fs=require('fs'),path=require('path'),cp=require('child_process'),skip={'node_modules':1,'dist':1,'build':1,'coverage':1};function walk(d){var out=[];fs.readdirSync(d,{withFileTypes:true}).forEach(function(e){if(skip[e.name]||e.name.charAt(0)==='.')return;var p=path.join(d,e.name);if(e.isDirectory()){out=out.concat(walk(p));}else if(e.name.endsWith('.js')){out.push(p);}});return out;}var files=walk('.');if(files.length===0){throw new Error('lint: no .js file found');}files.forEach(function(p){cp.execFileSync(process.execPath,['--check',p],{stdio:'inherit'});});console.log('lint ok: syntax-checked '+files.length+' js file(s)');\""
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "templates/",
+    "mcp-server-lite.js",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ]
+}

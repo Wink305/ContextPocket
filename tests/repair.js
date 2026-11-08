@@ -495,3 +495,35 @@ test('cli: repair on a clean pocket succeeds with a plain no-op', () => {
   assert.strictEqual(json.changed, false, run.out);
   assert.strictEqual(json.duplicates, 0);
 });
+
+// ------------------------------------------------------------
+// Phase 1：重编号后 graph 缓存要跟着源重写（边全按 T 号寻址）
+// ------------------------------------------------------------
+
+test('repair: renumbering refreshes an existing graph cache; absent cache stays absent', () => {
+  const links = require(path.join(ROOT, 'lib', 'links'));
+
+  // 有缓存的口袋：重编号后缓存必须重写，否则旧 T 号会把消掉的幽灵节点复活
+  const made = makeCollidedPocket('repair-graph-cache');
+  links.writeGraphCache(made.pocketDir);
+  const oldIds = links.deriveLinks(made.pocketDir).nodes.filter((n) => n.type === 'turn').map((n) => n.id).sort();
+
+  const r = repair.repairLogIds(made.pocketDir, {});
+  assert.strictEqual(r.success, true, JSON.stringify(r));
+  assert.strictEqual(r.graphCacheRebuilt, true, 'repair 要重写已存在的缓存');
+  assert.strictEqual(links.verifyGraphCache(made.pocketDir).ok, true, '重写后的缓存要能过 verify');
+
+  const newIds = links.deriveLinks(made.pocketDir).nodes.filter((n) => n.type === 'turn').map((n) => n.id).sort();
+  assert.notDeepStrictEqual(newIds, oldIds, '编号确实被重排了（前置条件）');
+  // 缓存里读到的是新坐标系，不是旧号
+  const cached = links.readGraph(made.pocketDir);
+  assert.strictEqual(cached.rebuilt, false, '缓存 fresh，无需再写');
+  assert.deepStrictEqual(cached.graph.nodes.filter((n) => n.type === 'turn').map((n) => n.id).sort(), newIds);
+
+  // 没建过缓存的口袋：repair 不顺手造一个
+  const bare = makeCollidedPocket('repair-graph-absent');
+  const r2 = repair.repairLogIds(bare.pocketDir, {});
+  assert.strictEqual(r2.success, true, JSON.stringify(r2));
+  assert.strictEqual(r2.graphCacheRebuilt, false);
+  assert.ok(!fs.existsSync(links.graphPath(bare.pocketDir)), 'repair 不该顺手造缓存');
+});

@@ -41,7 +41,7 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
 
 ### MCP 模式
 
-支持 MCP 的 Agent 不用 shell,直接调工具即可——CLI 子命令与 MCP 工具一一对应,共 27 个,工具名是子命令名加 `context_pocket_` 前缀(如 `context_pocket_log_amend`、`context_pocket_absolute_add`、`context_pocket_repair`)。检索索引的开关是 `context_pocket_search` 的 `noIndex` 参数,不是单独一个工具。这条对应关系不是文档承诺,而是断言:`context-pocket help --json` 给出命令全集,`tests/mcp.js` 拿它逐个核对 `tools/list` 去掉前缀后的工具名,少一个测试就红。
+支持 MCP 的 Agent 不用 shell,直接调工具即可——CLI 子命令与 MCP 工具一一对应,共 28 个,工具名是子命令名加 `context_pocket_` 前缀(如 `context_pocket_log_amend`、`context_pocket_absolute_add`、`context_pocket_repair`)。检索索引的开关是 `context_pocket_search` 的 `noIndex` 参数,不是单独一个工具;关联图的查看/重建/校验是 `context_pocket_graph` 的 `action` 参数(view/rebuild/verify),同样不拆成三个工具。这条对应关系不是文档承诺,而是断言:`context-pocket help --json` 给出命令全集,`tests/mcp.js` 拿它逐个核对 `tools/list` 去掉前缀后的工具名,少一个测试就红。
 
 ## 不兼容 / 有限支持
 
@@ -94,4 +94,4 @@ read: [CONVENTIONS.md]  # 创建一个 CONVENTIONS.md,内容写"用大白话提�
 
 ---
 
-最后更新:2026（对应 skill 1.6.1；CLI 子命令与 MCP 工具各 27 个）
+最后更新:2026（对应 skill 2.0.0；CLI 子命令与 MCP 工具各 28 个）

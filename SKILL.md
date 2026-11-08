@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 1.6.1
+version: 2.0.0
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -42,13 +42,13 @@ The Skill auto-detects which mode is available and falls back gracefully. Always
 ### Mode 1: MCP mode (best reliability)
 - Configure your agent to load `mcp-server.js` from the Skill directory.
 - All writes go through MCP tools (`context_pocket_*`). Never manually edit markdown files.
-- Tools cover: `bootstrap`, `status`, `verify`, `sync`, `log_append`, `log_amend`, `absolute_add`, `recall`, `diff`, `search`, `why`, `check_conflicts`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `migrate`, `repair`, `install_hook`, `uninstall_hook`, `index`, `distill`, `import`, `hub` (27 tools).
-- `search` takes a `noIndex` boolean — there is **no** separate `search_no_index` tool.
+- Tools cover: `bootstrap`, `status`, `verify`, `sync`, `log_append`, `log_amend`, `absolute_add`, `recall`, `diff`, `search`, `why`, `graph`, `check_conflicts`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `migrate`, `repair`, `install_hook`, `uninstall_hook`, `index`, `distill`, `import`, `hub` (28 tools).
+- `search` takes a `noIndex` boolean — there is **no** separate `search_no_index` tool. `graph` views the derived link graph (turns ↔ files ↔ ADRs) and takes `action` (view / rebuild / verify), `type`, `limit`.
 
 ### Mode 2: CLI mode (good reliability)
 - Script path: `<skill-dir>/bin/context-pocket.js`
 - Invoke: `node <skill-dir>/bin/context-pocket.js <command> --dir <project-root>`
-- All commands are subcommands (`log append`, `state update`, etc.). Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 27 the MCP server registers). Use `--no-index` on `search` to skip the index cache.
+- All commands are subcommands (`log append`, `state update`, etc.). Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 28 the MCP server registers). Use `--no-index` on `search` to skip the index cache.
 
 ### Mode 3: Pure skill mode (compatibility fallback)
 - Manually write the markdown files following the rules in **Per-turn rules** + **Pre-reply safety hook**.

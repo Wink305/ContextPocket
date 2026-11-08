@@ -14,7 +14,7 @@
 const path = require('path');
 const { runAll, cleanup } = require('./harness');
 
-const SUITES = ['unit.js', 'pocket.js', 'hooks.js', 'importer.js', 'migrate.js', 'repair.js', 'cli.js', 'help.js', 'mcp.js'];
+const SUITES = ['unit.js', 'pocket.js', 'hooks.js', 'importer.js', 'migrate.js', 'repair.js', 'cli.js', 'help.js', 'mcp.js', 'lite.js'];
 
 const filter = process.argv[2];
 const selected = SUITES.filter((f) => !filter || f.startsWith(filter));

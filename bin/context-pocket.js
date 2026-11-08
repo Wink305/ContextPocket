@@ -59,6 +59,7 @@ const {
 const { formatVerifyResult, formatStatus, colorize } = require('../lib/formatter');
 const { bootstrap } = require('../lib/bootstrap');
 const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('../lib/query');
+const { buildContext, formatContextLines, readGraph, writeGraphCache, verifyGraphCache } = require('../lib/links');
 const { runMigration, listMigrations } = require('../lib/migrate');
 const { repairLogIds } = require('../lib/repair');
 const { installPreCommitHook, uninstallPreCommitHook } = require('../lib/hooks');
@@ -92,7 +93,7 @@ const VALUE_OPTIONS = new Set([
   'context', 'decision', 'decisions', 'dir', 'drift-last-n', 'f', 'file', 'file-path',
   'from', 'gist', 'id', 'impl', 'key', 'keyword', 'keep-last', 'language', 'last-n', 'limit',
   'mode', 'next-step', 'offset', 'options', 'pitfall', 'pitfalls', 'preferences', 'project-type', 'recent-keep', 'source',
-  'since', 'status', 'summary', 'supersedes', 't', 't-a', 't-b', 't-id', 'tags', 'text', 'title', 'to', 'truncate', 'uncertain',
+  'since', 'status', 'summary', 'supersedes', 't', 't-a', 't-b', 't-id', 'tags', 'text', 'title', 'to', 'truncate', 'type', 'uncertain',
   'until', 'user', 'value', 'when', 'gitignore',
 ]);
 
@@ -100,7 +101,7 @@ const VALUE_OPTIONS = new Set([
 // "rebuild" 当成 quiet 的值，导致开关失效）
 const BOOL_OPTIONS = new Set([
   'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'help', 'h', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
-  'quiet', 'rebuild', 'verify', 'version', 'v',
+  'quiet', 'rebuild', 'verify', 'version', 'v', 'with-context',
 ]);
 
 // 真实存在的两段式命令。只有落在这些组合里的第二个词才当子命令，
@@ -115,6 +116,7 @@ const SUBCOMMANDS_BY_COMMAND = {
   prefs: ['update'],
   'code-map': ['update'],
   codemap: ['update'],
+  graph: ['rebuild', 'verify'],
 };
 
 function isKnownOption(token) {
@@ -750,6 +752,7 @@ function printRecallWindow(options, pocketDir, w) {
 function cmdRecall(options, positional) {
   const pocketDir = ensurePocket(options);
   const tIdStr = positional[0] || tIdOption(options);
+  const withContext = !!options['with-context'];
 
   // 与 search 同一组窗口旗标：intOption / textOption 统一收，垃圾值回落成 null，
   // 让 filterByTime 按"没给过滤条件"处理（与 search 完全同一份判据）。
@@ -779,6 +782,15 @@ function cmdRecall(options, positional) {
     process.exit(1);
   }
 
+  // --with-context 只对单轮形态有意义：窗口模式列的是一串轮次，没有「这一轮的
+  // 入向上下文」。静默忽略旗标就是本项目反复踩过的「选项被解析却被无视」。
+  if (!tIdStr && withContext) {
+    failJson(options, 'recall: --with-context applies to a single T-id, not to a window listing.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --with-context needs a single T-id.');
+    console.error('     Use `context-pocket recall <T-id> --with-context`, or drop the flag for a window.\n');
+    process.exit(1);
+  }
+
   if (!tIdStr) {
     printRecallWindow(options, pocketDir, { sinceT, untilT, fromDate, toDate });
     return;
@@ -798,7 +810,9 @@ function cmdRecall(options, positional) {
     process.exit(1);
   }
 
-  if (options.json) emitJson({ ok: true, t: result });
+  // 图是只读派生的：不给旗标时输出逐字不变（回归锁盯着这一点）
+  const context = withContext ? buildContext(pocketDir, tId) : null;
+  if (options.json) emitJson(context ? { ok: true, t: result, context } : { ok: true, t: result });
 
   console.log('');
   console.log(colorize(`  T${result.id} · ${result.gist}`, 'bold'));
@@ -831,6 +845,14 @@ function cmdRecall(options, positional) {
         console.log(`  - ${item}`);
       }
       console.log('');
+    }
+  }
+
+  if (context) {
+    console.log('  ' + colorize('─'.repeat(40), 'dim'));
+    console.log(colorize('  Inbound context (derived, read-only)', 'bold'));
+    for (const line of formatContextLines(context)) {
+      console.log('  ' + line);
     }
   }
   console.log('');
@@ -1146,6 +1168,148 @@ function cmdCheckConflicts(options) {
   if (result.criticalCount > 0) {
     process.exit(1);
   }
+}
+
+// ============================================================
+// 命令：graph — 派生关联图（查看 / rebuild / verify）
+// ============================================================
+
+// graph 认的边类型；--type 给别的值是用户拼错了，明确报错而不是静默过滤成空
+const GRAPH_EDGE_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'];
+
+function cmdGraph(options, sub) {
+  const pocketDir = ensurePocket(options);
+
+  // ---- graph rebuild：强制重写缓存（删掉缓存后再跑，产物必须逐字一致） ----
+  if (sub === 'rebuild') {
+    const r = writeGraphCache(pocketDir);
+    if (options.json) {
+      emitJson({
+        ok: true,
+        action: 'rebuild',
+        path: r.path,
+        nodes: r.nodes,
+        edges: r.edges,
+        byType: r.stats.byType,
+        bytes: r.bytes,
+      });
+    }
+    console.log('');
+    console.log(colorize('  ✅ Graph cache rebuilt', 'green'));
+    console.log(`     Nodes: ${r.nodes} · Edges: ${r.edges}`);
+    const parts = Object.keys(r.stats.byType).sort().map((t) => `${t} ${r.stats.byType[t]}`);
+    if (parts.length) console.log(`     ${parts.join(' · ')}`);
+    console.log(`     File: ${path.relative(process.cwd(), r.path) || r.path} (${r.bytes} bytes)`);
+    console.log('');
+    console.log(colorize('  Markdown files remain the single source of truth —', 'dim'));
+    console.log(colorize('  the graph is a derived cache; delete it and rebuild anytime.', 'dim'));
+    console.log('');
+    return;
+  }
+
+  // ---- graph verify：缓存与源是否一致（只报不写） ----
+  if (sub === 'verify') {
+    const v = verifyGraphCache(pocketDir);
+    if (options.json) {
+      // 失败必须退 1：--json 消费方（CI / hook）靠退出码分级，不能只看 ok 字段
+      emitJson(Object.assign({ ok: v.ok, action: 'verify' }, v), v.ok ? 0 : 1);
+    }
+    console.log('');
+    if (v.ok) {
+      console.log(colorize(`  ✅ Graph cache ${v.status === 'fresh' ? 'matches the sources' : 'not present'}`, 'green'));
+      if (v.stats) {
+        console.log(`     Nodes: ${v.stats.nodes} · Edges: ${v.stats.edges}`);
+      }
+      if (v.message) {
+        console.log(colorize(`     ${v.message}`, 'dim'));
+      }
+      console.log('');
+      return;
+    }
+    console.log(colorize('  ❌ Graph cache does not match the sources:', 'red'));
+    if (v.reason) console.log(`     ${v.reason}`);
+    for (const issue of (v.issues || [])) {
+      console.log(`     line ${issue.line}: ${issue.problem}`);
+    }
+    console.log('');
+    console.log('     Fix: context-pocket graph rebuild');
+    console.log('');
+    process.exit(1);
+  }
+
+  // ---- graph（查看）：fresh 用缓存，stale/corrupt/missing 现场自愈 ----
+  const typeFilter = options.type === undefined || options.type === true || String(options.type).trim() === ''
+    ? null
+    : String(options.type).trim();
+  if (typeFilter && !GRAPH_EDGE_TYPES.includes(typeFilter)) {
+    failJson(options, 'graph: unknown edge type "' + typeFilter + '". Known types: ' + GRAPH_EDGE_TYPES.join(', ') + '.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' Unknown edge type: ' + typeFilter);
+    console.error('     Known types: ' + GRAPH_EDGE_TYPES.join(', ') + '\n');
+    process.exit(1);
+  }
+
+  const limit = intOption(options.limit, 100);
+  const r = readGraph(pocketDir);
+  const graph = r.graph;
+
+  let edges = graph.edges;
+  if (typeFilter) edges = edges.filter((e) => e.type === typeFilter);
+  const total = edges.length;
+  const shown = limit === 0 ? edges : edges.slice(0, limit);
+
+  if (options.json) {
+    emitJson({
+      ok: true,
+      action: 'view',
+      cache: {
+        path: r.path,
+        status: r.cacheStatus,
+        rebuilt: r.rebuilt,
+        previousStatus: r.previousStatus,
+      },
+      stats: graph.stats,
+      nodes: graph.nodes,
+      edges: shown,
+      edgeCount: total,
+      truncated: limit === 0 ? false : total > shown.length,
+      type: typeFilter,
+    });
+  }
+
+  const nodesByType = {};
+  for (const n of graph.nodes) nodesByType[n.type] = (nodesByType[n.type] || 0) + 1;
+
+  console.log('');
+  console.log(colorize('  ContextPocket · Derived link graph', 'bold'));
+  console.log('  ' + colorize('─'.repeat(40), 'dim'));
+  const cacheNote = r.rebuilt
+    ? `cache ${r.previousStatus} → rewritten`
+    : 'cache: fresh';
+  console.log(`  Nodes: ${graph.stats.nodes} (${Object.keys(nodesByType).sort().map((t) => `${nodesByType[t]} ${t}`).join(', ')})`);
+  console.log(`  Edges: ${graph.stats.edges} — ${Object.keys(graph.stats.byType).sort().map((t) => `${t} ${graph.stats.byType[t]}`).join(' · ')}`);
+  console.log(colorize(`  ${cacheNote} · ${path.relative(process.cwd(), r.path) || r.path}`, 'dim'));
+  console.log('');
+
+  if (typeFilter) {
+    console.log(colorize(`  ${typeFilter} edges (${total}${limit !== 0 && total > shown.length ? `, showing first ${shown.length}` : ''}):`, 'cyan'));
+  } else if (limit !== 0 && total > shown.length) {
+    console.log(colorize(`  Edges (${total}, showing first ${shown.length} — --limit 0 for all, --type to filter):`, 'cyan'));
+  } else {
+    console.log(colorize(`  Edges (${total}):`, 'cyan'));
+  }
+  for (const e of shown) {
+    const weak = e.evidence === 'weak' ? colorize(' · weak', 'yellow') : '';
+    const via = e.via ? colorize(` · via ${e.via}`, 'dim') : '';
+    console.log(`    ${e.from} ${colorize('—' + e.type + '→', 'magenta')} ${e.to}${weak}${via}`);
+    console.log(colorize(`      source: ${e.source}${e.tId !== null && e.tId !== undefined ? ' · T' + e.tId : ''}`, 'dim'));
+  }
+  if (shown.length === 0) {
+    console.log(colorize('    (no edges' + (typeFilter ? ` of type "${typeFilter}"` : '') + ' derived from this pocket)', 'dim'));
+  }
+  console.log('');
+  console.log(colorize('  Derived from log.md / log-archive.md / decisions.md / code-map.md —', 'dim'));
+  console.log(colorize('  every edge cites its source line; weak evidence is marked.', 'dim'));
+  console.log('');
 }
 
 // ============================================================
@@ -2388,6 +2552,16 @@ function main() {
       return;
     }
     cmdCheckConflicts(args.options);
+    return;
+  }
+
+  // graph — 派生关联图（查看 / rebuild / verify）
+  if (cmd === 'graph') {
+    if (args.options.help || args.options.h) {
+      console.log(commandHelp('graph'));
+      return;
+    }
+    cmdGraph(args.options, args.subcommand);
     return;
   }
 

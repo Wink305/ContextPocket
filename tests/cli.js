@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { assert, test, makePocket, makeV1Pocket, tmpProject, ROOT } = require('./harness');
+const { assert, test, makePocket, makeLinkedPocket, makeV1Pocket, tmpProject, ROOT, writePocketFile, readPocketFile } = require('./harness');
 
 const CLI = path.join(ROOT, 'bin', 'context-pocket.js');
 const { HELP_COL } = require(path.join(ROOT, 'lib', 'help'));
@@ -486,7 +486,7 @@ test('cli: status --json reports the archive threshold it reads', () => {
 test('cli: help --json lists every command, and the docs list them too', () => {
   const json = parseJsonLine(runCli(['help', '--json']));
   const commands = json.groups.reduce((acc, g) => acc.concat(g.commands.map((c) => c.command)), []);
-  assert.strictEqual(commands.length, 27, 'help 与 main() 分发的命令数必须一致：\n' + commands.join(', '));
+  assert.strictEqual(commands.length, 28, 'help 与 main() 分发的命令数必须一致：\n' + commands.join(', '));
   assert.ok(!commands.some((c) => c === 'help'), 'help 自己不进清单');
 
   // 人类版与 JSON 版由同一张表渲染，两者不能漂移
@@ -1035,3 +1035,121 @@ test('cli: recall <T-id> is unchanged by the window mode', () => {
   assert.ok(data.t.rawText.includes('single turn'));
 });
 
+// ------------------------------------------------------------
+// Phase 0：recall --with-context（只读入向上下文）
+// ------------------------------------------------------------
+
+test('cli: recall --with-context adds context to --json and leaves the plain form untouched', () => {
+  const { pocketDir } = makeLinkedPocket('cli-links-json');
+
+  const plain = parseJsonLine(runCli(['recall', '1', '--json'], pocketDir));
+  assert.strictEqual(plain.ok, true);
+  assert.strictEqual(plain.context, undefined, '不给旗标时输出必须逐字不变');
+
+  const data = parseJsonLine(runCli(['recall', '1', '--with-context', '--json'], pocketDir));
+  assert.strictEqual(data.ok, true);
+  assert.strictEqual(data.t.id, 1);
+  assert.deepStrictEqual(data.context.referencedBy.map((r) => r.ref), ['T2']);
+  assert.deepStrictEqual(data.context.laterChanges.map((c) => c.tId), [2, 3]);
+  assert.deepStrictEqual(data.context.decisions.map((d) => d.adr), ['ADR-1']);
+});
+
+test('cli: recall --with-context prints a human-readable inbound context block', () => {
+  const { pocketDir } = makeLinkedPocket('cli-links-human');
+  const r = runCli(['recall', '1', '--with-context'], pocketDir);
+  assert.strictEqual(r.code, 0, r.stderr);
+  assert.ok(r.stdout.includes('Inbound context (derived, read-only)'), r.stdout);
+  assert.ok(r.stdout.includes('Referenced by: T2'), r.stdout);
+  assert.ok(r.stdout.includes('Later change: src/a.ts'), r.stdout);
+  assert.ok(r.stdout.includes('Decision: ADR-1'), r.stdout);
+});
+
+test('cli: recall --with-context rejects window mode instead of silently dropping the flag', () => {
+  const { pocketDir } = makeLinkedPocket('cli-links-conflict');
+  const j = parseJsonLine(runCli(['recall', '--since', '1', '--with-context', '--json'], pocketDir));
+  assert.strictEqual(j.ok, false);
+  assert.ok(/single T-id/.test(j.error), j.error);
+
+  const human = runCli(['recall', '--since', '1', '--with-context'], pocketDir);
+  assert.strictEqual(human.code, 1);
+  assert.ok(human.stderr.includes('--with-context'), human.stderr);
+});
+
+
+// ------------------------------------------------------------
+// Phase 1：graph 命令（派生关联图 + assets/graph.jsonl 缓存）
+// ------------------------------------------------------------
+
+test('cli: graph view builds the cache on first call and reports it fresh afterwards', () => {
+  const { pocketDir } = makeLinkedPocket('cli-graph-view');
+  assert.ok(!fs.existsSync(path.join(pocketDir, 'assets', 'graph.jsonl')), '起点：没有缓存');
+
+  const r = runCli(['graph'], pocketDir);
+  assert.strictEqual(r.code, 0, r.stderr);
+  assert.ok(r.stdout.includes('Derived link graph'), r.stdout);
+  assert.ok(r.stdout.includes('modifies'), r.stdout);
+  assert.ok(fs.existsSync(path.join(pocketDir, 'assets', 'graph.jsonl')), '第一次查看要落缓存');
+
+  const j = parseJsonLine(runCli(['graph', '--json'], pocketDir));
+  assert.strictEqual(j.ok, true, JSON.stringify(j));
+  assert.strictEqual(j.cache.status, 'fresh');
+  assert.strictEqual(j.cache.rebuilt, false, '第二次走缓存，不再写盘');
+  assert.strictEqual(j.stats.edges, j.stats.byType.modifies + j.stats.byType.references
+    + j.stats.byType['decided-in'] + j.stats.byType.supersedes + j.stats.byType['last-changed'] + j.stats.byType.mentions);
+  assert.ok(j.edges.every((e) => typeof e.source === 'string' && typeof e.tId === 'number'));
+});
+
+test('cli: graph --type filters edges and rejects unknown types by name', () => {
+  const { pocketDir } = makeLinkedPocket('cli-graph-type');
+  runCli(['graph'], pocketDir);
+
+  const j = parseJsonLine(runCli(['graph', '--type', 'modifies', '--json'], pocketDir));
+  assert.strictEqual(j.type, 'modifies');
+  assert.ok(j.edges.length > 0);
+  assert.ok(j.edges.every((e) => e.type === 'modifies'), '过滤后不该混进别的类型');
+  assert.strictEqual(j.edgeCount, j.edges.length);
+
+  const bad = runCli(['graph', '--type', 'wires', '--json'], pocketDir);
+  assert.strictEqual(bad.code, 1, '拼错的类型名是错误，不是空结果');
+  const err = parseJsonLine(bad);
+  assert.strictEqual(err.ok, false);
+  assert.ok(/unknown edge type/.test(err.error), err.error);
+});
+
+test('cli: graph rebuild / verify / tamper detection round-trip', () => {
+  const { pocketDir } = makeLinkedPocket('cli-graph-verify');
+  // 没有缓存：verify 通过（缓存是可选物），并说明怎么建
+  const missing = runCli(['graph', 'verify'], pocketDir);
+  assert.strictEqual(missing.code, 0, missing.stderr);
+  assert.ok(missing.stdout.includes('not present'), missing.stdout);
+
+  const rb = parseJsonLine(runCli(['graph', 'rebuild', '--json'], pocketDir));
+  assert.strictEqual(rb.ok, true);
+  assert.strictEqual(rb.action, 'rebuild');
+  assert.ok(rb.edges > 0);
+  const first = fs.readFileSync(path.join(pocketDir, 'assets', 'graph.jsonl'), 'utf-8');
+
+  fs.unlinkSync(path.join(pocketDir, 'assets', 'graph.jsonl'));
+  runCli(['graph', 'rebuild'], pocketDir);
+  assert.strictEqual(fs.readFileSync(path.join(pocketDir, 'assets', 'graph.jsonl'), 'utf-8'), first,
+    '删掉重建必须逐字一致（缓存是派生品的回归锁）');
+
+  // 源动了 → verify 退 1，修法指向 rebuild
+  writePocketFile(pocketDir, 'decisions.md', readPocketFile(pocketDir, 'decisions.md')
+    .replace('- Supersedes: ADR-1', '- Supersedes: none'));
+  const stale = runCli(['graph', 'verify'], pocketDir);
+  assert.strictEqual(stale.code, 1, 'stale 缓存要退 1：' + stale.stdout);
+  assert.ok(stale.stdout.includes('graph rebuild'), stale.stdout);
+
+  // 篡改（签名没动、字节变了）同样要抓到；--json 也是 ok:false
+  runCli(['graph', 'rebuild'], pocketDir);
+  const cachePath = path.join(pocketDir, 'assets', 'graph.jsonl');
+  fs.writeFileSync(cachePath, fs.readFileSync(cachePath, 'utf-8').replace('"evidence":"strong"', '"evidence":"weak"'), 'utf-8');
+  const tampered = runCli(['graph', 'verify', '--json'], pocketDir);
+  assert.strictEqual(tampered.code, 1);
+  assert.strictEqual(parseJsonLine(tampered).ok, false);
+
+  // rebuild 之后回到绿
+  assert.strictEqual(runCli(['graph', 'rebuild'], pocketDir).code, 0);
+  assert.strictEqual(runCli(['graph', 'verify'], pocketDir).code, 0);
+});

@@ -7,9 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [2.0.0] - 2026-11-08
+
+### 🪶 ContextPocket 2.0 Lite 独立轻量包
+
+> ContextPocket 2.0 以节点式上下文连接轮次、文件与决策；2.0 Lite 建立在这套设计和共用
+> Node schema v2 上，面向小型项目与日常对话记忆，优先让读取/写入更快、更简单。
+> 本次通过 GitHub Release 分发；不执行 npm registry 写入。
+
+- **Lite 独立包**（`lite/`）：8 条 CLI 命令 / 8 个 MCP 工具，5 个核心 Markdown 文件；
+  search 现场扫描、graph 运行时派生，不创建索引或缓存。维护、迁移、归档与冲突检测仍由完整包提供。
+- **安全与契约回归锁**：新增 Lite 的 bootstrap、追加、recall 窗口、search 分页、why 证据层级、
+  verify 密钥扫描、graph 零写盘、CLI/MCP 对称，以及与主包的 parser / links / search schema
+  和双向写入互认测试。主包 `npm test` 增加 Lite suite wrapper。
+- **六项轻量指标**（当前测量，Lite / 完整包）：核心文件 5 / 10；CLI 命令 8 / 28；
+  MCP 工具 8 / 28；包文件 27 / 61；启动模块 17 / 25、status 冷启动 best-of-5 约
+  97.0 / 114.3 ms；包体积 96.7 / 398.4 kB。模块数与包清单/体积有绝对值锁，
+  墙钟耗时每次在同一运行环境实测比较。
+- **主包 parser 修复**：空 requirements 文件解析时补齐 `implausible` 数组，避免 `verify`
+  在空口袋读取该字段时报 TypeError；主包与 Lite parser 保持一致。
+- **文档**：路线图、Lite README / SKILL 与根 README 中英版同步说明 2.0 与 Lite 的产品关系。
+
+### 🧭 2.0 路线图 + Phase 0：只读关联图原型（尚未定版、尚未提交）
+
+> `docs/ROADMAP-2.0.md` 是 2.0 / 2.0 Lite 的完整规划：两版共用一份 Node schema v2，
+> Lite 只做确定性单跳邻接，2.0 做图索引 / 多跳 / 时间有效性。本轮只落 Phase 0 ——
+> 先验证「入向上下文」到底有没有人看；不值就停，后面全部不做。
+> **不改数据格式、不写盘、不动版本号、不发版。**
+> 2026-11-08 追加拍板（记入路线图 §8 / §12）：Lite 定为独立 npm 包（同仓独立目录起步），
+> Lite 与 2.0 各自独立版本线；对外版本号统一两位（`2.0`、`2.0-lite`），
+> npm 包内仍为三位 semver（`2.0.0`）。
+
+- **规划**（`docs/ROADMAP-2.0.md`）：基线家底、目标与非目标、Node schema v2 的节点/边/
+  证据等级、确定性派生规则、hybrid 检索契约、两版分化矩阵、v1→v2 迁移、五阶段里程碑与
+  退出 gate、版本计划、测试策略、风险与反面证据、六个参考项目对照、六个待拍板问题。
+- **核心层**（`lib/links.js`，新增）：从 `log.md` / `log-archive.md` / `decisions.md` /
+  `code-map.md` 确定性派生 `modifies` / `mentions` / `references` / `decided-in` /
+  `supersedes` / `last-changed` 六种边；每条带 `source` + `tId` 可溯源；强/弱证据沿用
+  parser 的 `actions.files` / `weakMentions` 分层；code-map 的条目按 basename 唯一回退，
+  歧义就跳过、不造幽灵节点。**纯运行时派生、零写盘、两次调用结果逐字一致**。
+- **CLI / MCP**：`recall <T-id> --with-context`（MCP `withContext`）在单轮详情后附一段
+  「入向上下文」——谁引用了这轮、它改过的文件后来又被哪些轮改过、关联到哪些 ADR、
+  碰过哪些文件及其最后改动轮。`--json` 多一个 `context` 字段；不给旗标时输出逐字不变。
+  窗口模式与 `--with-context` 互斥，明确报错而不是静默丢旗标。
+- **单源 help**：`COMMAND_HELP.recall` / `TOOL_DESCRIPTIONS` / `SERVER_INSTRUCTIONS` 同步，
+  `tests/help.js` 六条单源锁继续全绿。
+- **测试**：新增 10 条（pocket 4 / cli 3 / mcp 3），含「零写盘」快照、边的确定性、
+  反证（删掉 `Corrects` / `Supersedes` / code-map 的 T 行，对应边必须消失）、
+  CLI 与 MCP 的两种错误分支。全量 **302 条通过 / 0 失败**。
+
+**验证**：`npm test` 302/0（67+91+16+17+16+19+42+7+27）、`lint` 39 个 js、
+`smoke` ALL PASS（initialize 报 1.6.1）、`smoke-live` 6/6、
+`npm pack --dry-run` 61 文件 / 381.9 kB（新增的 `lib/links.js` 与路线图都在包里）。
+
+### 🧩 Phase 1：graph 命令 + `assets/graph.jsonl` 缓存（Node schema v2 定稿）
+
+> §12 六个待决问题全部拍板（graph.jsonl / 不做 LLM / v1 零改动可读 / 加 `graph --json` /
+> Lite 独立包 / 两位版本号），Phase 1 进入实现。缓存是**可删的派生索引**，与
+> `assets/search-index.json` 同一定位：真值永远在四份源 Markdown 里，
+> 删掉缓存 `graph rebuild` 逐字重建（有字节级回归锁）。**不动 `format:` 戳、
+> 不发版、不写 npm。**
+
+- **核心层**（`lib/links.js` 扩展）：`serializeGraph` / `parseGraphText` /
+  `writeGraphCache` / `graphCacheStatus` / `verifyGraphCache` / `readGraph` /
+  `refreshGraphCacheIfExists`。JSONL 一行一条记录，第一行 meta（`schema: "graph/1"` +
+  四个源文件的 sha1 签名）；节点与边各占一行、顺序由 deriveLinks 的稳定排序决定，
+  同一口袋永远同一串字节。新鲜度按源签名判定：missing / stale / corrupt / tampered
+  四态；`readGraph` 像搜索索引一样**读取时自愈**（stale / corrupt / schema 不符当场重写），
+  `verifyGraphCache` 在签名之外再做一次**逐字节比对**——源没动、缓存被人手改也抓得住。
+- **CLI / MCP**（对称，28 = 28）：`context-pocket graph`（查看，`--type` 过滤边类型、
+  `--limit` 截断默认 100、`--json` 全量节点+过滤后的边+缓存状态）、
+  `graph rebuild`（强制重写）、`graph verify`（只报不写；stale / corrupt / tampered
+  退 1——含 `--json` 路径，CI/hook 靠退出码分级；missing 通过，缓存是可选物）。
+  MCP `context_pocket_graph` 同一套语义，`action: view/rebuild/verify`，
+  参数级描述与 `TOOL_DESCRIPTIONS` / `COMMAND_HELP.graph` / 主帮助页全部单源同步。
+  `recall --with-context` **仍走运行时派生**，输出与缓存有无、新鲜与否逐字无关。
+- **migrate / repair 收尾**：迁移重写源 Markdown、重编号挪动 T 坐标之后，已存在的
+  graph 缓存自动重写（结果里 `graphCacheRebuilt: true`）；从没建过缓存的口袋
+  **不多出一个文件**。repair 回滚分支同样收尾，不留「verify 绿、graph verify 红」的口袋。
+- **文档**：`docs/MIGRATION.md` 新增「v2 的派生层」章节——它不是 format 版本的一跳、
+  不需要迁移；新旧互读规则、自愈语义、schema bump 策略、灰色地带全写开。
+  `SKILL.md` / `docs/COMPATIBILITY.md` / 中英 README 的命令清单 27 → 28。
+- **测试**：新增 16 条（pocket 6 / cli 3 / mcp 4 / migrate 2 / repair 1），含：
+  删缓存逐字重建、fresh→stale→自愈→命中缓存、corrupt 报告+重写、篡改（签名不动
+  字节变）必须被抓、missing 通过、**v1 口袋零改动可读**（既有文件逐字节不变、唯一
+  新增就是缓存）、migrate/repair 的重建与「不新建」两个分支。全量 **318 条 / 0 失败**。
+
+**验证**：`npm test` 318/0（67+97+16+17+18+20+45+7+31）、`lint` 39 个 js、
+`smoke` ALL PASS、`smoke-live` 6/6、`npm pack --dry-run` 61 文件（`graph.jsonl`
+是用户口袋里的运行时产物，不进包）。
 
 ---
+
+## [Unreleased]
 
 ## [1.6.1] - 2026-11-08
 

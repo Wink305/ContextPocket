@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { assert, test, tmpProject, makePocket, readPocketFile, writePocketFile, makeV1Pocket, v1Block, ROOT } = require('./harness');
+const { assert, test, tmpProject, makePocket, makeLinkedPocket, readPocketFile, writePocketFile, makeV1Pocket, v1Block, ROOT } = require('./harness');
 
 const writer = require(path.join(ROOT, 'lib', 'writer'));
 const parser = require(path.join(ROOT, 'lib', 'parser'));
@@ -20,6 +20,7 @@ const { verify } = require(path.join(ROOT, 'lib', 'validator'));
 const { detectUnrecorded, sync: syncPocket } = require(path.join(ROOT, 'lib', 'sync'));
 const { distill } = require(path.join(ROOT, 'lib', 'distill'));
 const { buildIndex, searchWithIndex, loadIndex, indexPath, resetIndexMemo } = require(path.join(ROOT, 'lib', 'indexer'));
+const links = require(path.join(ROOT, 'lib', 'links'));
 const io = require(path.join(ROOT, 'lib', 'io'));
 const { formatVerifyResult } = require(path.join(ROOT, 'lib', 'formatter'));
 const repair = require(path.join(ROOT, 'lib', 'repair'));
@@ -2267,3 +2268,214 @@ test('recallWindow: 分页在过滤之后算，归档块照常列入并标记', 
   assert.strictEqual(page2.hasMore, false);
 });
 
+// ------------------------------------------------------------
+// Phase 0：关联图（只读派生，见 docs/ROADMAP-2.0.md）
+// ------------------------------------------------------------
+
+/** 口袋目录的完整快照：Phase 0 承诺零写盘，连文件内容都不许变 */
+function pocketSnapshot(dir) {
+  return fs.readdirSync(dir).sort()
+    .map((f) => {
+      const p = path.join(dir, f);
+      if (fs.statSync(p).isDirectory()) return f + '/\u0000' + pocketSnapshot(p);
+      return f + '\u0000' + fs.readFileSync(p, 'utf-8');
+    })
+    .join('\u0000');
+}
+
+test('links: deriveLinks rebuilds deterministic sourced edges and writes nothing', () => {
+  const { pocketDir } = makeLinkedPocket('links-derive');
+  const before = pocketSnapshot(pocketDir);
+
+  const graph = links.deriveLinks(pocketDir);
+  assert.deepStrictEqual(graph, links.deriveLinks(pocketDir), '同一份口袋两次派生必须逐字一致');
+  assert.strictEqual(pocketSnapshot(pocketDir), before, 'Phase 0 只读：不能往口袋里写任何东西');
+
+  const has = (type, from, to) => graph.edges.some((e) => e.type === type && e.from === from && e.to === to);
+  assert.ok(has('modifies', 'T1', 'file:src/a.ts'), 'Action 里的路径要生成强证据 modifies');
+  assert.ok(has('references', 'T2', 'T1'), '`Corrects T1` 要连到被更正轮');
+  assert.ok(has('decided-in', 'adr:ADR-1', 'T1'), 'ADR 标题里的 T 号要连回那一轮');
+  assert.ok(has('supersedes', 'adr:ADR-2', 'adr:ADR-1'), 'Supersedes 要连 ADR');
+  assert.ok(has('last-changed', 'file:src/a.ts', 'T3'), 'code-map 的 T 行要按 basename 归到已有文件节点');
+  assert.ok(has('mentions', 'T3', 'file:src/b.ts'), 'Uncertain 里的路径要收成弱证据');
+
+  for (const e of graph.edges) {
+    assert.ok(e.source, '每条边都要能溯源到源文件：' + JSON.stringify(e));
+    assert.strictEqual(typeof e.tId, 'number', '每条边都要带产出它的 T 号');
+  }
+  assert.strictEqual(graph.edges.filter((e) => e.type === 'mentions')[0].evidence, 'weak');
+  assert.strictEqual(graph.edges.filter((e) => e.type === 'modifies')[0].evidence, 'strong');
+  assert.strictEqual(graph.stats.edges, graph.edges.length);
+});
+
+test('links: buildContext answers the inbound questions a plain recall cannot', () => {
+  const { pocketDir } = makeLinkedPocket('links-context');
+  const ctx = links.buildContext(pocketDir, 1);
+
+  assert.deepStrictEqual(ctx.referencedBy.map((r) => r.ref), ['T2'], '谁引用了我');
+  assert.deepStrictEqual(ctx.laterChanges.map((c) => c.tId), [2, 3], '我改过的文件后来又被谁改过');
+  assert.ok(ctx.laterChanges.every((c) => c.file === 'src/a.ts'));
+  assert.deepStrictEqual(ctx.decisions.map((d) => d.adr), ['ADR-1'], '我关联到哪条 ADR');
+  assert.deepStrictEqual(ctx.relatedFiles, [{ file: 'src/a.ts', lastChangedT: 3 }]);
+  assert.deepStrictEqual(ctx.weakMentions, [], '弱证据默认折叠');
+  assert.ok(links.formatContextLines(ctx).some((l) => l.includes('Later change')));
+});
+
+test('links: weak mentions only appear when explicitly requested', () => {
+  const { pocketDir } = makeLinkedPocket('links-weak');
+  const plain = links.buildContext(pocketDir, 3);
+  assert.strictEqual(plain.counts.weakMentions, 0);
+  const withWeak = links.buildContext(pocketDir, 3, { includeWeak: true });
+  assert.deepStrictEqual(withWeak.weakMentions, [{ file: 'src/b.ts', section: 'Uncertain' }]);
+  assert.ok(links.formatContextLines(withWeak).some((l) => l.includes('Mentioned (weak)')));
+});
+
+test('links: edge anchors really go red when their source line is removed', () => {
+  const { pocketDir } = makeLinkedPocket('links-negative');
+  const graph = links.deriveLinks(pocketDir);
+  assert.ok(graph.edges.some((e) => e.type === 'references'));
+  assert.ok(graph.edges.some((e) => e.type === 'supersedes'));
+  assert.ok(graph.edges.some((e) => e.type === 'last-changed'));
+
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md').replace('- Corrects T1: 窗口应为闭区间', '- 只是普通说明'));
+  writePocketFile(pocketDir, 'decisions.md', readPocketFile(pocketDir, 'decisions.md').replace('- Supersedes: ADR-1', '- Supersedes: none'));
+  writePocketFile(pocketDir, 'code-map.md', readPocketFile(pocketDir, 'code-map.md').replace('T3: 重构', 'T3 重构'));
+
+  const after = links.deriveLinks(pocketDir);
+  assert.ok(!after.edges.some((e) => e.type === 'references'), '删掉 Corrects 行后引用边必须消失');
+  assert.ok(!after.edges.some((e) => e.type === 'supersedes'), '改掉 Supersedes 后边必须消失');
+  assert.ok(!after.edges.some((e) => e.type === 'last-changed'), '改掉 code-map 的 T 行后边必须消失');
+  assert.ok(after.edges.some((e) => e.type === 'modifies'), '其它边不受影响');
+});
+
+
+// ============================================================
+// Phase 1：assets/graph.jsonl 缓存
+// ============================================================
+
+test('graph cache: delete + rebuild reproduces the file byte for byte', () => {
+  const { pocketDir } = makeLinkedPocket('graph-rebuild');
+  const w1 = links.writeGraphCache(pocketDir);
+  const first = fs.readFileSync(w1.path, 'utf-8');
+
+  // 删掉缓存（用户可以随时删）再重建：字节级一致，这是「图是派生品」的回归锁
+  fs.unlinkSync(w1.path);
+  const w2 = links.writeGraphCache(pocketDir);
+  assert.strictEqual(fs.readFileSync(w2.path, 'utf-8'), first, 'rebuild 后的缓存必须逐字一致');
+
+  // 与纯函数序列化也对得上：writeGraphCache 没有夹带任何非派生内容
+  const fresh = links.serializeGraph(links.deriveLinks(pocketDir), links.sourceSignature(pocketDir));
+  assert.strictEqual(first, fresh);
+
+  // 第一行是 meta；节点/边各占一行；schema 版本钉死
+  const lines = first.split('\n').filter((l) => l !== '');
+  const meta = JSON.parse(lines[0]);
+  assert.strictEqual(meta.kind, 'meta');
+  assert.strictEqual(meta.schema, links.GRAPH_SCHEMA);
+  assert.strictEqual(lines.length, 1 + w1.nodes + w1.edges);
+});
+
+test('graph cache: status walks missing → fresh → stale, and view self-heals', () => {
+  const { pocketDir } = makeLinkedPocket('graph-status');
+  assert.strictEqual(links.graphCacheStatus(pocketDir).status, 'missing');
+
+  links.writeGraphCache(pocketDir);
+  assert.strictEqual(links.graphCacheStatus(pocketDir).status, 'fresh');
+
+  // 源动了 → stale；readGraph 像搜索索引一样当场自愈
+  writePocketFile(pocketDir, 'log.md', readPocketFile(pocketDir, 'log.md')
+    + '\n--- SESSION: 2026-11-04 ---\n\n## T4 · 新一轮 · [代码逻辑]\n--- WHEN: 2026-11-04 ---\n\n### User\n- 原话\n\n### Action\n- 新增 src/c.ts — 新文件\n\n');
+  assert.strictEqual(links.graphCacheStatus(pocketDir).status, 'stale');
+
+  const r = links.readGraph(pocketDir);
+  assert.strictEqual(r.rebuilt, true, 'stale 缓存要在读取时重写');
+  assert.strictEqual(r.previousStatus, 'stale');
+  assert.ok(r.graph.edges.some((e) => e.type === 'modifies' && e.from === 'T4'), '新轮次的边要进图');
+  assert.strictEqual(links.graphCacheStatus(pocketDir).status, 'fresh');
+
+  // 自愈后的图与直接派生完全一致：缓存永远不改变图的内容
+  assert.deepStrictEqual(r.graph.edges, links.deriveLinks(pocketDir).edges);
+
+  // 再读一次：命中缓存，不再写盘
+  const again = links.readGraph(pocketDir);
+  assert.strictEqual(again.rebuilt, false);
+});
+
+test('graph cache: corrupt cache is reported, and readGraph rewrites it', () => {
+  const { pocketDir } = makeLinkedPocket('graph-corrupt');
+  const w = links.writeGraphCache(pocketDir);
+  fs.writeFileSync(w.path, 'not json at all\n{"kind":"edge"}\n', 'utf-8');
+
+  const status = links.graphCacheStatus(pocketDir);
+  assert.strictEqual(status.status, 'corrupt');
+  assert.ok(status.issues.length >= 2, '坏行要逐条报：' + JSON.stringify(status.issues));
+
+  const r = links.readGraph(pocketDir);
+  assert.strictEqual(r.rebuilt, true, 'corrupt 缓存要在读取时重写');
+  assert.strictEqual(links.verifyGraphCache(pocketDir).ok, true, '重写后 verify 要绿');
+});
+
+test('graph cache: verify catches tampering that keeps the signature', () => {
+  const { pocketDir } = makeLinkedPocket('graph-tamper');
+  const w = links.writeGraphCache(pocketDir);
+
+  // 只改一条边的 to：meta 里的源签名没动，字节比对必须抓得住
+  const text = fs.readFileSync(w.path, 'utf-8');
+  const tampered = text.replace('"to":"file:src/a.ts"', '"to":"file:src/zz.ts"');
+  assert.notStrictEqual(tampered, text, '篡改要真的改到内容');
+  fs.writeFileSync(w.path, tampered, 'utf-8');
+
+  const v = links.verifyGraphCache(pocketDir);
+  assert.strictEqual(v.ok, false);
+  assert.strictEqual(v.status, 'tampered');
+
+  // rebuild 之后恢复一致
+  links.writeGraphCache(pocketDir);
+  assert.strictEqual(links.verifyGraphCache(pocketDir).ok, true);
+});
+
+test('graph cache: missing cache passes verify (it is optional, recall never needs it)', () => {
+  const { pocketDir } = makeLinkedPocket('graph-missing');
+  const v = links.verifyGraphCache(pocketDir);
+  assert.strictEqual(v.ok, true);
+  assert.strictEqual(v.status, 'missing');
+  assert.ok(/optional/.test(v.message), v.message);
+});
+
+test('graph cache: view leaves v1 pocket markdown untouched (zero-change readability)', () => {
+  const made = makeV1Pocket('graph-v1-pocket');
+  const before = pocketFileMap(made.pocketDir);
+
+  const r = links.readGraph(made.pocketDir);
+  assert.strictEqual(r.rebuilt, true, 'v1 口袋没有缓存，第一次查看要生成一个');
+
+  // 既有文件（含全部 Markdown）一个字节不能动，唯一允许的新增是 assets/graph.jsonl
+  const after = pocketFileMap(made.pocketDir);
+  for (const name of Object.keys(before)) {
+    assert.ok(after[name] !== undefined, 'readGraph 不许删任何既有文件：' + name);
+    assert.strictEqual(after[name], before[name], '既有文件必须逐字不变：' + name);
+  }
+  assert.deepStrictEqual(
+    Object.keys(after).filter((n) => before[n] === undefined),
+    ['assets/graph.jsonl'],
+    '唯一允许的新增就是缓存文件'
+  );
+
+  // v1 读者（只认白名单）不受影响；新读者的派生照常工作
+  assert.ok(r.graph.edges.length > 0, 'v1 的块也能派生出边');
+});
+
+/** 递归的 file → content 映射：「零改动可读」用逐文件比对，别跟快照字符串较劲 */
+function pocketFileMap(dir, base) {
+  const out = {};
+  for (const name of fs.readdirSync(dir)) {
+    const rel = (base ? base + '/' : '') + name;
+    const p = path.join(dir, name);
+    if (fs.statSync(p).isDirectory()) {
+      Object.assign(out, pocketFileMap(p, rel));
+    } else {
+      out[rel] = fs.readFileSync(p, 'utf-8');
+    }
+  }
+  return out;
+}

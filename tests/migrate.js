@@ -525,3 +525,37 @@ test('cli: a bad target is a JSON error with exit 1, not a stack trace', () => {
   assert.strictEqual(parsed.ok, false);
   assert.ok(/Invalid target version "banana"/.test(parsed.error), parsed.error);
 });
+
+// ------------------------------------------------------------
+// Phase 1：迁移收尾要重写已存在的 graph 缓存（没建过的不新建）
+// ------------------------------------------------------------
+
+test('migrate: refreshes an existing graph cache after rewriting the sources', () => {
+  const made = makeV1Pocket('migrate-graph-cache');
+  const links = require(path.join(ROOT, 'lib', 'links'));
+
+  // v1 时代就用过 graph 的口袋：缓存已经存在
+  links.writeGraphCache(made.pocketDir);
+  assert.strictEqual(links.graphCacheStatus(made.pocketDir).status, 'fresh');
+
+  const result = migrate.runMigration(made.pocketDir, {});
+  assert.strictEqual(result.success, true, JSON.stringify(result));
+  assert.strictEqual(result.graphCacheRebuilt, true, '源被迁移改写后要重写缓存');
+  // log.md 补了时间行 → 旧缓存必然 stale；重写后必须 fresh
+  assert.ok(readPocketFile(made.pocketDir, 'log.md').includes('--- WHEN:'));
+  assert.strictEqual(links.verifyGraphCache(made.pocketDir).ok, true, '重写后的缓存要能过 verify');
+
+  // 已在最新版的口袋再跑一遍是空跑：不碰缓存
+  const again = migrate.runMigration(made.pocketDir, {});
+  assert.strictEqual(again.skipped, true, JSON.stringify(again));
+});
+
+test('migrate: a pocket that never used graph gains no cache file', () => {
+  const made = makeV1Pocket('migrate-graph-absent');
+  const links = require(path.join(ROOT, 'lib', 'links'));
+
+  const result = migrate.runMigration(made.pocketDir, {});
+  assert.strictEqual(result.success, true, JSON.stringify(result));
+  assert.strictEqual(result.graphCacheRebuilt, false, '没建过缓存就不新建（零新增文件）');
+  assert.ok(!fs.existsSync(links.graphPath(made.pocketDir)), '迁移不该顺手造缓存');
+});

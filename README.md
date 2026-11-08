@@ -20,6 +20,19 @@
 - Next agent reads it once and picks up progress in 5 seconds.
 - Captures: requirements, code changes, decisions, pitfalls, preferences.
 
+## ContextPocket 2.0 and 2.0 Lite
+
+**ContextPocket 2.0** adds node-based context: turns, files and decisions are connected in a traceable graph, so `recall --with-context` can show related history and the full package can inspect, rebuild and verify its graph index. It keeps the broader 28-command CLI / MCP toolset for larger, long-lived project memories.
+
+**ContextPocket 2.0 Lite** builds on the same node schema and pocket format, but simplifies the read/write path for small projects and everyday conversation memory. It uses five core Markdown files, eight CLI commands / MCP tools, on-demand search and runtime-only graph derivation—no search index or graph cache.
+
+| Edition | Best for | Context graph | Footprint |
+|---|---|---|---|
+| **2.0** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
+| **2.0 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
+
+Download the GitHub Release archives: [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
+
 🚀 **How to use**
 
 1. **Install** — pick one of the three methods in [Quick Start](#1-install) (CLI command, no-install script call, or skill-directory copy)
@@ -234,6 +247,7 @@ All commands below work via CLI when Node.js 14+ is available. Type `context-poc
 | `context-pocket search <keyword> --dir <root> [--limit N] [--offset N] [--no-index]` | Keyword search over the whole history: T-blocks (gist, tags, every section, archived turns included), ADRs, requirements and preferences. Auto-uses the `assets/search-index.json` index; `--no-index` scans the markdown instead — both paths match and order identically, so `--limit`/`--offset` page the same list (`--limit 0` = all). Matching: latin words split on separators, Chinese is indexed as adjacent two-character pairs, and **every** query term must hit. A phrase inside a longer Chinese run therefore works (`时间分页` finds 「给搜索加时间分页」) and a reordered one does not (`分页时间`); one lone Chinese character only matches where that character stands alone |
 | `context-pocket why <file-path> --dir <root>` | Reverse lookup: which T-blocks mention this file, split by evidence — `[changed]` (path in that turn's Action section) vs `[mentioned only]` (elsewhere: Uncertain / Attachments / Conflicts / Pitfalls …). Changed turns are listed first, so `--limit` drops the weak ones, never the real edits (Inspired by ThoughtDAG) |
 | `context-pocket check-conflicts --dir <root>` | 6-dimension conflict scan with severity (critical / warning / info) |
+| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | View the derived link graph (T ↔ file ↔ ADR; edges: modifies / mentions / references / decided-in / supersedes / last-changed, each citing source + T-id). `graph rebuild` rewrites the `assets/graph.jsonl` cache byte-identically from the markdown; `graph verify` reports cache-vs-source drift |
 | `context-pocket log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | Append one T-block to log.md (pass `--user "<what the user asked>"` — a block without it fails verify and blocks commits). `--when` is optional: the block is stamped with the moment you record it, and `--when` only overrides that when the turn actually happened at another time. `--author "<who is recording>"` signs the turn in a `### Author` section — use it when several agents share one pocket; omit it and the block simply has no author, the tool never guesses one. Every append also compares this turn against what the pocket already says and writes what it **newly** collides with into the block's `### Conflicts` section prefixed `[auto]` (`--no-conflict-check` opts out and the tool says so). The scan reports, it never blocks the record |
 | `context-pocket log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | Fill in sections **missing** from an existing T-block. Never overwrites existing content — `--when` will add a missing time line or sharpen a day-only one, but refuses to rewrite a moment that was already recorded, and `--author` only adds a missing `### Author` section |
 | `context-pocket absolute add --dir <root> --text "..." [--gist "..."]` | Append a 🔒 red-line entry to absolute.md (verbatim, never compressed) |
@@ -408,7 +422,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode**: For scripts/small projects — creates only the 5 core files; others are created on demand.
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.0 Lite package, which shares the node-based context schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 

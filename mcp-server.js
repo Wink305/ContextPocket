@@ -35,6 +35,7 @@ const {
 } = require('./lib/writer');
 const { bootstrap } = require('./lib/bootstrap');
 const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('./lib/query');
+const { buildContext, formatContextLines, readGraph, writeGraphCache, verifyGraphCache } = require('./lib/links');
 const { runMigration, listMigrations } = require('./lib/migrate');
 const { repairLogIds } = require('./lib/repair');
 const { describeWhen, describeWhenLine } = require('./lib/when');
@@ -297,6 +298,11 @@ const TOOLS = [
           description: 'Window mode — turns to skip before the page (CLI equivalent: --offset)',
           default: 0,
         },
+        withContext: {
+          type: 'boolean',
+          description: 'Single-turn mode only — append read-only inbound context derived from links (who referenced this turn, later changes to the same files, related ADRs). CLI equivalent: --with-context. Cannot be combined with a window.',
+          default: false,
+        },
       },
     },
   },
@@ -388,6 +394,31 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'context_pocket_graph',
+    description: TOOL_DESCRIPTIONS.context_pocket_graph,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['view', 'rebuild', 'verify'],
+          description: 'view (default) = show the derived graph, rebuilding the cache if stale/missing/corrupt; rebuild = force-rewrite the cache from the sources; verify = report cache-vs-source consistency without writing',
+          default: 'view',
+        },
+        type: {
+          type: 'string',
+          enum: ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'],
+          description: 'view only — restrict edges to one type',
+        },
+        limit: {
+          type: 'number',
+          description: 'view only — max edges to return (default 100; 0 = all). CLI equivalent: --limit',
+          default: 100,
+        },
+      },
     },
   },
   {
@@ -959,6 +990,9 @@ function handleToolsCall(id, params) {
       case 'context_pocket_check_conflicts':
         result = toolCheckConflicts();
         break;
+      case 'context_pocket_graph':
+        result = toolGraph(args || {});
+        break;
 
       // Git safety net
       case 'context_pocket_sync':
@@ -1263,6 +1297,7 @@ function toolRecall(args) {
   const pocketDir = getPocketDir();
   // 与 CLI 同一份归一：裸 parseInt 会把 "abc" 变成 NaN 再当合法编号传给 recall
   const tId = toTId(args.tId);
+  const withContext = args.withContext === true;
 
   // 四个窗口参数与 context_pocket_search 同名同义，判据最终都落到 query.filterByTime。
   const sinceT = typeof args.sinceT === 'number' && args.sinceT > 0 ? args.sinceT : null;
@@ -1281,6 +1316,14 @@ function toolRecall(args) {
   if (Number.isNaN(tId) && !hasWindow) {
     return {
       content: [{ type: 'text', text: '❌ Error: tId or a time window is required. Pass tId (positive integer, e.g. 7 or "T7") for one full turn, or sinceT/untilT/fromDate/toDate to list a window.' }],
+      isError: true,
+    };
+  }
+
+  // 与 CLI 同一份互斥：withContext 只对单轮有意义，窗口是列表，静默丢旗标不行
+  if (withContext && Number.isNaN(tId) && hasWindow) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: withContext applies to a single tId, not to a window listing. Pass tId with withContext, or omit withContext for a window.' }],
       isError: true,
     };
   }
@@ -1322,6 +1365,8 @@ function toolRecall(args) {
     };
   }
 
+  const context = withContext ? buildContext(pocketDir, tId) : null;
+
   const lines = [];
   lines.push(`## T${result.id} · ${result.gist}${result.archived ? ' *(archived)*' : ''}`);
   if (result.tags && result.tags.length > 0) {
@@ -1348,6 +1393,10 @@ function toolRecall(args) {
       }
       lines.push('');
     }
+  }
+
+  if (context) {
+    lines.push('', '### Inbound context (derived, read-only)', ...formatContextLines(context));
   }
 
   return {
@@ -1590,6 +1639,101 @@ function toolCheckConflicts() {
   return {
     content: [{ type: 'text', text: lines.join('\n') }],
   };
+}
+
+// --- Derived link graph (Phase 1) ---
+
+function toolGraph(args) {
+  const pocketDir = getPocketDir();
+  const action = args.action === undefined ? 'view' : String(args.action);
+  const typeFilter = args.type === undefined || args.type === null || String(args.type).trim() === ''
+    ? null
+    : String(args.type).trim();
+
+  if (action === 'rebuild') {
+    const r = writeGraphCache(pocketDir);
+    const lines = [];
+    lines.push(`✅ **Graph cache rebuilt** — ${r.nodes} nodes · ${r.edges} edges · ${r.bytes} bytes`);
+    lines.push(`- File: ${path.relative(process.cwd(), r.path) || r.path}`);
+    const parts = Object.keys(r.stats.byType).sort().map((t) => `${t} ${r.stats.byType[t]}`);
+    if (parts.length) lines.push(`- ${parts.join(' · ')}`);
+    lines.push('');
+    lines.push('Markdown files remain the single source of truth —');
+    lines.push('the graph is a derived cache; delete it and rebuild anytime.');
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+
+  if (action === 'verify') {
+    const v = verifyGraphCache(pocketDir);
+    const lines = [];
+    if (v.ok) {
+      lines.push(`✅ **Graph cache ${v.status === 'fresh' ? 'matches the sources' : 'not present'}**`);
+      if (v.stats) lines.push(`- Nodes: ${v.stats.nodes} · Edges: ${v.stats.edges}`);
+      if (v.message) lines.push(`- ${v.message}`);
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+    lines.push('❌ **Graph cache does not match the sources:**');
+    if (v.reason) lines.push(`- ${v.reason}`);
+    for (const issue of (v.issues || [])) {
+      lines.push(`- line ${issue.line}: ${issue.problem}`);
+    }
+    lines.push('');
+    lines.push('Fix: call this tool with action="rebuild" (or `context-pocket graph rebuild`).');
+    return { content: [{ type: 'text', text: lines.join('\n') }], isError: true };
+  }
+
+  if (action !== 'view') {
+    return {
+      content: [{ type: 'text', text: `❌ Error: unknown action "${action}". Use "view", "rebuild" or "verify".` }],
+      isError: true,
+    };
+  }
+
+  const KNOWN_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'];
+  if (typeFilter && !KNOWN_TYPES.includes(typeFilter)) {
+    return {
+      content: [{ type: 'text', text: `❌ Error: unknown edge type "${typeFilter}". Known types: ${KNOWN_TYPES.join(', ')}.` }],
+      isError: true,
+    };
+  }
+
+  const limit = intOption(args.limit, 100);
+  const r = readGraph(pocketDir);
+  const graph = r.graph;
+
+  let edges = graph.edges;
+  if (typeFilter) edges = edges.filter((e) => e.type === typeFilter);
+  const total = edges.length;
+  const shown = limit === 0 ? edges : edges.slice(0, limit);
+
+  const nodesByType = {};
+  for (const n of graph.nodes) nodesByType[n.type] = (nodesByType[n.type] || 0) + 1;
+
+  const lines = [];
+  lines.push('## ContextPocket · Derived link graph');
+  lines.push(`- Nodes: ${graph.stats.nodes} (${Object.keys(nodesByType).sort().map((t) => `${nodesByType[t]} ${t}`).join(', ')})`);
+  const parts = Object.keys(graph.stats.byType).sort().map((t) => `${t} ${graph.stats.byType[t]}`);
+  lines.push(`- Edges: ${graph.stats.edges}${parts.length ? ' — ' + parts.join(' · ') : ''}`);
+  lines.push(`- Cache: ${r.cacheStatus}${r.rebuilt ? ` (was ${r.previousStatus}, rewritten on read)` : ''} · ${path.relative(process.cwd(), r.path) || r.path}`);
+  lines.push('');
+
+  const title = typeFilter
+    ? `### ${typeFilter} edges (${total})`
+    : `### Edges (${total}${limit !== 0 && total > shown.length ? `, showing first ${shown.length} — pass limit=0 for all, type to filter` : ''})`;
+  lines.push(title);
+  if (shown.length === 0) {
+    lines.push(`*(no edges${typeFilter ? ` of type "${typeFilter}"` : ''} derived from this pocket)*`);
+  }
+  for (const e of shown) {
+    const weak = e.evidence === 'weak' ? ' · **weak**' : '';
+    const via = e.via ? ` · via ${e.via}` : '';
+    const src = `source ${e.source}${e.tId !== null && e.tId !== undefined ? ' · T' + e.tId : ''}`;
+    lines.push(`- \`${e.from}\` —${e.type}→ \`${e.to}\`${weak}${via} (${src})`);
+  }
+  lines.push('');
+  lines.push('Derived from log.md / log-archive.md / decisions.md / code-map.md — every edge cites its source; weak evidence is marked. recall with withContext uses the live derivation, so it never depends on this cache.');
+
+  return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
 
 // --- Git safety net ---

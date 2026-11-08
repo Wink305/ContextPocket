@@ -20,6 +20,19 @@
 - 下次任何 Agent 读一遍，5 秒续上进度。
 - 记录内容：需求、代码变更、决策、踩坑、偏好。
 
+## ContextPocket 2.0 与 2.0 Lite
+
+**ContextPocket 2.0** 加入节点式上下文：把轮次、文件和决策连接成可追溯的图，`recall --with-context` 可展示关联历史；完整包还可查看、重建和校验图索引。它保留更完整的 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。
+
+**ContextPocket 2.0 Lite** 建立在相同的节点 schema 和口袋格式之上，为小型项目和日常对话记忆简化读写路径。它使用 5 个核心 Markdown 文件、8 条 CLI 命令 / MCP 工具；搜索现场扫描、关联图运行时派生，不创建搜索索引或图缓存。
+
+| 版本 | 适用场景 | 上下文关联图 | 规模 |
+|---|---|---|---|
+| **2.0** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
+| **2.0 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
+
+下载 GitHub Release 压缩包：[ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
+
 🚀 **方法**
 
 1. **安装** — 在[快速开始](#1-安装)里三选一：装成全局命令、免安装直接 `node` 调用、或复制到 Agent 的 skill 目录
@@ -234,6 +247,7 @@ Agent 会自动：
 | `context-pocket search <关键词> --dir <root> [--limit N] [--offset N] [--no-index]` | 在全量历史上做关键词搜索：T-block（gist、标签、每一个小节，含已归档轮次）、ADR、需求与偏好。自动走 `assets/search-index.json` 索引，加 `--no-index` 直接扫 Markdown —— 两条路径的匹配与排序完全相同，所以 `--limit`/`--offset` 翻的是同一份结果（`--limit 0` 为全部）。匹配规则：拉丁词按分隔符拆开，中文按**相邻两字组合**建索引，且查询词必须**全部**命中。所以长中文串里的短语能搜到（`时间分页` 能找到「给搜索加时间分页」），换个顺序就不行（`分页时间` 搜不到）；单独一个汉字只能命中那个字独立出现的地方 |
 | `context-pocket why <文件路径> --dir <root>` | 反向检索：哪些 T-block 提到过这个文件，并按证据强弱分开 —— `[changed]`（该轮 Action 小节里有这个路径）与 `[mentioned only]`（只在 Uncertain / Attachments / Conflicts / Pitfalls 里出现）。改过它的那几轮排前面，所以 `--limit` 截掉的是弱证据，不会把真实改动挤掉（借鉴 ThoughtDAG） |
 | `context-pocket check-conflicts --dir <root>` | 6 维冲突扫描，三级严重度（critical / warning / info） |
+| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | 查看派生关联图（T ↔ 文件 ↔ ADR；边：modifies / mentions / references / decided-in / supersedes / last-changed，每条带来源与 T 号）。`graph rebuild` 从 Markdown 逐字重建 `assets/graph.jsonl` 缓存；`graph verify` 只报缓存与源是否一致 |
 | `context-pocket log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | 追加一轮 T-block 到 log.md（务必带 `--user "<用户原话>"`，否则 verify 报错并被 hook 拦下提交）。`--when` 可省略：默认盖成“你记录它的那一刻”，只有当这一轮实际发生在别的时间才用它覆盖。`--author "<谁在记>"` 把写入者写进这一块的 `### Author` 小节——多个 Agent 共用一份 pocket 时该带上；不传就没有这一小节，工具绝不会替你猜一个名字。每一次追加还会拿这一轮去比对 pocket 里已经写着的东西，把**新撞上的**那些以 `[auto]` 前缀写进这一块的 `### Conflicts` 小节（`--no-conflict-check` 可以跳过，跳过也会明说一句）。比对只做通报，永远不拦这次记录 |
 | `context-pocket log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | 补齐**已写入** T-block 中缺失的小节；绝不覆盖已有内容——`--when` 可以补一条缺失的时间行、或把只知道天的精确到时刻，但会拒绝改写一个已经记下过的时间点；`--author` 只补缺失的 `### Author` 小节，不覆盖块上已有的署名 |
 | `context-pocket absolute add --dir <root> --text "..." [--gist "..."]` | 追加一条🔒绝对保留到 absolute.md（原样保存，永不压缩） |
@@ -405,7 +419,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 - tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
 ```
 
-**Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。
+**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket 2.0 Lite 包**，建立在 2.0 节点式上下文与共用 schema 之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
 
 ---
 

@@ -10,7 +10,7 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `1.6.1` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `2.0.0` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
 
 ### 兼容性原则
@@ -168,6 +168,60 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 - **归档安全**：`archive` 是按行范围把整块搬进 `log-archive.md` 的，时间行紧跟标题，所以它一定跟着自己的块走（`tests/pocket.js` 有一条专门查这个）。
 - **精度不会倒退**：迁移补出来的历史只有"天"，之后新记录的轮次仍然精确到分钟。想知道某块是升级前还是升级后记的，看 `(day)` 就够了。
 - 反过来（v2 降回 v1）登记表里没有这一跳，也不会加：时间行是加法产物，留着它对 v1 读者无害。
+
+---
+
+## v2 的派生层：`assets/graph.jsonl`（Node schema v2）
+
+> 这是 Phase 1（关联图缓存）的落盘说明。**它不是数据格式版本的一跳**：
+> `ContextPocket/readme.md` 的 `format:` 戳不动，登记表里没有它的迁移步骤。
+> 图是纯派生品 —— 真值永远在 `log.md` / `log-archive.md` / `decisions.md` /
+> `code-map.md` 四份 Markdown 里，缓存删了随时逐字重建。
+
+### 它是什么
+
+`ContextPocket/assets/graph.jsonl`，一行一条 JSON 记录，第一行是 meta：
+
+```jsonl
+{"kind":"meta","schema":"graph/1","sources":{"log.md":"<sha1>", ...}}
+{"kind":"node","id":"T1","type":"turn","label":"初版","archived":false,"source":"log.md"}
+{"kind":"edge","from":"T1","to":"file:src/a.ts","type":"modifies","evidence":"strong","source":"log.md","tId":1,"via":null}
+```
+
+节点类型 `turn` / `file` / `decision` / `correction`；边类型 `modifies` /
+`mentions`（弱证据）/ `references` / `decided-in` / `supersedes` /
+`last-changed`。每条边带 `source`（来自哪份文件）与 `tId`（哪一轮），
+`evidence: "weak"` 的边绝不冒充改动 —— 与 `why` 的证据分层同一套。
+
+### 与 format v1/v2 的关系（重要）
+
+- **不需要迁移**：v1 与 v2 的口袋都直接可用，第一次跑 `context-pocket graph`
+  时缓存自动生成（只新增 `assets/graph.jsonl`，四份源 Markdown 一个字节不动）。
+- **旧 skill 读新口袋**：1.x 的读者只认白名单里的 Markdown 与
+  `assets/search-index.json`，多出来的 `graph.jsonl` 被原样忽略、不报错。
+- **新 skill 读旧口袋**：没有缓存就现场派生，`recall --with-context` 的输出
+  与有没有缓存**逐字无关**（它始终走运行时派生，永不受缓存新鲜度影响）。
+- `migrate` 走完一跳之后、`repair` 重编号之后，若缓存已存在会自动重写
+  （`graphCacheRebuilt` 字段）；从没建过缓存的口袋不多出一个文件。
+
+### 新鲜度与自愈
+
+- meta 行记着四个源文件各自的 sha1；源动了，缓存判 `stale`。
+- `graph`（查看）遇到 missing / stale / corrupt / schema 不符，**当场重写**再输出
+  —— 与 `search` 对 `search-index.json` 的自愈语义相同。
+- `graph verify` 只报不写：`fresh` 通过；`missing` 也通过（缓存是可选物）；
+  `stale` / `corrupt`（JSON 坏行、meta 不在第一行）/ `tampered`（签名没动但
+  字节与现场派生对不上）都是失败、退 1。
+- `graph rebuild` 强制重写。**回归锁**：删掉缓存 → rebuild → 与删除前逐字节一致
+  （`tests/pocket.js`）。派生规则变更时 bump `GRAPH_SCHEMA`（`"graph/1"` →
+  `"graph/2"`），旧缓存据此判 stale 自动重写，不需要任何手工迁移步骤。
+
+### 灰色地带
+
+- `log-archive.md` 不存在时按空内容参与签名 —— 归档文件后来出现（哪怕内容为空）
+  会让签名变化，缓存判 stale 重写；这是代价最小的保守取向，不丢任何边。
+- code-map 树里只写 basename 的条目按「唯一同名文件」回退归属，歧义就跳过
+  —— 宁可少一条边，不造幽灵节点（`lib/links.js` 的派生规则第 8 条）。
 
 ---
 
