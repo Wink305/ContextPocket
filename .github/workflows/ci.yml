@@ -6,13 +6,15 @@ name: CI
 #   smoke       MCP 协议冒烟（mcp-smoke.js）
 #   smoke-live  真实 CLI 子进程整链路活测（tests/smoke-live.js，全程临时目录，不碰 ~/.contextpocket）
 # 发版前本地跑的就是这四条，CI 再兜一遍 —— 两边跑的命令一字不差，避免"本地绿、CI 红"的口径漂移。
-# 1.6.1 起 `v*` tag 也触发：tag 推上去用自己的代码再跑一遍四道门禁，不再只是 main 那条 run
+# 1.6.1 起发版 tag 也触发：tag 推上去用自己的代码再跑一遍四道门禁，不再只是 main 那条 run
 # 的附属品。1.5.1 当时只有 push main 触发，tag 和 Release 都发完了才发现那条 run 是红的。
+# 2.0.1-hotfix1 起 tag 去掉 v 前缀（用户拍板「以后不要v了」）：`[0-9]*` 认新命名，
+# `v*` 继续兼容历史 tag，两条都在，发版闸门不因改名而失效。
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['[0-9]*', 'v*']
   pull_request:
 
 jobs:

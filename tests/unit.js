@@ -1015,15 +1015,16 @@ test('CI workflow gates release tags with the same four checks as main', () => {
   const wf = fs.readFileSync(path.join(ROOT, rel), 'utf-8');
 
   const assertGates = (text) => {
-    assert.ok(/tags:\s*\[\s*'v\*'\s*\]/.test(text),
-      rel + " 的 on.push 必须含 tags: ['v*']，否则发版 tag 推上去不会跑任何门禁");
+    assert.ok(/tags:\s*\[\s*'\[0-9\]\*'\s*,\s*'v\*'\s*\]/.test(text),
+      rel + " 的 on.push 必须含 tags: ['[0-9]*', 'v*']：2.0.1-hotfix1 起 tag 去 v 前缀，"
+      + '裸版本号由 [0-9]* 触发、历史 v* 继续兼容，否则发版 tag 推上去不会跑任何门禁');
     for (const cmd of ['npm run lint', 'node tests/run.js', 'npm run smoke', 'npm run smoke-live']) {
       assert.ok(text.includes(cmd), rel + ' 缺 ' + cmd + '：tag 触发了却少跑一道门禁');
     }
   };
   assertGates(wf);
 
-  assert.throws(() => assertGates(wf.replace(/tags:\s*\[\s*'v\*'\s*\]/, "tags: ['none']")),
+  assert.throws(() => assertGates(wf.replace(/tags:\s*\[\s*'\[0-9\]\*'\s*,\s*'v\*'\s*\]/, "tags: ['none']")),
     /on\.push/, 'tags 锚点必须在触发条件被改掉时真的报红');
   assert.throws(() => assertGates(wf.replace('npm run smoke-live', 'echo skipped')),
     /smoke-live/, '四道命令的锚点必须在少一道时真的报红');

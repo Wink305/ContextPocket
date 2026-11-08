@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **文档纠偏**：ROADMAP §13 的 Phase 2 状态从「未提交、待确认」改为已发行
   （commit `e7cff19`、tag `v2.0`、已推送）；§12 追加 hotfix 展示拍板。
 - **测试清理**：删掉 lite/tests/core.js 里一行原样重复的断言。
+- **tag 去 v 前缀**（用户拍板「以后不要v了」）：本次起 tag 直接用版本号
+  （`2.0.1-hotfix1` / `2.0.1-Lite-hotfix1`）；CI 闸门改认 `['[0-9]*', 'v*']`，
+  新命名与历史 tag 都触发四道门禁，unit.js 触发条件锁与 CONTRIBUTING 第 6 步同步。
 
 ## [2.0.0] - 2026-11-08
 

@@ -226,10 +226,12 @@ context-pocket/
 5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单真的把它带上了。
    落在 `bin/` `lib/` `templates/` `assets/` `docs/` `scripts/` 里的会自动带上；白名单外的目录要显式加，
    否则发布出去的包缺文件，用户拿到的就是"读不到 package.json、只能报兜底版本"那种安装。
-6. 创建 Git tag: `git tag vX.Y.Z`（`refs/tags/` 下现有 tag 全是 lightweight，别用 `-a`
-   另外造出 annotated tag 让口径分叉），再 `git push origin vX.Y.Z`。
-   `.github/workflows/ci.yml` 的 `on.push.tags: ['v*']` 会让这次 tag 推送自己也跑一遍四道门禁；
-   `tests/unit.js` 有一条用例盯着这个触发条件和四条命令，别误删。
+6. 创建 Git tag: `git tag X.Y.Z`（2.0.1-hotfix1 起拍板「以后不要v了」，tag 不再带 v 前缀；
+   历史 tag 全是 lightweight，别用 `-a` 另外造出 annotated tag 让口径分叉），
+   再 `git push origin X.Y.Z`。`.github/workflows/ci.yml` 的
+   `on.push.tags: ['[0-9]*', 'v*']` 会让这次 tag 推送自己也跑一遍四道门禁
+   （`[0-9]*` 认新命名、`v*` 兼容历史 tag）；`tests/unit.js` 有一条用例盯着这个触发条件
+   和四条命令，别误删。
 7. 等 tag 那条 run 也 `completed · success` 再创建 GitHub Release，粘贴 CHANGELOG 摘要。
    `gh run list --limit 5` 里应能同时看到 main 与 tag 两条 run，任一红都先回去修，别发 Release。
    1.5.1 的教训：那时只有 `push main` 触发 CI，tag 发完才发现挂的是一条红 run。

@@ -172,7 +172,7 @@ query → 倒排召回（现有 search，语义不变）
 | MCP 工具 | 8 | 28 | stdio `tools/list` 现场数 + 绝对值 |
 | 包内文件 | 27 | 61 | `npm pack --dry-run` 解析文件数 |
 | 冷启动模块数 / `status` best-of-5 | 17 / 97.0 ms | 25 / 114.3 ms | 模块数绝对值 + 墙钟耗时实测比较 |
-| npm 包体积 | 96.8 kB | 约 400.5 kB | dry-run 输出绝对值锁；npm 只显示一位小数，容差 0.1 kB |
+| npm 包体积 | 96.8 kB | 约 400.8 kB | dry-run 输出绝对值锁；npm 只显示一位小数，容差 0.1 kB |
 
 ---
 
@@ -227,7 +227,7 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 - 帮助文本单源（`tests/help.js`）继续钉死 CLI / MCP / initialize 三个入口。
 - 新增每条派生规则配「反证」用例：把源文本里那一行改掉，边必须消失——防止正则写成永远通过的摆设（1.5.3 的做法）。
 - 跨平台：所有涉及 mtime / 路径 / 换行的用例显式错开输入（1.5.2 的教训）。
-- 四道门禁 + `npm pack --dry-run` 每次定版必跑；CI 现在对 `v*` tag 也会跑。
+- 四道门禁 + `npm pack --dry-run` 每次定版必跑；CI 现在对 `[0-9]*`（新命名）与 `v*`（历史）tag 都会跑。
 - 性能预算：图派生在大口袋（>800 行 log）下不得让 `recall` 变慢一个数量级。
 - 「简单查询不退化」锁：开图/关图两种模式的命中集合与顺序一致。
 
@@ -338,7 +338,10 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
   主包 `tests/unit.js` 与 Lite 测试各自把这条规则钉死；docs 三处锚点正则整串匹配
   semver（含 prerelease），不再截断误报。
 - Lite 新增自己的版本抄本锁（package.json ↔ lib/version.js ↔ SKILL.md）。
-- 文档与 CHANGELOG 增长后复测包体积：Lite **96.8 kB** / 主包 **400.5 kB**（文件数不变
+- tag 命名追加拍板：「以后不要v了」——自本次起 tag 直接用版本号（`2.0.1-hotfix1` /
+  `2.0.1-Lite-hotfix1`），CI 闸门改认 `['[0-9]*', 'v*']`（新命名 + 历史兼容），
+  unit.js 的触发条件锁与 CONTRIBUTING 第 6 步同步更新。
+- 文档与 CHANGELOG 增长后复测包体积：Lite **96.8 kB** / 主包 **400.8 kB**（文件数不变
   27 / 61），§5 表与 metrics.js 绝对值锁已同步；Phase 2 小节里的 96.7 / 398.4 是当时实测，
   作为历史记录保留。
 
