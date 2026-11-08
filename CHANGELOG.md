@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🛡️ CI 加固：code-map rename 用例不再赌文件系统的时间精度
+
+- `tests/pocket.js` 的 `rename 按 size+mtime 配对` 造出的两个文件都是 10 字节；Linux CI runner
+  把连续两次写入记成同一毫秒后，两者的 `(size, mtimeMs)` 撞成同一个键，改名配对按设计判为
+  「不唯一 → 宁可报 A+D」，用例因此失败——**1.5.0 与 1.5.1 两次 CI 都挂在这一条**，本地
+  Windows 上却一直是绿的。现在把两个文件的体积与 mtime 显式错开，让用例只验证
+  「改名继承描述」；产品代码和「歧义时不配对」的保护分支都没动，那条用例照旧通过。
+
 ---
 
 ## [1.5.1] - 2026-11-07

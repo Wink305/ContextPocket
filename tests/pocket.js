@@ -2053,7 +2053,14 @@ test('code-map update: rename 按 size+mtime 配对，描述跟着走，无描�
   const projectDir = path.dirname(pocketDir);
   fs.mkdirSync(path.join(projectDir, 'src'));
   fs.writeFileSync(path.join(projectDir, 'src', 'named.ts'), '// keep me');
-  fs.writeFileSync(path.join(projectDir, 'src', 'plain.ts'), '// no desc');
+  fs.writeFileSync(path.join(projectDir, 'src', 'plain.ts'), '// no description yet');
+  // 配对的判据是 size + mtimeMs 全等且双向唯一。这两个文件若一样长，某些文件系统
+  // （Linux CI runner）又会把连续两次 write 记成同一毫秒，就会命中「歧义 → 宁可报 A+D」
+  // 那条保护分支，renamed 变空：本地绿、CI 红。这里把体积和 mtime 都显式错开，
+  // 让用例只测「改名继承描述」，不去赌文件系统的时间精度。
+  const past = Date.now() / 1000;
+  fs.utimesSync(path.join(projectDir, 'src', 'named.ts'), past - 10, past - 10);
+  fs.utimesSync(path.join(projectDir, 'src', 'plain.ts'), past - 20, past - 20);
   // 给 named.ts 落一条真实描述
   writer.updateCodeMap(pocketDir, {
     descOverrides: { 'src/named.ts': '有名字的模块' },
