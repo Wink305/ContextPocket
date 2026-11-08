@@ -3,6 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version: 2.2](https://img.shields.io/badge/version-2.2-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -19,19 +20,20 @@
 - Automatically records every dev conversation turn into your project's `ContextPocket/` folder.
 - Next agent reads it once and picks up progress in 5 seconds.
 - Captures: requirements, code changes, decisions, pitfalls, preferences.
+- Links turns, files and decisions into a traceable graph, so `recall --with-context` answers *what happened around this turn* — not just *what it said*.
 
-## ContextPocket 2.0 and 2.0 Lite
+## ContextPocket 2.2 and 2.2 Lite
 
-**ContextPocket 2.0** adds node-based context: turns, files and decisions are connected in a traceable graph, so `recall --with-context` can show related history and the full package can inspect, rebuild and verify its graph index. It keeps the broader 28-command CLI / MCP toolset for larger, long-lived project memories.
+**ContextPocket 2.2** adds node-based context: turns, files and decisions are connected in a traceable graph, so `recall --with-context` shows what happened around a turn, and `graph` lets you inspect, rebuild and verify the whole graph index. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
 
-**ContextPocket 2.0 Lite** builds on the same node schema and pocket format, but simplifies the read/write path for small projects and everyday conversation memory. It uses five core Markdown files, eight CLI commands / MCP tools, on-demand search and runtime-only graph derivation—no search index or graph cache.
+**ContextPocket 2.2 Lite** builds on the same node schema and pocket format, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eight CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
-| **2.0** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
-| **2.0 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
+| **2.2** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
+| **2.2 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.1](https://github.com/Wink305/ContextPocket/releases/download/2.1/ContextPocket-2.1.zip) · [ContextPocket 2.1 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.1-lite/ContextPocket-2.1-Lite.zip) — the current release (tags `2.1` / `2.1-lite`). The previous release stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
+Download the GitHub Release archives: [ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip) — the current release (tags `2.2` / `2.2-lite`). The previous stable release stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
 🚀 **How to use**
 
@@ -322,6 +324,7 @@ context-pocket recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
 | Long session token overflow | History gets compressed/lost | Critical content is already on disk |
 | Multi-agent collaboration | Agents have inconsistent state | Share one `ContextPocket/`; concurrent writers on one machine are serialized by the write lock, cross-machine merges are settled by `repair`, and `log append --author` says who recorded what |
 | Inherit someone else's project | Don't know what was done before | Read `handoff.md`, 5 min onboarding |
+| Trace a decision through time | "Who touched this file after that call?" | `recall --with-context` and `graph` follow turns ↔ files ↔ decisions |
 
 ---
 
@@ -345,6 +348,7 @@ project-root/
     ├── pocket-snapshot-*.md  # Snapshot files (max 3 kept)
     └── assets/
         ├── search-index.json   # Search index (auto-generated, safe to delete + rebuild)
+        ├── graph.jsonl         # Link-graph cache (derived; `graph rebuild` reproduces it byte for byte)
         └── archive/            # Archived attachments (moved here on archive)
 ```
 
@@ -432,7 +436,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.0 Lite package, which shares the node-based context schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.2 Lite package, which shares the node-based context schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 

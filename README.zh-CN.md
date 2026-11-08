@@ -31,7 +31,7 @@
 | **2.0** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
 | **2.0 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
 
-下载 GitHub Release 压缩包：[ContextPocket 2.1](https://github.com/Wink305/ContextPocket/releases/download/2.1/ContextPocket-2.1.zip) · [ContextPocket 2.1 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.1-lite/ContextPocket-2.1-Lite.zip)——当前发行版（tag `2.1` / `2.1-lite`）。上一版仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
+下载 GitHub Release 压缩包：[ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip)——当前发行版（tag `2.2` / `2.2-lite`）。上一版仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
 
 🚀 **方法**
 
@@ -322,6 +322,7 @@ context-pocket recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
 | 长会话 token 爆掉 | 历史被压缩丢失 | 关键内容已落到磁盘 |
 | 多人协作同一项目 | 各 Agent 状态不一致 | 共享同一个 `ContextPocket/`：同一台机器上的并发写入由写入锁排队，跨机器合并后撞到的 T 号用 `repair` 收回来，`log append --author` 写下每一轮是谁记的 |
 | 接手他人/AI 的项目 | 不知道前面做了什么 | 读 `handoff.md` 5 分钟上手 |
+| 追一个决定的时间线 | 「那次改动之后谁又动过这个文件？」 | `recall --with-context` 与 `graph` 沿着轮次 ↔ 文件 ↔ 决策连起来 |
 
 ---
 
@@ -345,6 +346,7 @@ project-root/
     ├── pocket-snapshot-*.md  # 快照文件（最多保留 3 份）
     └── assets/
         ├── search-index.json   # 检索索引（自动生成、可删除重建）
+        ├── graph.jsonl         # 关联图缓存（派生品；`graph rebuild` 能逐字节重建）
         └── archive/            # 归档附件（archive 时把旧附件搬到这里）
 ```
 
@@ -429,7 +431,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 - tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
 ```
 
-**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket 2.0 Lite 包**，建立在 2.0 节点式上下文与共用 schema 之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
+**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket 2.2 Lite 包**，建立在 2.2 节点式上下文与共用 schema 之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
 
 ---
 
