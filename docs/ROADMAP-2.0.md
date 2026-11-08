@@ -172,7 +172,7 @@ query → 倒排召回（现有 search，语义不变）
 | MCP 工具 | 8 | 28 | stdio `tools/list` 现场数 + 绝对值 |
 | 包内文件 | 27 | 61 | `npm pack --dry-run` 解析文件数 |
 | 冷启动模块数 / `status` best-of-5 | 17 / 97.0 ms | 25 / 114.3 ms | 模块数绝对值 + 墙钟耗时实测比较 |
-| npm 包体积 | 96.7 kB | 约 398.4 kB | dry-run 输出绝对值锁；npm 只显示一位小数，容差 0.1 kB |
+| npm 包体积 | 96.8 kB | 约 400.5 kB | dry-run 输出绝对值锁；npm 只显示一位小数，容差 0.1 kB |
 
 ---
 
@@ -213,6 +213,12 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 两位只用于 tag（`v2.0`）、CHANGELOG 标题、README 与帮助文本；六处版本号抄本锁相应
 把「对外两位、包内三位」一起钉死。发版仍走 `.trae/skills/context-pocket-release/SKILL.md`：
 抄本 → CHANGELOG 切节 → 四道门禁 → tag → 等 tag CI 绿 → Release。
+
+**Hotfix 追加拍板（2026-11-08，`2.0.1-hotfix1`）**：带 `-` 后缀的预发布/hotfix 版
+**对外显示完整串**（主包 `2.0.1-hotfix1`、Lite `2.0.1-Lite-hotfix1`）——后缀本身有语义，
+砍成两位就丢了「第几个 hotfix」。稳定版仍两位。两包 `lib/version.js` 的 `DISPLAY_VERSION`
+按这条规则取值，主包 `tests/unit.js` 与 Lite 测试各自锁规则本身（不是锁某个具体号），
+升版本时不用改用例。
 
 ---
 
@@ -300,7 +306,7 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
   `smoke-live` 6/6、`npm pack --dry-run` 61 文件。
 - 依旧**不发版、不提交、不写 npm**。
 
-### Phase 2（实现完成；全量门禁通过；待用户确认；未提交、未发布）
+### Phase 2（已发行：commit `e7cff19`，tag `v2.0`，已推送 origin/main）
 
 - `lite/` 是基于 2.0 节点式上下文/schema 的独立轻量包，适用于小型项目和日常对话记忆；
   以 5 个核心文件、8 条 CLI 命令 / 8 个 MCP 工具、现场扫描及运行时图派生，降低启动和维护负担。
@@ -317,9 +323,27 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
   （测试对 npm 输出的一位小数显示值留 0.1 kB 容差）。
 - 行为/兼容锁覆盖五文件 bootstrap、追加与时间结构、recall 窗口/上下文、扫描分页、why 证据层级、
   verify 密钥扫描与 T 号连续性、graph 零写盘、CLI/MCP 对称、parser/links/search schema 一致及双向写入互认。
-- **不提交、不发布、不写 npm registry**；变更保留工作树，等待用户确认后再提交。
+- 已由用户确认并发行：commit `e7cff19`（Release ContextPocket 2.0）、tag `v2.0`、已推送；
+  经 GitHub Release 分发，未写 npm registry。
+
+### 2.0.1-hotfix1（review 修复；主包 `2.0.1-hotfix1` / Lite `2.0.1-Lite-hotfix1`）
+
+- 2.0 发行后 review 发现三处问题，本 hotfix 修复：
+  ① 主包 `--version` 标题行直接打三位 semver，违反 §12「对外两位」——补上
+  `DISPLAY_VERSION` 展示层（标题行打展示版、次行打完整 semver、`--json` 加 `display`），
+  与 Lite 入口同形；② 本节 Phase 2 状态停留在「未提交、待确认」，与已发行事实矛盾——已纠偏；
+  ③ lite/tests/core.js 一行断言原样重复——已删。
+- 展示规则追加拍板：稳定版对外两位（`2.1`），带 `-` 的 hotfix/预发布显示完整串
+  （`2.0.1-hotfix1` / `2.0.1-Lite-hotfix1`）——后缀有语义，砍掉就丢了「第几个 hotfix」。
+  主包 `tests/unit.js` 与 Lite 测试各自把这条规则钉死；docs 三处锚点正则整串匹配
+  semver（含 prerelease），不再截断误报。
+- Lite 新增自己的版本抄本锁（package.json ↔ lib/version.js ↔ SKILL.md）。
+- 文档与 CHANGELOG 增长后复测包体积：Lite **96.8 kB** / 主包 **400.5 kB**（文件数不变
+  27 / 61），§5 表与 metrics.js 绝对值锁已同步；Phase 2 小节里的 96.7 / 398.4 是当时实测，
+  作为历史记录保留。
 
 ### 下一步
 
 - Phase 0 的价值确认（真实口袋上人工用 `recall --with-context` / `graph`）。
-- Phase 2：2.0 Lite 独立发行（§5 六项量化指标全部下降才准出）。
+- Phase 3：完整 2.0 的图索引、多跳与时间有效性（§7 退出 gate）。
+- Phase 4：npm 首发收尾（`npm view context-pocket` 不再是 404）。

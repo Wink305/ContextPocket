@@ -241,7 +241,7 @@ function cmdHelp(options) {
  * 命令：version（`--version` / `-v` / `context-pocket-lite version`）
  *
  * 只读 lite/package.json（lib/version.js），不需要 ContextPocket/ 目录。
- * 对外两位：`2.0-lite`；package.json 内保持三位 semver。
+ * 对外展示：hotfix 预发布显示完整串（2.0.1-Lite-hotfix1）；稳定版两位加 -lite。
  */
 function cmdVersion(options) {
   const opts = options || {};

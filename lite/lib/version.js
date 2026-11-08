@@ -4,18 +4,18 @@
  * ContextPocket Lite — 版本号的唯一读取点
  *
  * 与主包 lib/version.js 同一套实现（读到什么就报什么，读不到才用兜底值），
- * 差别只在两处常量：lite/package.json 与兜底值 2.0.0。
+ * 差别只在常量：lite/package.json、兜底值与对外展示串。
  *
- * 对外展示两位（2.0-lite）；package.json 内保持三位 semver（2.0.0）——
- * npm 的世界里 semver 是硬约束，「不要 2.0.0」落在外观层而不是包元数据层
- * （docs/ROADMAP-2.0.md §8 / §12 的拍板）。
+ * 展示规则（ROADMAP §12 拍板 + hotfix 追加）：稳定版对外两位加产品后缀
+ * （2.1.0 → `2.1-lite`）；带 `-` 的预发布/hotfix 版显示完整串
+ * （`2.0.1-Lite-hotfix1`）——后缀有语义，不能砍。npm 包内永远是合法 semver。
  */
 
 /** 拿不到 package.json 时的兜底值。改动它必须同时改 lite/package.json。 */
-const FALLBACK_VERSION = '2.0.0';
+const FALLBACK_VERSION = '2.0.1-Lite-hotfix1';
 
-/** 对外展示的两位版本（README / --version 的标题行），不进任何包元数据。 */
-const DISPLAY_VERSION = '2.0-lite';
+/** 对外展示版本（--version 标题行 / version --json 的 display），不进任何包元数据。 */
+const DISPLAY_VERSION = '2.0.1-Lite-hotfix1';
 
 /**
  * @param {string} [dir] 包根目录（默认本文件所在 lib 的上一级）

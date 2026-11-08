@@ -26,7 +26,7 @@ The MCP server exposes the same 8 operations as tools (`context_pocket_bootstrap
 * **No caches.** Search always scans (`viaIndex: false`); graph is derived at call time and writes nothing. A Lite pocket is 5 Markdown files, full stop.
 * **No write-time conflict gate.** `log append` reports `conflictCheckSkipped: true` honestly instead of pretending to have checked.
 * **No maintenance plane.** Archive, migrate, repair, amend, hub registration — those live in the full package. A pocket outgrown by Lite is a valid full-package pocket; run `context-pocket` against it whenever you want.
-* **Version line is independent.** Lite starts at `2.0.0` (displayed as `2.0-lite`), versioned separately from the full package.
+* **Version line is independent.** Lite is versioned separately from the full package (currently `2.0.1-Lite-hotfix1`). Stable releases display two parts plus the product suffix (`2.1-lite`); hotfix prereleases display the full string — the suffix carries meaning.
 
 ## Install
 

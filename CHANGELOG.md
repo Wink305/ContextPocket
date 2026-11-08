@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1-hotfix1] - 2026-11-08
+
+### 🩹 2.0 review 修复（主包 `2.0.1-hotfix1` / Lite `2.0.1-Lite-hotfix1`）
+
+- **主包补上对外展示层**：`--version` / `version` 标题行此前直接打 `package.json` 的
+  三位 semver，违反路线图 §12「对外两位」拍板。现在 `lib/version.js` 增加
+  `DISPLAY_VERSION`，标题行打展示版、下一行打完整 semver，`--json` 增加 `display`
+  字段——与 Lite 入口同形。展示规则由 `tests/unit.js` 钉死：稳定版两位（`2.1`），
+  带 `-` 的 hotfix/预发布显示完整串（后缀有语义，砍掉就丢了「第几个 hotfix」）。
+- **版本抄本锁兼容预发布后缀**：三处 docs 锚点正则此前只吞 `x.y.z`，遇到
+  `2.0.1-hotfix1` 会截断误报；现在整串匹配 semver（含 prerelease），反证漂移的
+  自检照旧。七处抄本（含 CHANGELOG 本节）同步到 hotfix 号。
+- **Lite 版本线独立推进**：`lite/package.json` → `2.0.1-Lite-hotfix1`，
+  `FALLBACK_VERSION` / `DISPLAY_VERSION` / SKILL frontmatter 同步；
+  Lite 测试新增自己的版本抄本锁（package.json ↔ lib/version.js ↔ SKILL.md）。
+- **文档纠偏**：ROADMAP §13 的 Phase 2 状态从「未提交、待确认」改为已发行
+  （commit `e7cff19`、tag `v2.0`、已推送）；§12 追加 hotfix 展示拍板。
+- **测试清理**：删掉 lite/tests/core.js 里一行原样重复的断言。
+
 ## [2.0.0] - 2026-11-08
 
 ### 🪶 ContextPocket 2.0 Lite 独立轻量包

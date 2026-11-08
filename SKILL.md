@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.0.0
+version: 2.0.1-hotfix1
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---

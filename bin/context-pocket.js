@@ -341,17 +341,20 @@ function cmdVersion(options) {
       ok: true,
       name: 'context-pocket',
       version: info.version,
+      display: info.display,
       source: info.source,
       node: process.version,
     });
     return;
   }
   console.log('');
-  console.log(colorize('  ContextPocket CLI', 'bold') + ' ' + info.version);
-  console.log('    source: ' + (info.source === 'package.json'
+  // 标题行打对外展示版（DISPLAY_VERSION），完整 semver 在下一行 —— 与 Lite 入口同形。
+  // 此前这里直接打 info.version，稳定版会把 2.1.0 原样亮给用户，违反 §12「对外两位」。
+  console.log(colorize('  ContextPocket CLI', 'bold') + ' ' + info.display);
+  console.log('    version: ' + info.version + ' (source: ' + (info.source === 'package.json'
     ? 'package.json'
-    : 'built-in fallback (no package.json next to the binary)'));
-  console.log('    node:   ' + process.version);
+    : 'built-in fallback (no package.json next to the binary)') + ')');
+  console.log('    node:    ' + process.version);
   console.log('');
 }
 

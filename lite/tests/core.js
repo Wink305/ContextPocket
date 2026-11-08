@@ -160,15 +160,29 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.0-lite/);
+  assert.match(version.stdout, /2\.0\.1-Lite-hotfix1/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.0.0');
-  assert.strictEqual(versionJson.display, '2.0-lite');
+  assert.strictEqual(versionJson.version, '2.0.1-Lite-hotfix1');
+  assert.strictEqual(versionJson.display, '2.0.1-Lite-hotfix1');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);
   assert.strictEqual(commandHelp.status, 0);
   assert.match(commandHelp.stdout, /Usage: context-pocket-lite status/);
-  assert.match(commandHelp.stdout, /Usage: context-pocket-lite status/);
   assert.doesNotMatch(commandHelp.stdout, /No ContextPocket\/ directory found/i);
+});
+
+test('lite version copies stay aligned: package.json, lib/version.js, SKILL.md', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const { FALLBACK_VERSION, DISPLAY_VERSION } = require(path.join(ROOT, 'lib', 'version'));
+  assert.strictEqual(FALLBACK_VERSION, pkg.version, 'lite FALLBACK_VERSION drifted from lite/package.json');
+  // 展示规则与主包同一条（ROADMAP §12 + hotfix 追加）：prerelease 显示完整串，稳定版两位加 -lite。
+  const expectedDisplay = pkg.version.includes('-')
+    ? pkg.version
+    : pkg.version.split('.').slice(0, 2).join('.') + '-lite';
+  assert.strictEqual(DISPLAY_VERSION, expectedDisplay, 'lite DISPLAY_VERSION violates the display rule');
+  const skill = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
+  const stamped = skill.match(/^version:\s*(\S+)\s*$/m);
+  assert.ok(stamped, 'lite SKILL.md frontmatter needs a version: line');
+  assert.strictEqual(stamped[1], pkg.version, 'lite SKILL.md version drifted from lite/package.json');
 });

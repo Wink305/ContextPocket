@@ -913,7 +913,7 @@ function assertVersionStamp(text, re, label, expected) {
 }
 
 test('every copy of the skill version says the same number as package.json', () => {
-  const { FALLBACK_VERSION } = require(path.join(ROOT, 'lib', 'version'));
+  const { FALLBACK_VERSION, DISPLAY_VERSION } = require(path.join(ROOT, 'lib', 'version'));
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
 
   const skill = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
@@ -924,6 +924,14 @@ test('every copy of the skill version says the same number as package.json', () 
   assert.strictEqual(FALLBACK_VERSION, pkg.version,
     'lib/version.js 的 FALLBACK_VERSION 与 package.json 不一致：兜底值本该就是当前版本号');
 
+  // 对外展示规则（ROADMAP §12 + hotfix 追加拍板）：带 `-` 的预发布/hotfix 显示完整串，
+  // 稳定版只显示前两位。这条锁盯的是「规则」而不是某个具体号——升版本时不用改用例。
+  const expectedDisplay = pkg.version.includes('-')
+    ? pkg.version
+    : pkg.version.split('.').slice(0, 2).join('.');
+  assert.strictEqual(DISPLAY_VERSION, expectedDisplay,
+    'DISPLAY_VERSION 违反展示规则：hotfix/预发布显示完整串，稳定版两位（ ROADMAP §12）');
+
   const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf-8');
   assert.ok(changelog.includes('## [' + pkg.version + '] - '),
     'package.json 已是 ' + pkg.version + '，CHANGELOG 却没有 `## [' + pkg.version + '] - <日期>` 这节定版标题'
@@ -931,10 +939,13 @@ test('every copy of the skill version says the same number as package.json', () 
 
   // docs 三处：先用真实文本比对，再把版本号替换成 9.9.9 反证这条锁真的会报红——
   // 免得有人把正则写宽、或锚到不含版本号的字符串上，让用例变成永远通过的摆设。
+  // semver 预发布后缀（-hotfix1 等）是版本号的一部分，正则必须整串吞下，
+  // 否则 2.0.1-hotfix1 会被截成 2.0.1 去比对，锁永远红。
+  const SEMVER = '(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)';
   const docStamps = [
-    ['docs/COMPATIBILITY.md', /对应 skill (\d+\.\d+\.\d+)/],
-    ['docs/FAQ.md', /"version":"(\d+\.\d+\.\d+)"/],
-    ['docs/MIGRATION.md', /\|\s*`(\d+\.\d+\.\d+)`\s*\|\s*遵循 \[语义化版本\]/],
+    ['docs/COMPATIBILITY.md', new RegExp('对应 skill ' + SEMVER)],
+    ['docs/FAQ.md', new RegExp('"version":"' + SEMVER + '"')],
+    ['docs/MIGRATION.md', new RegExp('\\|\\s*`' + SEMVER + '`\\s*\\|\\s*遵循 \\[语义化版本\\]')],
   ];
   for (const [rel, re] of docStamps) {
     const text = fs.readFileSync(path.join(ROOT, rel), 'utf-8');
