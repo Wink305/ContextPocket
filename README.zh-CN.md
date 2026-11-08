@@ -31,7 +31,7 @@
 | **2.0** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
 | **2.0 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
 
-下载 GitHub Release 压缩包：[ContextPocket 2.1 preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-preview/ContextPocket-2.1-preview.zip) · [ContextPocket 2.1 Lite preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-Lite-preview/ContextPocket-2.1-Lite-preview.zip)——当前预发布通道（tag `2.1-preview` / `2.1-Lite-preview`）。稳定通道仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
+下载 GitHub Release 压缩包：[ContextPocket 2.1](https://github.com/Wink305/ContextPocket/releases/download/2.1/ContextPocket-2.1.zip) · [ContextPocket 2.1 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.1-lite/ContextPocket-2.1-Lite.zip)——当前发行版（tag `2.1` / `2.1-lite`）。上一版仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
 
 🚀 **方法**
 
@@ -221,10 +221,12 @@ Agent 会自动：
 | 查某个文件是谁改的 | `why <path>` | 命中的轮次，按证据强弱标注：`[changed]`（这轮的 Action 小节里有它）/ `[mentioned only]`（只在 Uncertain、Attachments、Conflicts 里被谈到过，不等于改过）；改过的排在前面 |
 | 按关键词或窗口找历史 | `search <关键词>` | 命中的 T-block |
 | 回看某一轮 | `recall T<n>` | 完整 T-block |
+| 回看某一轮**连同它的上下文** | `recall T<n> --with-context` | 这一轮 + 入向上下文：谁引用过它、同一文件后来被谁改过、关联到哪些 ADR |
 | 按窗口列轮次 | `recall --from … --to …` / `recall --since T5 --until T9` | 这个窗口里的轮次，按 T 号从早到晚 |
 | 对比两轮 | `diff Ta Tb` | 差异 |
 | 列出待确认项 | 直接读 `❓` 行（无工具） | 列出清单，然后问"逐条确认吗？" |
 | 检查前后矛盾 | `check-conflicts` | 按严重度分级的结果 |
+| 看项目的**关系形状** | `graph [--type <type>] [--json]` | 从口袋里派生出的节点与边：轮次 ↔ 文件 ↔ ADR，每条边都标出来源 |
 | 修复重复或错位的 T 号 | 先 `repair --dry-run` | 改号方案 + 仍在指旧号的文字 |
 | 检查 git 漏记 | `sync`（加 `--auto` 才写入） | 补记了几轮 |
 | 导入旧会话 | `import` | 导入了几轮 |
@@ -234,6 +236,8 @@ Agent 会自动：
 | 说明这个工具怎么用 | 内联回答——**绝不**回"见 README.md" | 内联答案 |
 
 > 💡 用大白话比记命令名更顺；如果你想要零歧义，直接把子命令名说出来也行（`context-pocket verify`）。
+
+**关联图层。** `recall --with-context` 与 `graph` 读的是一张**派生**出来的关联图——轮次 ↔ 文件 ↔ ADR——每次都从 `log.md`、`decisions.md`、`code-map.md` 现场重建，不写任何东西，每条边都标得出来源。问题落在**关系**上时用它（「这轮前后发生了什么」「哪些决策碰过这个文件」）；问题落在**内容**上时别用（「T7 当时说了什么」），`recall` / `search` 更快而且已经是完整答案。
 
 ---
 

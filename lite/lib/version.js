@@ -7,16 +7,15 @@
  * 差别只在常量：lite/package.json、兜底值与对外展示串。
  *
  * 展示规则（ROADMAP §12 + hotfix 追加）：稳定版对外两位加产品后缀
- * （2.1.0 → `2.1-lite`）；带 `-` 的预发布/hotfix 版显示完整串
- * （`2.1-Lite-preview`、`2.0.1-Lite-hotfix1`）——preview 通道本身就是两位 +
- * 后缀，不补 patch 位；hotfix 的后缀有语义，不能砍。
+ * （2.1 → `2.1-lite`）；带 `-` 的预发布/hotfix 版显示完整串
+ * （`2.0.1-Lite-hotfix1`）——后缀有语义，不能砍。
  */
 
 /** 拿不到 package.json 时的兜底值。改动它必须同时改 lite/package.json。 */
-const FALLBACK_VERSION = '2.1-Lite-preview';
+const FALLBACK_VERSION = '2.1';
 
 /** 对外展示版本（--version 标题行 / version --json 的 display），不进任何包元数据。 */
-const DISPLAY_VERSION = '2.1-Lite-preview';
+const DISPLAY_VERSION = '2.1-lite';
 
 /**
  * @param {string} [dir] 包根目录（默认本文件所在 lib 的上一级）

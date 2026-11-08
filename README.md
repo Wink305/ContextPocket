@@ -31,7 +31,7 @@
 | **2.0** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
 | **2.0 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.1 preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-preview/ContextPocket-2.1-preview.zip) · [ContextPocket 2.1 Lite preview](https://github.com/Wink305/ContextPocket/releases/download/2.1-Lite-preview/ContextPocket-2.1-Lite-preview.zip) — the current pre-release channel (tags `2.1-preview` / `2.1-Lite-preview`). The stable channel stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
+Download the GitHub Release archives: [ContextPocket 2.1](https://github.com/Wink305/ContextPocket/releases/download/2.1/ContextPocket-2.1.zip) · [ContextPocket 2.1 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.1-lite/ContextPocket-2.1-Lite.zip) — the current release (tags `2.1` / `2.1-lite`). The previous release stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
 🚀 **How to use**
 
@@ -221,10 +221,12 @@ The new agent picks recording back up automatically — up and running in 5 seco
 | Find who changed a file | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
 | Find an earlier turn by keyword or window | `search <keyword>` | The matching T-blocks |
 | Recall one turn | `recall T<n>` | The full T-block |
+| Recall one turn **with its surroundings** | `recall T<n> --with-context` | The turn plus its inbound context: who referenced it, later changes to the same files, related ADRs |
 | List turns inside a window | `recall --from … --to …` / `recall --since T5 --until T9` | The turns in that window, oldest first |
 | Compare two turns | `diff Ta Tb` | The delta |
 | List open questions | Reads the `❓` lines directly (no tool) | The list, then "Confirm one by one?" |
 | Check for contradictions | `check-conflicts` | Severity-ranked result |
+| Inspect the **shape** of the project | `graph [--type <type>] [--json]` | Nodes and edges derived from the pocket — turns ↔ files ↔ ADRs, each edge naming its source |
 | Repair duplicated or stale T-numbers | `repair --dry-run` first | The renumber plan + the prose still naming an old id |
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | How many turns were backfilled |
 | Import an earlier session | `import` | How many turns were imported |
@@ -234,6 +236,8 @@ The new agent picks recording back up automatically — up and running in 5 seco
 | Explain how this works | Answers inline — **never** "see README.md" | An inline answer |
 
 > 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket verify`) also works if you want zero ambiguity.
+
+**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs — rebuilt on the fly from `log.md`, `decisions.md` and `code-map.md`. Nothing is written, and every edge names the file it came from. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
 
 ---
 

@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.1-preview
+version: 2.1
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -77,10 +77,12 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Find who changed a file | `why <path>` | matching turns, split by evidence: `[changed]` (in that turn's Action) vs `[mentioned only]` (Uncertain / Attachments / Conflicts — talked about, not modified) |
 | Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`) | matching T-blocks, window applied before paging |
 | Recall one turn | `recall T<n>` | the full T-block |
+| Recall one turn **with its surroundings** | `recall T<n> --with-context` (MCP: `withContext`) | the T-block plus its inbound context: who referenced it, later changes to the same files, related ADRs |
 | List turns inside a window | `recall --since T5 --until T9` / `recall --from <date> --to <date>` (MCP: `context_pocket_recall` **without `tId`**, with the four window params) | turns in the window, oldest first, archived ones marked; page with `--limit/--offset`. No keyword needed. A `tId` and a window cannot be combined |
 | Compare two turns | `diff Ta Tb` | the delta |
 | List open questions | read `❓` lines directly (no tool) | the list, then "逐条确认吗?" |
 | Check for contradictions | `check-conflicts` | severity-ranked result |
+| Inspect the **shape** of the project | `graph [--type <type>] [--json]` | nodes and edges derived from the pocket: turns ↔ files ↔ ADRs, each edge naming its source |
 | Repair duplicated or stale T-numbers | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | "补了 N 个" |
 | Import an earlier session | `import` | "导入了 N 轮" |
@@ -90,6 +92,16 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Explain how this skill works | answer inline from this table + `docs/FAQ.md` — **never** reply "see README.md" |
 
 > Bare names above are the CLI subcommand (`context-pocket <name>`) and the MCP tool (`context_pocket_<name>`) for the same capability. Prefer MCP > CLI > pure-skill, per Execution modes.
+
+### The graph layer
+
+`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs — rebuilt on the fly from `log.md`, `decisions.md` and `code-map.md`. Nothing is written: the graph is a projection of files already in the pocket, and every edge names the file it came from.
+
+**Reach for it when the question is about relationships** — "what happened around this turn?", "which decisions touched this file?", "is that decision still current?". `graph` answers shape questions ("how are these files and decisions connected?"); `--with-context` answers one turn's surroundings.
+
+**Skip it when the question is about content** — "what did T7 say?", "find the turn about the login bug". Plain `recall` / `search` are faster and the answer is already complete. The graph layer exists for the questions a keyword search cannot answer.
+
+Evidence stays graded: `[changed]` (in that turn's Action section) vs `[mentioned only]` (talked about, not modified). A weak edge never counts as "covered".
 
 ### Activation
 

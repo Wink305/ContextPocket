@@ -11,26 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.1-preview] - 2026-11-08
+## [2.1] - 2026-11-08
 
-### 提示词话术清理：写死的口语触发词与「用户拍板」式来源标注全部清掉
+### 关联图层接进意图表 + 提示词话术清理
 
-> 2.1 preview 通道的汇总：三批尚未发布的改动一起发。包内版本与对外渠道名同形
-> ——preview 通道用「两位 + 预发布后缀」，不补 patch 位：
-> `2.1-preview` / `2.1-Lite-preview`。
+> 2.1 正式版：四批尚未发布的改动一起发。主包包内与对外展示都是 `2.1`，
+> Lite 包内 `2.1`、对外展示 `2.1-lite`（带产品后缀）。
 
-- **产品文档里的口语触发话术**：`SKILL.md` 与两份 README 的「意图 → 动作」映射表原本把
-  用户会怎么说写死成一列（"开始记一下"、"查一下有没有漏"、"交接一下"、"这玩意儿怎么用"…），
-  中英各一份。现在列头改成纯**意图**（First time in this project / 第一次进这个项目…），
-  意图到工具的映射一条不少，只是不再规定用户得怎么开口；`SKILL-advanced.md` /
-  `SKILL-reference.md` / `docs/FAQ.md` / `CONTRIBUTING.md` 与代码注释里的同类举例一并中性化。
+- **意图表接入（本版主内容）**：`SKILL.md` 的「意图 → 动作」映射表新增两条 ——
+  「回看某一轮连同它的上下文」落到 `recall T<n> --with-context`，「看项目的关系形状」落到
+  `graph [--type <type>] [--json]`；两份 README 的同表同步。表后新增「The graph layer」一节，
+  写清**什么时候该用图、什么时候不必**：问的是**关系**（「这轮前后发生了什么」「哪些决策碰过
+  这个文件」）就用，问的是**内容**（「T7 当时说了什么」）就别用 —— 后者 `recall` / `search`
+  更快且已是完整答案。之前这两条能力只存在于命令里，Agent 不会主动想起它们。
+- **产品文档里的口语触发话术**：`SKILL.md` 与两份 README 的意图表原本把用户会怎么说写死成
+  一列（"开始记一下"、"查一下有没有漏"、"交接一下"、"这玩意儿怎么用"…），中英各一份。现在列头
+  改成纯**意图**，意图到工具的映射一条不少，只是不再规定用户得怎么开口；
+  `SKILL-advanced.md` / `SKILL-reference.md` / `docs/FAQ.md` / `CONTRIBUTING.md` 与代码注释里的
+  同类举例一并中性化。
 - **CHANGELOG 与路线图里的来源标注**：「用户拍板「以后不要v了」」「本次经维护者授权」
   「待拍板问题」这类记录"谁在什么时候拍的"的句子全部改成中性表述——**结论保留，来源去掉**；
   「维护者」作为角色称谓保留。
-- **README 中英双语的下载链接**：第 34 行原先指向 v2.0 的两个 ZIP，现指向当前预发布通道
-  `2.1-preview` / `2.1-Lite-preview` 的资产（`ContextPocket-2.1-preview.zip` /
-  `ContextPocket-2.1-Lite-preview.zip`），同时保留 v2.0 稳定通道入口，并标明哪条是预发布、
-  哪条是稳定版。第 82 行「尚未发布到 npm registry」的说法不变。
 - **Lite 冷启动模块数指标**（`lite/tests/metrics.js`）：此前统计 `require.cache` 的全部条目，
   把 IDE / 运行时注入的 shim（fs 代理、ipc 客户端）也算成这个包的重量 —— 同一条锁在
   ubuntu runner 上是 17、在注入 shim 的编辑器里是 21，本地红而 CI 绿。现在只统计项目目录内的
@@ -38,9 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **体积基线容差** 0.1 → 1.0 kB（主包基线 401.5 kB）：压缩后的 tarball 大小会随 README /
   CHANGELOG 这类文本改动浮动零点几 kB，0.1 的容差等于「每写一句 CHANGELOG 都要追一次基线」，
   追着追着锁就变成噪声；1 kB（约 0.25%）仍能挡住真正的体积膨胀。`lite` 包体积 96.8 kB 不变。
-- **版本**：包内七处抄本同步到 `2.1-preview`（Lite `2.1-Lite-preview`），tag、Release 与
-  ZIP 资产同名。版本锁的正则放宽到「两位 + 可选三位 + 可选后缀」——preview 通道的版本号
-  本来就不是三位 semver，锁不能把它挡在门外。产品代码零改动（只改注释与文档）。
+- **README 中英双语的下载链接**：第 34 行改指 2.1 正式版的两个资产
+  （`ContextPocket-2.1.zip` / `ContextPocket-2.1-Lite.zip`），同时保留上一版 v2.0 的入口。
+  第 82 行「尚未发布到 npm registry」的说法不变。
+- **版本**：包内七处抄本同步到 `2.1`（Lite 包内 `2.1`、对外展示 `2.1-lite`），tag、Release 与
+  ZIP 资产同名。版本锁的正则放宽到「两位 + 可选三位 + 可选后缀」——preview 通道曾用
+  「两位 + 后缀」，锁不能把它挡在门外。除版本号常量与测试锁外，产品代码零改动。
 - CONTRIBUTING 的用例计数口径补上 lite 套件：302 → 333。
 
 **验证**：`npm test` 333/0、lint 63 个 js、smoke ALL PASS、smoke-live 6/6，
