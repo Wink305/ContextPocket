@@ -66,7 +66,7 @@ npm link
 npm install -g .
 ```
 
-**从 registry 安装 —— 发布之后**。`npm install -g context-pocket` 是最终的形态，但这个包**目前还没有发布到 npm registry**；在发布之前请使用上面的本地安装方式（可用 `npm view context-pocket` 自查是否已发布）。
+**从 registry 安装 —— 尚未发布**。`npm install -g context-pocket` 是最终形态，但这个包**一次都没有发布到 npm registry**：到目前为止每个版本都只通过 GitHub Release 或 git clone 分发，所以 `npm view context-pocket` 现在返回 404 是正常的。首发落地之前请用上面的本地安装方式。首发的完整清单（登录 + 2FA → `npm publish` → 把本段替换成 registry 命令）写在 `CONTRIBUTING.md` 的「发布流程（维护者）」。
 
 `package.json` 里声明了两个 bin，link 之后两个命令都会装上：
 

@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-11-08
+
+### 📦 npm 首发的离线部分就位（包本身仍未发布）
+
+> 发布流程从第 1 版起就只写到「tag → GitHub Release → 公告」，**没有 npm publish**；
+> CHANGELOG 里两条 1.1.x 的历史注释却写着「tag / npm publish 由维护者按发布流程第 6-8 步补」——
+> 文档自己打架。npm 上 `context-pocket` 至今 404（一次都没发过），README 中英文第 69 行也如实写着
+> 「尚未发布」。本版把首发前能在本地做完的事全部做完，**不执行 `npm publish`**：登录 + 2FA 与占用包名
+> 是外部动作，必须维护者本人来做。
+
+- **包元数据**（`package.json`）：补 `repository` / `homepage` / `bugs`，npm 页面不再是没有源码链接的
+  三无包。`bin` 两个入口、`files` 白名单 12 项、以及运行时真正会读的 5 个文件，全部纳入回归锁。
+- **发布流程 SOP**（`CONTRIBUTING.md`）：新增第 8 步，按「`npm adduser` + 2FA → `npm view` 占名自查 →
+  `npm pack --dry-run` 复核 → `npm publish` → `npm view` / 干净目录全局安装验收 → 回来改 README 与哨兵用例」
+  写全；并明确 `npm whoami` 报 `ENEEDAUTH` 是没登录、不是网络故障。CHANGELOG 底部引用「第 6-8 步」的
+  历史注释放开编号依赖，步骤数一变也不会再漂。
+- **README 中英文**：「尚未发布」这句实话不删，改成准确、可自查的说明——GitHub Release / git clone
+  是当前唯一分发渠道、`npm view context-pocket` 返回 404 属正常、并标明首发成功后**要替换哪一段**。
+- **两条回归锁**（`tests/unit.js`）：一条锁包元数据与白名单，一条锁「发布流程必须含 npm publish + 2FA」
+  「两份 README 必须保留未发布哨兵」。后者是刻意的：包真发出去那天它会报红，提醒维护者同步文档，
+  然后删掉这条断言。
+
+**验证**：`npm test` 291/0、`lint` 38 个 js、`smoke` ALL PASS（initialize 报 1.6.0）、
+`smoke-live` 6/6、`npm pack --dry-run` 59 文件。
+
+> ⚠️ 本版发的是 GitHub tag / Release；`npm publish` 尚未执行，`npm view context-pocket` 仍应是 404。
+
+---
+
 ## [1.5.3] - 2026-11-08
 
 ### 🛡️ 版本号的六处抄本，现在六处都锁住了
@@ -363,7 +392,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `verify` 照出来（一条 ERROR，附删行后重记的命令）。抬到 1.2.0 而不是 1.1.1，是因为这一版除了修复还**新增了**
 > 用户能读到的东西：`--json` 的 `missingSections` 字段、`log append` 的写后告警、MCP 回执里的补齐指引，
 > 以及一条过去不存在的 verify ERROR 判据。
-> 定版当天日期写在标题里；Git tag 与 npm publish 由维护者按 `CONTRIBUTING.md`「发布流程」第 6-8 步补，
+> 定版当天日期写在标题里；Git tag 与 npm publish 由维护者按 `CONTRIBUTING.md`「发布流程」补，
 > 那两步没做完之前，不要把这一节当成"已经发出去了"。
 
 ### 🐛 P1：`--when` 的整天区间把 `undefined` 写进了记录，而且 verify 一声不响（2026-10-07）

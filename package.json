@@ -1,6 +1,6 @@
 {
   "name": "context-pocket",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "Zero-dependency CLI + MCP server that auto-records every AI coding conversation turn into a project-local ContextPocket/ folder of plain Markdown, so any agent or model can pick the context back up in seconds.",
   "keywords": [
     "context",
@@ -20,6 +20,14 @@
   ],
   "license": "MIT",
   "author": "ContextPocket Contributors",
+  "homepage": "https://github.com/Wink305/ContextPocket#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wink305/ContextPocket.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Wink305/ContextPocket/issues"
+  },
   "bin": {
     "context-pocket": "bin/context-pocket.js",
     "context-pocket-mcp": "mcp-server.js"

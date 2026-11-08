@@ -66,7 +66,7 @@ Or install it globally from the local folder instead:
 npm install -g .
 ```
 
-**From the registry — once published.** `npm install -g context-pocket` is the intended final form, but the package is **not published to the npm registry yet**; use one of the clone-based commands above until it is (check with `npm view context-pocket`).
+**From the registry — not published yet.** `npm install -g context-pocket` is the intended final form, but the package has **never been published to the npm registry**: every release so far ships only via a GitHub Release or a git clone, and `npm view context-pocket` returning 404 is expected. Use one of the clone-based commands above until the first publish lands. The publish checklist (login + 2FA → `npm publish` → replace this paragraph) is in `CONTRIBUTING.md` under "发布流程（维护者）".
 
 `package.json` declares two binaries, so linking installs both:
 

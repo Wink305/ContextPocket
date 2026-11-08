@@ -36,7 +36,7 @@
    - 修改 `templates/` 时,确保新模板符合"占位符用 `<...>` 包裹"的约定
    - 修改 README/CHANGELOG 时同步更新相关章节
 4. **本地验证**（三条都要过，`package.json` 里已配好脚本）:
-   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 64+87+16+17+16+19+39+7+24 = 289 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
+   - `npm test` — 跑 `tests/run.js`（零依赖自研骨架，当前 66+87+16+17+16+19+39+7+24 = 291 个用例：单元 / pocket 集成 / git hook / 会话导入 / 格式迁移 / T 编号修复 / CLI 契约 / 帮助文本单源 / MCP 契约）。测试会自己建临时项目，绝不碰你的真实 `ContextPocket/`，也不会往 `~/.contextpocket/hub.json` 里写注册项（`tests/harness.js` 把 `CONTEXTPOCKET_HOME` 重定向到临时目录）
    - `npm run lint` — 对仓库内每个 `.js` 跑 `node --check`
    - `npm run smoke` — 用真实 stdio 跑一遍 MCP server（`initialize` / `tools/list` / 27 个工具里的 append、amend、absolute add、index、distill、hub、verify 等；`repair` 不在冒烟覆盖里——它要先人为造出撞号的目录，这件事由 `tests/repair.js` 与 `tests/mcp.js` 盯着）。不带参数时它会在 OS 临时目录里现造一个一次性 pocket 并把 `CONTEXTPOCKET_HOME` 隔离到同一目录，退出即删，所以可以直接跑；想对着指定项目跑就写 `npm run smoke -- /path/to/project`（此时若没设 `CONTEXTPOCKET_HOME`，hub 写入会落到你真实的 `~/.contextpocket`，脚本会先打印一行提示）。收尾断言是 `verify` 必须返回 `All checks passed`——所以往冒烟步骤里加任何声明（尤其是 `### Attachments` 那条路径）都得把文件真的写出来，否则第 15 项检查会让冒烟红）
    - `node tests/run.js pocket` 之类的前缀参数可以只跑某个文件
@@ -223,13 +223,26 @@ context-pocket/
    （整天区间 `--when` 落盘、坏行被 verify/archive 拦住、`stated:` 原话不误报、删行后 amend 补回、
    缺必填小节当场警告且 `--json` 的 `missingSections` 准、`distill --json` 报告的窗口数字与实际一致），
    全部走真实 CLI 子进程 + 临时 hub，退出即删。它比日常套件慢，所以不进 `npm test`，只做发版前的最后一道闸。
-5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单（`:36`）真的把它带上了。
+5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单真的把它带上了。
    落在 `bin/` `lib/` `templates/` `assets/` `docs/` `scripts/` 里的会自动带上；白名单外的目录要显式加，
    否则发布出去的包缺文件，用户拿到的就是"读不到 package.json、只能报兜底版本"那种安装。
-6. 创建 Git tag: `git tag v1.2.0`（`refs/tags/` 下现有 tag 全是 lightweight，别用 `-a`
+6. 创建 Git tag: `git tag vX.Y.Z`（`refs/tags/` 下现有 tag 全是 lightweight，别用 `-a`
    另外造出 annotated tag 让口径分叉）
-7. 创建 GitHub Release,粘贴 CHANGELOG 摘要
-8. 在社区/Discord 发公告（如果有）
+7. 创建 GitHub Release，粘贴 CHANGELOG 摘要；确认 CI `completed · success`
+8. **npm 首发**（这一步在 1.6.0 之前一直漏着，而 CHANGELOG 里两处旧注释早就默认它存在）：
+   - 一次性登录：`npm adduser`，浏览器 2FA 必须维护者本人过。判据是 `npm whoami` 能回账号；
+     它报 `ENEEDAUTH` 是**没登录**，不是网络故障——`npm ping` 通照样发不出去。
+   - 占名自查：首发前 `npm view context-pocket` 返回 404 属正常；一旦返回版本号，说明包名
+     已被占用，停下来别发。
+   - 复核白名单：按第 5 步跑 `npm pack --dry-run`，确认 `bin/context-pocket.js`、
+     `mcp-server.js`、`lib/version.js`、`SKILL.md`、`README*.md`、`LICENSE` 都在包里。
+   - 发布：`npm publish`（非 scope 包默认 public）。**只发当前 tag 对应的那一份代码**，
+     别在 `[Unreleased]` 已经堆了新改动的工作区里敲。
+   - 验收：`npm view context-pocket version` 等于本次版本号；再找个干净目录
+     `npm install -g context-pocket`，`context-pocket --version` 能答、`context-pocket-mcp` 能起。
+   - 收尾：把 README.md / README.zh-CN.md 第 69 行「尚未发布」换成 registry 安装命令，
+     并删掉 `tests/unit.js` 里那条 `not-published notices` 断言——它会刻意报红提醒你同步文档。
+9. 在社区/Discord 发公告（如果有）
 
 ---
 

@@ -944,3 +944,54 @@ test('every copy of the skill version says the same number as package.json', () 
       /漂开了/, rel + ' 的锚点必须在抄本漂开时真的报红');
   }
 });
+
+// npm 首发（1.6.0）之前的 package.json 只有 bin/files/main，缺 repository / homepage / bugs，
+// npm 页面会是个没有仓库链接的三无包。这些字段漏了不会让任何命令报错，只会在发布后才被人发现。
+test('npm package metadata and file whitelist are ready for a public first publish', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+
+  // bin 路径写错是首发最典型的翻车：装完命令找不到，而本地 npm link 一直能用
+  assert.ok(pkg.bin && typeof pkg.bin === 'object', 'package.json 必须声明 bin');
+  assert.ok(Object.keys(pkg.bin).length >= 2, 'CLI 与 MCP 两个 bin 都要在');
+  for (const [name, rel] of Object.entries(pkg.bin)) {
+    assert.ok(fs.existsSync(path.join(ROOT, rel)),
+      `bin.${name} 指向的 ${rel} 不存在，装到全局会是个空命令`);
+  }
+
+  // files 白名单：漏掉任何一项，用户拿到的包就会缺运行时真要读的文件
+  const mustHave = [
+    'bin/', 'lib/', 'templates/', 'assets/', 'docs/', 'scripts/',
+    'mcp-server.js', 'SKILL*.md', 'README.md', 'README.zh-CN.md', 'CHANGELOG.md', 'LICENSE',
+  ];
+  for (const entry of mustHave) {
+    assert.ok(pkg.files.includes(entry),
+      `files 白名单缺 ${entry}：首发包会少文件（新增文件后请看 CONTRIBUTING「发布流程」第 5 步）`);
+  }
+  for (const rel of ['bin/context-pocket.js', 'mcp-server.js', 'lib/version.js', 'SKILL.md', 'LICENSE']) {
+    assert.ok(fs.existsSync(path.join(ROOT, rel)), `首发包必需的 ${rel} 不在仓库里`);
+  }
+
+  assert.ok(pkg.repository && /github\.com\/Wink305\/ContextPocket/.test(pkg.repository.url),
+    'repository.url 要指向本仓库，npm 页面才有源码链接');
+  assert.ok(pkg.homepage && /github\.com\/Wink305\/ContextPocket/.test(pkg.homepage),
+    'homepage 要指向本仓库');
+  assert.ok(pkg.bugs && /\/issues/.test(pkg.bugs.url), 'bugs.url 要指向 issues');
+});
+
+// 发布流程文档把 npm publish 漏了整整六个版本，而 CHANGELOG 里两处旧注释却默认它存在——
+// 这类"文档自己打架"只能靠用例盯住。README 的哨兵是刻意的：包真发出去后它会报红，
+// 提醒维护者把「尚未发布」那段换成 registry 安装命令（同时删掉这条断言）。
+test('release checklist keeps the npm publish step and the not-published notices in sync', () => {
+  const contributing = fs.readFileSync(path.join(ROOT, 'CONTRIBUTING.md'), 'utf-8');
+  const flow = contributing.slice(contributing.indexOf('## 发布流程'));
+  assert.ok(flow.includes('npm publish'), 'CONTRIBUTING 的发布流程必须真的写出 npm publish 这一步');
+  assert.ok(flow.includes('npm adduser') && flow.includes('2FA'),
+    '首发要写清登录 + 2FA 由维护者本人完成，否则会被误当成一条普通命令');
+
+  const en = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf-8');
+  const zh = fs.readFileSync(path.join(ROOT, 'README.zh-CN.md'), 'utf-8');
+  assert.ok(/never been published to the npm registry/.test(en),
+    'README.md 必须如实写明尚未首发；npm publish 成功后请把这段换成 registry 安装命令并更新本用例');
+  assert.ok(/一次都没有发布到 npm registry/.test(zh),
+    'README.zh-CN.md 必须如实写明尚未首发；npm publish 成功后请同步改这段与本用例');
+});
