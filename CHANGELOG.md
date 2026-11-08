@@ -11,6 +11,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.1] - 2026-11-08
+
+### 🔁 v1.5.1 的 tag 归位 + CI 给发版 tag 也上门禁
+
+> 两件事同一个根：CI 原来只在 `push main` / PR 触发，tag 推上去既不跑门禁，也没有自己的
+> 可查结论。1.5.1 发完 Release 才发现 `3c818c2` 那条 run 是红的（`code-map update: rename
+> 按 size+mtime 配对`，Linux 同毫秒写入撞键）。1.5.2 已把用例改成确定性，但 tag 仍停在
+> 没有修复的那个提交上。
+
+- **维护：force-move `v1.5.1`**（外部动作，本次经维护者授权）。先试 `gh run rerun 42384076770`，
+  attempt #2 仍挂在同一条用例——旧代码里没修，重跑不会变绿；于是把 tag 强推到 `97d2b91`
+  （test-only 修复提交，`package.json` 仍是 1.5.1，其 CI `42440112047` 为 `success`）。
+  `v1.5.1` 的 Release 没动、仍是非草稿；`3c818c2` 那条历史失败 run 本身无法改写，只是不再
+  被任何 tag 指向。已经 clone 过旧 tag 的仓库需 `git fetch --tags --force` 才会同步。
+- **CI**：`.github/workflows/ci.yml` 的 `on.push` 增加 `tags: ['v*']`，以后每个发版 tag 都用
+  自己的代码再跑一遍 lint / tests / smoke / smoke-live。`tests/unit.js` 新增一条带反证的用例
+  锁住触发条件与四道命令；`CONTRIBUTING.md` 第 6-7 步改成「推 tag → 等 tag 那条 run 绿 →
+  再建 Release」，把 1.5.1 的教训写进流程，用例计数 291 → 292。
+- **版本**：六处抄本 1.6.0 → 1.6.1，发版 skill 的示例值与历史表同步。产品代码零改动。
+
+**验证**：`npm test` 292/0（unit 67）、`lint` 38 个 js、`smoke` ALL PASS（initialize 报 1.6.1）、
+`smoke-live` 6/6、`npm pack --dry-run` 59 文件；main 与 `v1.6.1` tag 两条 CI 均 `success`。
+
+---
+
 ## [1.6.0] - 2026-11-08
 
 ### 📦 npm 首发的离线部分就位（包本身仍未发布）

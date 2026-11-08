@@ -995,3 +995,25 @@ test('release checklist keeps the npm publish step and the not-published notices
   assert.ok(/一次都没有发布到 npm registry/.test(zh),
     'README.zh-CN.md 必须如实写明尚未首发；npm publish 成功后请同步改这段与本用例');
 });
+
+// CI 曾只在 push main / PR 触发：tag 推上去没有任何门禁，1.5.1 就是 Release 发完
+// 才发现 main 那条 run 是红的。tags 过滤和四道命令都锁住，防止以后改 workflow 时
+// 把发版这道自动闸悄悄删掉；反证确保锚点不是"永远通过"的摆设。
+test('CI workflow gates release tags with the same four checks as main', () => {
+  const rel = '.github/workflows/ci.yml';
+  const wf = fs.readFileSync(path.join(ROOT, rel), 'utf-8');
+
+  const assertGates = (text) => {
+    assert.ok(/tags:\s*\[\s*'v\*'\s*\]/.test(text),
+      rel + " 的 on.push 必须含 tags: ['v*']，否则发版 tag 推上去不会跑任何门禁");
+    for (const cmd of ['npm run lint', 'node tests/run.js', 'npm run smoke', 'npm run smoke-live']) {
+      assert.ok(text.includes(cmd), rel + ' 缺 ' + cmd + '：tag 触发了却少跑一道门禁');
+    }
+  };
+  assertGates(wf);
+
+  assert.throws(() => assertGates(wf.replace(/tags:\s*\[\s*'v\*'\s*\]/, "tags: ['none']")),
+    /on\.push/, 'tags 锚点必须在触发条件被改掉时真的报红');
+  assert.throws(() => assertGates(wf.replace('npm run smoke-live', 'echo skipped')),
+    /smoke-live/, '四道命令的锚点必须在少一道时真的报红');
+});
