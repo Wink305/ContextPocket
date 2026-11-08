@@ -11,13 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.1.0-preview] - 2026-11-08
+## [2.1-preview] - 2026-11-08
 
 ### 提示词话术清理：写死的口语触发词与「用户拍板」式来源标注全部清掉
 
-> 2.1 preview 通道的汇总：三批尚未发布的改动一起发。包内版本是三位 semver
-> （`2.1.0-preview` / `2.1.0-Lite-preview`），对外发行物与 tag 用两位渠道名
-> （`2.1-preview` / `2.1-Lite-preview`）。
+> 2.1 preview 通道的汇总：三批尚未发布的改动一起发。包内版本与对外渠道名同形
+> ——preview 通道用「两位 + 预发布后缀」，不补 patch 位：
+> `2.1-preview` / `2.1-Lite-preview`。
 
 - **产品文档里的口语触发话术**：`SKILL.md` 与两份 README 的「意图 → 动作」映射表原本把
   用户会怎么说写死成一列（"开始记一下"、"查一下有没有漏"、"交接一下"、"这玩意儿怎么用"…），
@@ -38,8 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **体积基线容差** 0.1 → 1.0 kB（主包基线 401.5 kB）：压缩后的 tarball 大小会随 README /
   CHANGELOG 这类文本改动浮动零点几 kB，0.1 的容差等于「每写一句 CHANGELOG 都要追一次基线」，
   追着追着锁就变成噪声；1 kB（约 0.25%）仍能挡住真正的体积膨胀。`lite` 包体积 96.8 kB 不变。
-- **版本**：包内七处抄本同步到 `2.1.0-preview`（Lite `2.1.0-Lite-preview`）；对外发行物与
-  tag 用两位渠道名。产品代码零改动（只改注释与文档）。
+- **版本**：包内七处抄本同步到 `2.1-preview`（Lite `2.1-Lite-preview`），tag、Release 与
+  ZIP 资产同名。版本锁的正则放宽到「两位 + 可选三位 + 可选后缀」——preview 通道的版本号
+  本来就不是三位 semver，锁不能把它挡在门外。产品代码零改动（只改注释与文档）。
 - CONTRIBUTING 的用例计数口径补上 lite 套件：302 → 333。
 
 **验证**：`npm test` 333/0、lint 63 个 js、smoke ALL PASS、smoke-live 6/6，

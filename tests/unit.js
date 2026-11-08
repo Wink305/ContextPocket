@@ -939,9 +939,10 @@ test('every copy of the skill version says the same number as package.json', () 
 
   // docs 三处：先用真实文本比对，再把版本号替换成 9.9.9 反证这条锁真的会报红——
   // 免得有人把正则写宽、或锚到不含版本号的字符串上，让用例变成永远通过的摆设。
-  // semver 预发布后缀（-hotfix1 等）是版本号的一部分，正则必须整串吞下，
-  // 否则 2.0.1-hotfix1 会被截成 2.0.1 去比对，锁永远红。
-  const SEMVER = '(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)';
+  // 版本号里的预发布后缀（-preview / -hotfix1 等）是版本号的一部分，正则必须整串吞下，
+  // 否则 2.1-preview 会被截成 2.1 去比对，锁永远红。patch 位也是可选的：preview 通道
+  // 的版本号就是「两位 + 后缀」（2.1-preview），不补三位。
+  const SEMVER = '(\\d+\\.\\d+(?:\\.\\d+)?(?:-[0-9A-Za-z.-]+)?)';
   const docStamps = [
     ['docs/COMPATIBILITY.md', new RegExp('对应 skill ' + SEMVER)],
     ['docs/FAQ.md', new RegExp('"version":"' + SEMVER + '"')],
