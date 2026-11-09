@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { performance } = require('perf_hooks');
 const {
@@ -19,6 +20,8 @@ const mainConstants = require(path.join(MAIN_ROOT, 'lib', 'constants'));
 const liteBin = path.join(ROOT, 'bin', 'context-pocket-lite.js');
 const mainBin = path.join(MAIN_ROOT, 'bin', 'context-pocket.js');
 const mainMcp = path.join(MAIN_ROOT, 'mcp-server.js');
+const liteQuery = require(path.join(ROOT, 'lib', 'query'));
+const mainQuery = require(path.join(MAIN_ROOT, 'lib', 'query'));
 
 function countCommands(bin, cwd) {
   const result = spawnSync(process.execPath, [bin, 'help', '--json'], { cwd, env: process.env, encoding: 'utf8', timeout: 15000 });
@@ -72,8 +75,20 @@ function bestStatusMs(bin, cwd) {
   return Math.min(...samples);
 }
 
-test('six Lite metrics stay below the full package and their absolute baselines remain locked', () => {
-  const { projectDir } = makeLitePocket('metrics');
+function medianExactIdMs(search, pocketDir) {
+  search(pocketDir, 'T1');
+  const samples = [];
+  for (let i = 0; i < 5; i++) {
+    const start = performance.now();
+    search(pocketDir, 'T1');
+    samples.push(performance.now() - start);
+  }
+  samples.sort((a, b) => a - b);
+  return samples[2];
+}
+
+test('Lite metrics stay below the full package and exact T-id search skips unrelated metadata', () => {
+  const { projectDir, pocketDir } = makeLitePocket('metrics');
   const liteCoreFiles = liteConstants.LITE_CORE_FILES.length;
   const mainCoreFiles = mainConstants.CORE_FILES.length;
   const liteCommands = countCommands(liteBin, projectDir);
@@ -103,6 +118,14 @@ test('six Lite metrics stay below the full package and their absolute baselines 
   const mainModules = cachedModuleCount(mainBin);
   const liteColdMs = bestStatusMs(liteBin, projectDir);
   const mainColdMs = bestStatusMs(mainBin, projectDir);
+
+  fs.writeFileSync(
+    path.join(pocketDir, 'preferences.md'),
+    '# Preferences · T1\n' + Array.from({ length: 5000 }, (_, i) => '- preference entry ' + i + ' with descriptive words').join('\n') + '\n',
+    'utf8'
+  );
+  const liteExactIdMs = medianExactIdMs(liteQuery.searchAny, pocketDir);
+  const mainExactIdMs = medianExactIdMs((dir, keyword) => mainQuery.searchAny(dir, keyword, { useIndex: false }), pocketDir);
 
   const measured = [
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
@@ -138,5 +161,7 @@ test('six Lite metrics stay below the full package and their absolute baselines 
 
   assert.ok(liteColdMs < mainColdMs,
     `cold status startup (best-of-5): Lite ${liteColdMs.toFixed(1)} ms must be below full ${mainColdMs.toFixed(1)} ms`);
-  console.log(`  metrics: modules Lite ${liteModules} / full ${mainModules}; cold status best-of-5 Lite ${liteColdMs.toFixed(1)} ms / full ${mainColdMs.toFixed(1)} ms`);
+  assert.ok(liteExactIdMs < mainExactIdMs,
+    `exact T-id search (median-of-5): Lite ${liteExactIdMs.toFixed(1)} ms must be below full scan ${mainExactIdMs.toFixed(1)} ms`);
+  console.log(`  metrics: modules Lite ${liteModules} / full ${mainModules}; cold status best-of-5 Lite ${liteColdMs.toFixed(1)} ms / full ${mainColdMs.toFixed(1)} ms; exact T-id median Lite ${liteExactIdMs.toFixed(1)} ms / full scan ${mainExactIdMs.toFixed(1)} ms`);
 });

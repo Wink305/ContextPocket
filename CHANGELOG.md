@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4-lite] - 2026-11-09
+
+### Lite 查询优化
+
+- Lite 对精确 `T<n>` 搜索现在只解析活动与归档日志，不再为定位单轮而解析无关的决策、需求和偏好文件；搜索结果与完整包扫描保持一致。
+
 ## [2.3] - 2026-11-09
 
 ### 多跳图上下文与历史有效期

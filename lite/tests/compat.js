@@ -106,6 +106,26 @@ test('Lite scan results match the main package forced scan exactly', () => {
   );
 });
 
+test('Lite exact T-id search matches the full scan for live, archived, padded, and missing ids', () => {
+  const { pocketDir } = fixture('compat-search-id');
+  writePocketFile(pocketDir, 'log-archive.md', [
+    '## T4 · archived turn',
+    '',
+    '### User',
+    '- Archived request',
+    '',
+    '### Action',
+    '- Modified src/archived.js',
+    '',
+  ].join('\n'));
+  for (const keyword of ['T1', 't002', 'T4', 'T99']) {
+    assert.deepStrictEqual(
+      liteQuery.searchAny(pocketDir, keyword, { limit: 0 }),
+      mainQuery.searchAny(pocketDir, keyword, { useIndex: false, limit: 0 })
+    );
+  }
+});
+
 test('Lite-written blocks parse in main and main-written blocks recall in Lite', () => {
   const { pocketDir } = fixture('compat-write');
   const liteAppend = liteWriter.appendLogBlock(pocketDir, {

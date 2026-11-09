@@ -15,7 +15,7 @@
  */
 
 const path = require('path');
-const { parseLogText, parseDecisions, parseRequirements, parsePreferences } = require('./parser');
+const { parseLogAll, parseLogText, parseDecisions, parseRequirements, parsePreferences } = require('./parser');
 const { readFileSafe } = require('./core');
 
 const MAX_DOC_TEXT = 4000; // 非 T 文档存进索引的最大字符数（用于命中后校验/高亮）
@@ -230,12 +230,13 @@ function normText(s) {
  * `T7` 这样的查询直接命中那一轮，与走不走索引无关
  * @returns {object[]|null} null 表示这不是 id 形式的查询；命中不到该轮时返回空数组
  */
-function idShortcutHit(docs, kw) {
+function idShortcutHit(pocketDir, kw) {
   const m = kw.match(/^T(\d+)$/i);
   if (!m) return null;
-  const key = 'T' + parseInt(m[1], 10); // T007 归一到 T7，与文档 key 的写法一致
-  const doc = docs[key];
-  if (!doc || doc.type !== 'T') return [];
+  const tId = parseInt(m[1], 10); // T007 归一到 T7，与文档 key 的写法一致
+  const block = parseLogAll(pocketDir).blocks.find((item) => item.id === tId);
+  if (!block) return [];
+  const doc = blockToDoc(block);
   return [formatDocHit(doc, [{ field: 'gist', text: doc.gist || '' }], 1)];
 }
 
@@ -351,12 +352,14 @@ function scanAll(pocketDir, keyword) {
   const kw = String(keyword || '').trim();
   if (!kw) return [];
 
+  // Exact T-id lookups only need the turn logs. Avoid parsing unrelated decision,
+  // requirement and preference documents for this common shortcut.
+  const shortcut = idShortcutHit(pocketDir, kw);
+  if (shortcut !== null) return shortcut;
+
   const { docs } = collectDocs(pocketDir);
   const byKey = {};
   for (const [key, doc] of docs) byKey[key] = doc;
-
-  const shortcut = idShortcutHit(byKey, kw);
-  if (shortcut !== null) return shortcut;
 
   const tokens = tokenize(kw);
   if (tokens.length === 0) return [];
