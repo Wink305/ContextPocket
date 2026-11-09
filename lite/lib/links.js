@@ -69,6 +69,9 @@ function deriveLinks(pocketDir) {
   const addEdge = (e) => {
     const key = [e.from, e.type, e.to].join('\u0000');
     if (edges.has(key)) return;
+    const recordedAt = e.recordedAt === undefined
+      ? (turnNum(e.from) === null ? e.tId : turnNum(e.from))
+      : e.recordedAt;
     edges.set(key, {
       from: e.from,
       to: e.to,
@@ -76,6 +79,9 @@ function deriveLinks(pocketDir) {
       evidence: e.evidence || STRONG,
       source: e.source,
       tId: e.tId === undefined ? null : e.tId,
+      recordedAt,
+      validFrom: recordedAt,
+      validTo: null,
       via: e.via || null,
     });
   };
@@ -107,20 +113,47 @@ function deriveLinks(pocketDir) {
 
   // `## T<n>-fix` 不是 T-block（不参与发号），单独作为更正节点连到被更正的轮次
   for (const fix of (logData.fixBlocks || [])) {
-    addNode(fix.fixId, 'correction', fix.gist, { source: 'log.md' });
-    addEdge({ from: fix.fixId, to: turnNodeId(fix.targetId), type: 'references', source: 'log.md', tId: fix.targetId, via: 'fix' });
+    addNode(fix.fixId, 'correction', fix.gist, { source: 'log.md', recordedAt: null, validFrom: null, validTo: null });
+    addEdge({ from: fix.fixId, to: turnNodeId(fix.targetId), type: 'references', source: 'log.md', tId: fix.targetId, recordedAt: null, via: 'fix' });
     for (const target of (fix.corrects || [])) {
-      addEdge({ from: fix.fixId, to: turnNodeId(target), type: 'references', source: 'log.md', tId: target, via: 'corrects' });
+      addEdge({ from: fix.fixId, to: turnNodeId(target), type: 'references', source: 'log.md', tId: target, recordedAt: null, via: 'corrects' });
     }
   }
 
   for (const adr of parseDecisions(pocketDir).adrs) {
     const from = adrNodeId(adr.id);
-    addNode(from, 'decision', adr.title);
+    addNode(from, 'decision', adr.title, {
+      recordedAt: adr.createdAt,
+      validFrom: adr.createdAt,
+      validTo: null,
+    });
     addEdge({ from, to: turnNodeId(adr.createdAt), type: 'decided-in', source: 'decisions.md', tId: adr.createdAt });
     const sup = /ADR-(\d+)/i.exec(String(adr.supersedes || ''));
     if (sup) {
       addEdge({ from, to: adrNodeId(sup[1]), type: 'supersedes', source: 'decisions.md', tId: adr.createdAt });
+      const superseded = nodes.get(adrNodeId(sup[1]));
+      if (superseded && (superseded.validTo === null || adr.createdAt < superseded.validTo)) {
+        superseded.validTo = adr.createdAt;
+      }
+    }
+  }
+
+  for (const node of nodes.values()) {
+    if (node.type !== 'turn') continue;
+    const tId = turnNum(node.id);
+    node.recordedAt = tId;
+    node.validFrom = tId;
+    node.validTo = null;
+  }
+
+  for (const edge of edges.values()) {
+    if (edge.type !== 'references' || edge.via !== 'corrects' ||
+        turnNum(edge.from) === null || turnNum(edge.to) === null) continue;
+    const correctedTurn = edge.to;
+    const correctedAt = edge.recordedAt;
+    for (const fact of edges.values()) {
+      if (fact.from !== correctedTurn || fact.type === 'references' || correctedAt === null) continue;
+      if (fact.validTo === null || correctedAt < fact.validTo) fact.validTo = correctedAt;
     }
   }
 

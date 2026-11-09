@@ -26,7 +26,9 @@ The MCP server exposes the same 8 operations as tools (`context_pocket_bootstrap
 * **No caches.** Search always scans (`viaIndex: false`); graph is derived at call time and writes nothing. A Lite pocket is 5 Markdown files, full stop.
 * **No write-time conflict gate.** `log append` reports `conflictCheckSkipped: true` honestly instead of pretending to have checked.
 * **No maintenance plane.** Archive, migrate, repair, amend, hub registration — those live in the full package. A pocket outgrown by Lite is a valid full-package pocket; run `context-pocket` against it whenever you want.
-* **Version line is independent.** Lite is versioned separately from the full package (currently `2.0.1-Lite-hotfix1`). Stable releases display two parts plus the product suffix (`2.1-lite`); hotfix prereleases display the full string — the suffix carries meaning.
+* **Version line is independent.** Lite is versioned separately from the full package (currently `2.3`). Stable releases display two parts plus the product suffix (`2.3-lite`); hotfix prereleases display the full string — the suffix carries meaning.
+
+Download the [ContextPocket-2.3-Lite release archive](https://github.com/Wink305/ContextPocket/releases/download/2.3-lite/ContextPocket-2.3-Lite.zip). The ZIP contains the package files and does not involve an npm registry release.
 
 ## Install
 

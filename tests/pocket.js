@@ -2321,6 +2321,56 @@ test('links: buildContext answers the inbound questions a plain recall cannot', 
   assert.ok(links.formatContextLines(ctx).some((l) => l.includes('Later change')));
 });
 
+test('links: Phase 3 expansion is multi-hop, sourced, bounded, and time-aware', () => {
+  const { pocketDir } = makeLinkedPocket('links-phase3-expansion');
+  const graph = links.deriveLinks(pocketDir);
+  const oldFact = graph.edges.find((e) => e.type === 'modifies' && e.from === 'T1' && e.to === 'file:src/a.ts');
+  assert.deepStrictEqual(
+    [oldFact.recordedAt, oldFact.validFrom, oldFact.validTo],
+    [1, 1, 2],
+    'Corrects T1 closes T1 factual edges at the correcting T-id'
+  );
+  assert.strictEqual(graph.nodes.find((n) => n.id === 'adr:ADR-1').validTo, 3,
+    'Supersedes closes the previous ADR at the replacing decision');
+
+  const atT1 = links.expandGraph(graph, ['file:src/a.ts'], 3, { asOf: 1 });
+  assert.ok(atT1.results.some((n) => n.id === 'T1' && n.distance === 1));
+  assert.ok(atT1.results.some((n) => n.id === 'adr:ADR-1' && n.distance === 2),
+    'the second hop reaches a decision through its originating turn');
+  assert.ok(atT1.results.every((n) => n.path.every((edge) => edge.source && edge.tId !== null)),
+    'each path step retains its source and T-id');
+
+  const atT2 = links.expandGraph(graph, ['file:src/a.ts'], 3, { asOf: 2 });
+  const historicalTurn = atT2.results.find((n) => n.id === 'T1');
+  assert.ok(historicalTurn, 'the corrected turn remains addressable as history');
+  assert.ok(!historicalTurn.path.some((edge) => edge.from === 'T1' && edge.type === 'modifies'),
+    'the corrected fact is not valid at the correction boundary');
+  assert.deepStrictEqual(links.expandGraph(graph, ['adr:ADR-1'], 1, { asOf: 3 }).results, [],
+    'superseded ADRs are not active at the exclusive validTo boundary');
+
+  assert.deepStrictEqual(links.graphQueryOptions(undefined, undefined), { depth: 0, asOf: null });
+  assert.strictEqual(links.graphQueryOptions(4).error, 'expand must be an integer from 1 to 3');
+  assert.match(links.graphQueryOptions(undefined, 2).error, /requires expand/);
+});
+
+test('links: log amend derives new edges at the original T-id', () => {
+  const { pocketDir } = makePocket('links-amend-timeline');
+  const appended = writer.appendLogBlock(pocketDir, {
+    gist: '补齐动作记录',
+    user: ['用户原话：补充动作'],
+  });
+  assert.strictEqual(appended.success, true);
+  writer.amendLogBlock(pocketDir, appended.tId, {
+    action: ['修改 src/amended.ts — 补上缺失的动作记录'],
+  });
+  const edge = links.deriveLinks(pocketDir).edges.find((e) =>
+    e.type === 'modifies' && e.from === 'T1' && e.to === 'file:src/amended.ts');
+  assert.ok(edge, 'amended Action data must produce the normal graph edge');
+  assert.strictEqual(edge.recordedAt, 1, 'amendment content is attributed to its original turn');
+  assert.strictEqual(edge.validFrom, 1);
+  assert.strictEqual(edge.validTo, null);
+});
+
 test('links: weak mentions only appear when explicitly requested', () => {
   const { pocketDir } = makeLinkedPocket('links-weak');
   const plain = links.buildContext(pocketDir, 3);
@@ -2373,6 +2423,25 @@ test('graph cache: delete + rebuild reproduces the file byte for byte', () => {
   assert.strictEqual(meta.kind, 'meta');
   assert.strictEqual(meta.schema, links.GRAPH_SCHEMA);
   assert.strictEqual(lines.length, 1 + w1.nodes + w1.edges);
+});
+
+test('graph cache: graph/1 caches are rejected and rebuilt with temporal graph/2 fields', () => {
+  const { pocketDir } = makeLinkedPocket('graph-schema-upgrade');
+  const written = links.writeGraphCache(pocketDir);
+  const legacy = fs.readFileSync(written.path, 'utf-8').replace('"schema":"graph/2"', '"schema":"graph/1"');
+  fs.writeFileSync(written.path, legacy, 'utf-8');
+
+  const status = links.graphCacheStatus(pocketDir);
+  assert.strictEqual(status.status, 'corrupt', 'old derivation schema cannot be treated as fresh');
+  const rebuilt = links.readGraph(pocketDir);
+  assert.strictEqual(rebuilt.rebuilt, true);
+  assert.strictEqual(rebuilt.previousStatus, 'corrupt');
+  const parsed = links.parseGraphText(fs.readFileSync(written.path, 'utf-8'));
+  assert.strictEqual(parsed.meta.schema, 'graph/2');
+  assert.ok(parsed.edges.every((edge) =>
+    Object.prototype.hasOwnProperty.call(edge, 'recordedAt') &&
+    Object.prototype.hasOwnProperty.call(edge, 'validFrom') &&
+    Object.prototype.hasOwnProperty.call(edge, 'validTo')));
 });
 
 test('graph cache: status walks missing → fresh → stale, and view self-heals', () => {

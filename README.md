@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.2](https://img.shields.io/badge/version-2.2-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.3](https://img.shields.io/badge/version-2.3-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -22,18 +22,18 @@
 - Captures: requirements, code changes, decisions, pitfalls, preferences.
 - Links turns, files and decisions into a traceable graph, so `recall --with-context` answers *what happened around this turn* — not just *what it said*.
 
-## ContextPocket 2.2 and 2.2 Lite
+## ContextPocket 2.3 and 2.3 Lite
 
-**ContextPocket 2.2** adds node-based context: turns, files and decisions are connected in a traceable graph, so `recall --with-context` shows what happened around a turn, and `graph` lets you inspect, rebuild and verify the whole graph index. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
+**ContextPocket 2.3** adds sourced multi-hop graph context and historical validity filtering: `search <kw> --expand 2` and `why <file> --expand 2` trace related turns, files and decisions up to three hops, while `--as-of <T>` filters the graph context to facts valid at that turn. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
 
-**ContextPocket 2.2 Lite** builds on the same node schema and pocket format, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eight CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild.
+**ContextPocket 2.3 Lite** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eight CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
-| **2.2** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
-| **2.2 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
+| **2.3** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
+| **2.3 Lite** | Small projects and everyday conversation memory | Runtime-derived temporal links; no cache | 5 core files · 8 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip) — the current release (tags `2.2` / `2.2-lite`). The previous stable release stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
+Download the GitHub Release archives: [ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket 2.3 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.3-lite/ContextPocket-2.3-Lite.zip) — the current release (tags `2.3` / `2.3-lite`). Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
 🚀 **How to use**
 
@@ -220,8 +220,8 @@ The new agent picks recording back up automatically — up and running in 5 seco
 | Check whether changed code went unrecorded | `verify --drift` | The files whose mtime is later than the last record (works without git; never blocks a commit) |
 | Fill in a missing turn | `log amend` | T7 filled in |
 | Record an explicit time for a turn | `log append --when` / `log amend <Tn> --when` | The turn's time line, echoed back as `⏱ <date> 09:00 → <date> 11:30` — a day it only knows as a day stays `(day)`, and the stated wording stays verbatim |
-| Find who changed a file | `why <path>` | Matching turns, labelled `[changed]` (it's in that turn's Action section) or `[mentioned only]` (Uncertain / Attachments / Conflicts … — it was talked about, not modified); changed turns come first |
-| Find an earlier turn by keyword or window | `search <keyword>` | The matching T-blocks |
+| Find who changed a file | `why <path>` (`--expand <1–3>` for graph context; `--as-of <T>` for a historical slice) | Matching turns labelled by evidence, plus related graph nodes when requested |
+| Find an earlier turn by keyword or window | `search <keyword>` (`--expand <1–3>` for graph context) | The matching T-blocks; graph context does not alter match order |
 | Recall one turn | `recall T<n>` | The full T-block |
 | Recall one turn **with its surroundings** | `recall T<n> --with-context` | The turn plus its inbound context: who referenced it, later changes to the same files, related ADRs |
 | List turns inside a window | `recall --from … --to …` / `recall --since T5 --until T9` | The turns in that window, oldest first |
@@ -239,7 +239,7 @@ The new agent picks recording back up automatically — up and running in 5 seco
 
 > 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket verify`) also works if you want zero ambiguity.
 
-**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs — rebuilt on the fly from `log.md`, `decisions.md` and `code-map.md`. Nothing is written, and every edge names the file it came from. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
+**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing the order of the original text matches; `--as-of <T>` filters that context to facts valid at a past T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close the old fact's validity interval. Every edge retains its source. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
 
 ---
 
@@ -436,7 +436,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.2 Lite package, which shares the node-based context schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.3 Lite package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 

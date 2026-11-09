@@ -59,7 +59,17 @@ const {
 const { formatVerifyResult, formatStatus, colorize } = require('../lib/formatter');
 const { bootstrap } = require('../lib/bootstrap');
 const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('../lib/query');
-const { buildContext, formatContextLines, readGraph, writeGraphCache, verifyGraphCache } = require('../lib/links');
+const {
+  buildContext,
+  formatContextLines,
+  graphQueryOptions,
+  expandGraph,
+  searchNodeIds,
+  formatExpansionLines,
+  readGraph,
+  writeGraphCache,
+  verifyGraphCache,
+} = require('../lib/links');
 const { runMigration, listMigrations } = require('../lib/migrate');
 const { repairLogIds } = require('../lib/repair');
 const { installPreCommitHook, uninstallPreCommitHook } = require('../lib/hooks');
@@ -969,6 +979,13 @@ function cmdSearch(options, positional) {
     process.exit(1);
   }
 
+  const graphOptions = graphQueryOptions(options.expand, options['as-of']);
+  if (graphOptions.error) {
+    failJson(options, 'search: ' + graphOptions.error);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + graphOptions.error);
+    process.exit(1);
+  }
+
   // 4 个过滤旗标：两两等价（T 号窗口 / 日期窗口）。值选项由 intOption/textOption 统一收，
   // 垃圾值（非数字 / 空字符串）一律回落成 null，让 filterByTime 按"没给过滤条件"处理。
   // 注意：textOption(obj, ...keys) —— 第一个参数是 options 对象，后面是键名
@@ -990,6 +1007,14 @@ function cmdSearch(options, positional) {
     fromDate,
     toDate,
   });
+  const graphContext = graphOptions.depth > 0
+    ? expandGraph(
+      readGraph(pocketDir).graph,
+      searchNodeIds(results),
+      graphOptions.depth,
+      { asOf: graphOptions.asOf, exclude: searchNodeIds(results) }
+    )
+    : null;
 
   if (options.json) {
     emitJson({
@@ -1006,6 +1031,7 @@ function cmdSearch(options, positional) {
       hasMore,
       viaIndex,
       results,
+      ...(graphContext ? { graphContext } : {}),
     });
   }
 
@@ -1064,6 +1090,10 @@ function cmdSearch(options, positional) {
     console.log('  ' + colorize(`  ↳ ${total - offset - results.length} more — next page: --offset ${offset + results.length}`, 'dim'));
     console.log('  ' + colorize('    all of them: --limit 0', 'dim'));
   }
+  if (graphContext) {
+    console.log(colorize(`  Graph context (up to ${graphContext.depth} hops${graphContext.asOf === null ? '' : ` as of T${graphContext.asOf}`})`, 'bold'));
+    for (const line of formatExpansionLines(graphContext)) console.log('  ' + line);
+  }
   console.log('');
 }
 
@@ -1086,11 +1116,37 @@ function cmdWhy(options, positional) {
     process.exit(1);
   }
 
+  const graphOptions = graphQueryOptions(options.expand, options['as-of']);
+  if (graphOptions.error) {
+    failJson(options, 'why: ' + graphOptions.error);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + graphOptions.error);
+    process.exit(1);
+  }
+
   const limit = Math.max(1, intOption(options.limit, 10));
   const results = why(pocketDir, filePath, { limit });
+  let graphContext = null;
+  if (graphOptions.depth > 0) {
+    const graph = readGraph(pocketDir).graph;
+    const needle = filePath.toLowerCase().replace(/\\/g, '/');
+    const seeds = graph.nodes
+      .filter((node) => node.type === 'file' && node.id.slice(5).toLowerCase().includes(needle))
+      .map((node) => node.id);
+    graphContext = expandGraph(graph, seeds, graphOptions.depth, {
+      asOf: graphOptions.asOf,
+      exclude: results.map((result) => 'T' + result.id),
+    });
+  }
 
   if (options.json) {
-    emitJson({ ok: true, file: filePath, count: results.length, limit, results });
+    emitJson({
+      ok: true,
+      file: filePath,
+      count: results.length,
+      limit,
+      results,
+      ...(graphContext ? { graphContext } : {}),
+    });
   }
 
   console.log('');
@@ -1124,6 +1180,10 @@ function cmdWhy(options, positional) {
       console.log(colorize('  ⚠️  No T-block records changing this file — every hit above only mentions it', 'yellow'));
       console.log(colorize('     (in Attachments / Uncertain / Conflicts / Pitfalls …). Treat the "why" as unresolved.', 'dim'));
     }
+  }
+  if (graphContext) {
+    console.log(colorize(`  Graph context (up to ${graphContext.depth} hops${graphContext.asOf === null ? '' : ` as of T${graphContext.asOf}`})`, 'bold'));
+    for (const line of formatExpansionLines(graphContext)) console.log('  ' + line);
   }
   console.log('');
 }
@@ -1304,7 +1364,9 @@ function cmdGraph(options, sub) {
     const weak = e.evidence === 'weak' ? colorize(' · weak', 'yellow') : '';
     const via = e.via ? colorize(` · via ${e.via}`, 'dim') : '';
     console.log(`    ${e.from} ${colorize('—' + e.type + '→', 'magenta')} ${e.to}${weak}${via}`);
-    console.log(colorize(`      source: ${e.source}${e.tId !== null && e.tId !== undefined ? ' · T' + e.tId : ''}`, 'dim'));
+    const recorded = e.recordedAt === null || e.recordedAt === undefined ? 'unknown' : `T${e.recordedAt}`;
+    const validTo = e.validTo === null || e.validTo === undefined ? '∞' : `T${e.validTo}`;
+    console.log(colorize(`      source: ${e.source}${e.tId !== null && e.tId !== undefined ? ' · T' + e.tId : ''} · recorded ${recorded} · valid ${e.validFrom === null || e.validFrom === undefined ? 'unknown' : 'T' + e.validFrom}–${validTo}`, 'dim'));
   }
   if (shown.length === 0) {
     console.log(colorize('    (no edges' + (typeFilter ? ` of type "${typeFilter}"` : '') + ' derived from this pocket)', 'dim'));

@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.2
+version: 2.3
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -74,8 +74,8 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Check for missing or malformed records | `verify` | pass / or a list of issues **each with a runnable fix command** |
 | Check whether changed code went unrecorded | `verify` with `drift: true` (`--drift`) | warning naming the files whose mtime is later than the last record (works without git; never blocks a commit) |
 | Fill in a missing turn | `log amend` | `✅ T7 filled: User` |
-| Find who changed a file | `why <path>` | matching turns, split by evidence: `[changed]` (in that turn's Action) vs `[mentioned only]` (Uncertain / Attachments / Conflicts — talked about, not modified) |
-| Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`) | matching T-blocks, window applied before paging |
+| Find who changed a file | `why <path>` (`--expand <1–3>` for graph context; `--as-of <T>` for a historical slice) | matching turns split by evidence, plus related graph nodes when requested |
+| Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`; `--expand <1–3>` for graph context) | matching T-blocks, window applied before paging; optional graph context never changes match order |
 | Recall one turn | `recall T<n>` | the full T-block |
 | Recall one turn **with its surroundings** | `recall T<n> --with-context` (MCP: `withContext`) | the T-block plus its inbound context: who referenced it, later changes to the same files, related ADRs |
 | List turns inside a window | `recall --since T5 --until T9` / `recall --from <date> --to <date>` (MCP: `context_pocket_recall` **without `tId`**, with the four window params) | turns in the window, oldest first, archived ones marked; page with `--limit/--offset`. No keyword needed. A `tId` and a window cannot be combined |
@@ -95,7 +95,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 
 ### The graph layer
 
-`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs — rebuilt on the fly from `log.md`, `decisions.md` and `code-map.md`. Nothing is written: the graph is a projection of files already in the pocket, and every edge names the file it came from.
+`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing text-match order; `--as-of <T>` filters the graph slice to facts valid at that T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close old fact intervals. Every edge names its source.
 
 **Reach for it when the question is about relationships** — "what happened around this turn?", "which decisions touched this file?", "is that decision still current?". `graph` answers shape questions ("how are these files and decisions connected?"); `--with-context` answers one turn's surroundings.
 

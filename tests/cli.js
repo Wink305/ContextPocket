@@ -1153,3 +1153,32 @@ test('cli: graph rebuild / verify / tamper detection round-trip', () => {
   assert.strictEqual(runCli(['graph', 'rebuild'], pocketDir).code, 0);
   assert.strictEqual(runCli(['graph', 'verify'], pocketDir).code, 0);
 });
+
+test('cli: search and why append multi-hop graph context with as-of validity filtering', () => {
+  const { pocketDir } = makeLinkedPocket('cli-graph-expansion');
+
+  const plain = parseJsonLine(runCli(['search', '闭区间', '--json'], pocketDir));
+  const expanded = parseJsonLine(runCli([
+    'search', '闭区间', '--expand', '2', '--as-of', '2', '--json',
+  ], pocketDir));
+  assert.deepStrictEqual(expanded.results, plain.results, 'graph expansion must not reorder or alter text matches');
+  assert.strictEqual(expanded.graphContext.depth, 2);
+  assert.strictEqual(expanded.graphContext.asOf, 2);
+  assert.ok(expanded.graphContext.results.some((n) => n.id === 'T1'), JSON.stringify(expanded.graphContext));
+  assert.ok(expanded.graphContext.results.every((n) => n.path.every((edge) => edge.source)),
+    'every returned path is traceable');
+
+  const whyResult = parseJsonLine(runCli([
+    'why', 'src/a.ts', '--expand', '2', '--as-of', '1', '--json',
+  ], pocketDir));
+  assert.strictEqual(whyResult.graphContext.asOf, 1);
+  assert.ok(whyResult.graphContext.results.some((n) => n.id === 'adr:ADR-1'),
+    JSON.stringify(whyResult.graphContext));
+
+  const invalid = runCli(['why', 'src/a.ts', '--expand', '4', '--json'], pocketDir);
+  assert.strictEqual(invalid.code, 1);
+  assert.match(parseJsonLine(invalid).error, /expand must be an integer from 1 to 3/);
+  const asOfWithoutExpand = runCli(['search', '闭区间', '--as-of', '2', '--json'], pocketDir);
+  assert.strictEqual(asOfWithoutExpand.code, 1);
+  assert.match(parseJsonLine(asOfWithoutExpand).error, /requires expand/);
+});

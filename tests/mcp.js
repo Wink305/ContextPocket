@@ -1004,6 +1004,28 @@ test('mcp: graph rebuild and verify mirror the CLI semantics', async () => {
   assert.ok(ok.includes('matches the sources'), ok);
 });
 
+test('mcp: search and why support sourced graph expansion with temporal slices', async () => {
+  const { projectDir } = makeLinkedPocket('mcp-graph-expansion');
+  const search = await mcpCall(projectDir, 'context_pocket_search', {
+    keyword: '闭区间', expand: 2, asOf: 2,
+  }, 2);
+  assert.match(search, /Graph context \(up to 2 hops as of T2\)/, search);
+  assert.match(search, /T1/, search);
+  assert.match(search, /log\.md T2/, search);
+
+  const whyText = await mcpCall(projectDir, 'context_pocket_why', {
+    filePath: 'src/a.ts', expand: 2, asOf: 1,
+  }, 2);
+  assert.match(whyText, /Graph context \(up to 2 hops as of T1\)/, whyText);
+  assert.match(whyText, /adr:ADR-1/, whyText);
+
+  const invalid = await mcpCallRaw(projectDir, 'context_pocket_search', {
+    keyword: '闭区间', expand: 4,
+  });
+  assert.strictEqual(invalid.isError, true);
+  assert.match(invalid.content[0].text, /expand must be an integer from 1 to 3/);
+});
+
 test('mcp: tools/list advertises context_pocket_graph with action/type/limit', async () => {
   const { projectDir } = makePocket('mcp-graph-schema');
   const srv = startServer(projectDir);

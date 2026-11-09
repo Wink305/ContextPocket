@@ -6,7 +6,7 @@ description: >
   and everyday conversation memory: 8 commands / 8 MCP tools, zero caches, zero dependencies.
   Same pocket format as the full package — a Lite pocket can be handed to the full
   package at any time for archive / migrate / repair / index / hub.
-version: 2.2
+version: 2.3
 format: v2
 tags: [dev-tools, context, memory, productivity, agent-handoff, lite]
 ---

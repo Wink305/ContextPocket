@@ -35,7 +35,17 @@ const {
 } = require('./lib/writer');
 const { bootstrap } = require('./lib/bootstrap');
 const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('./lib/query');
-const { buildContext, formatContextLines, readGraph, writeGraphCache, verifyGraphCache } = require('./lib/links');
+const {
+  buildContext,
+  formatContextLines,
+  graphQueryOptions,
+  expandGraph,
+  searchNodeIds,
+  formatExpansionLines,
+  readGraph,
+  writeGraphCache,
+  verifyGraphCache,
+} = require('./lib/links');
 const { runMigration, listMigrations } = require('./lib/migrate');
 const { repairLogIds } = require('./lib/repair');
 const { describeWhen, describeWhenLine } = require('./lib/when');
@@ -366,6 +376,17 @@ const TOOLS = [
           type: 'string',
           description: 'Time window — only turns whose WHEN is on or before this day (YYYY-MM-DD; CLI equivalent: --to)',
         },
+        expand: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 3,
+          description: 'Expand graph context by 1–3 hops (CLI equivalent: --expand)',
+        },
+        asOf: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Filter graph context to facts valid at this T-id; requires expand (CLI equivalent: --as-of)',
+        },
       },
     },
   },
@@ -384,6 +405,17 @@ const TOOLS = [
           type: 'number',
           description: 'Maximum number of T-blocks to return (default: 10)',
           default: 10,
+        },
+        expand: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 3,
+          description: 'Expand graph context by 1–3 hops (CLI equivalent: --expand)',
+        },
+        asOf: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Filter graph context to facts valid at this T-id; requires expand (CLI equivalent: --as-of)',
         },
       },
     },
@@ -1486,6 +1518,13 @@ function toolSearch(args) {
       isError: true,
     };
   }
+  const graphOptions = graphQueryOptions(args.expand, args.asOf);
+  if (graphOptions.error) {
+    return {
+      content: [{ type: 'text', text: `❌ Error: ${graphOptions.error}` }],
+      isError: true,
+    };
+  }
 
   // 优先倒排索引（覆盖 T-block + ADR + R + prefs，历史增长后依然即时）；
   // 缓存缺失 / 坏 JSON / INDEX_VERSION 对不上 / 签名过期都是当场重建然后继续走索引，
@@ -1501,6 +1540,13 @@ function toolSearch(args) {
     fromDate: typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null,
     toDate: typeof args.toDate === 'string' && args.toDate ? args.toDate : null,
   });
+  const resultNodeIds = searchNodeIds(results);
+  const graphContext = graphOptions.depth > 0
+    ? expandGraph(readGraph(pocketDir).graph, resultNodeIds, graphOptions.depth, {
+      asOf: graphOptions.asOf,
+      exclude: resultNodeIds,
+    })
+    : null;
 
   const lines = [];
   const shown = limit !== null && results.length < total
@@ -1553,6 +1599,10 @@ function toolSearch(args) {
     lines.push('');
     lines.push(`_${total - offset - results.length} more — next page: {"offset": ${offset + results.length}}; all of them: {"limit": 0}_`);
   }
+  if (graphContext) {
+    lines.push('', `### Graph context (up to ${graphContext.depth} hops${graphContext.asOf === null ? '' : ` as of T${graphContext.asOf}`})`);
+    lines.push(...formatExpansionLines(graphContext));
+  }
 
   return {
     content: [{ type: 'text', text: lines.join('\n') }],
@@ -1569,10 +1619,29 @@ function toolWhy(args) {
       isError: true,
     };
   }
+  const graphOptions = graphQueryOptions(args.expand, args.asOf);
+  if (graphOptions.error) {
+    return {
+      content: [{ type: 'text', text: `❌ Error: ${graphOptions.error}` }],
+      isError: true,
+    };
+  }
 
   // 与 CLI 的 why 同一条归一：limit=0 不该被当成"没给"而变回默认值
   const limit = Math.max(1, intOption(args.limit, 10));
   const results = why(pocketDir, filePath, { limit });
+  let graphContext = null;
+  if (graphOptions.depth > 0) {
+    const graph = readGraph(pocketDir).graph;
+    const needle = filePath.toLowerCase().replace(/\\/g, '/');
+    const seeds = graph.nodes
+      .filter((node) => node.type === 'file' && node.id.slice(5).toLowerCase().includes(needle))
+      .map((node) => node.id);
+    graphContext = expandGraph(graph, seeds, graphOptions.depth, {
+      asOf: graphOptions.asOf,
+      exclude: results.map((result) => 'T' + result.id),
+    });
+  }
 
   const lines = [];
   const changedN = results.filter(r => r.evidence === 'changed').length;
@@ -1598,6 +1667,10 @@ function toolWhy(args) {
       lines.push('');
       lines.push('> ⚠️ No T-block records *changing* this file — every hit above only mentions it (Attachments / Uncertain / Conflicts / Pitfalls …). Treat the "why" as unresolved.');
     }
+  }
+  if (graphContext) {
+    lines.push('', `### Graph context (up to ${graphContext.depth} hops${graphContext.asOf === null ? '' : ` as of T${graphContext.asOf}`})`);
+    lines.push(...formatExpansionLines(graphContext));
   }
 
   return {
@@ -1728,7 +1801,10 @@ function toolGraph(args) {
     const weak = e.evidence === 'weak' ? ' · **weak**' : '';
     const via = e.via ? ` · via ${e.via}` : '';
     const src = `source ${e.source}${e.tId !== null && e.tId !== undefined ? ' · T' + e.tId : ''}`;
-    lines.push(`- \`${e.from}\` —${e.type}→ \`${e.to}\`${weak}${via} (${src})`);
+    const recorded = e.recordedAt === null || e.recordedAt === undefined ? 'unknown' : `T${e.recordedAt}`;
+    const validFrom = e.validFrom === null || e.validFrom === undefined ? 'unknown' : `T${e.validFrom}`;
+    const validTo = e.validTo === null || e.validTo === undefined ? '∞' : `T${e.validTo}`;
+    lines.push(`- \`${e.from}\` —${e.type}→ \`${e.to}\`${weak}${via} (${src}; recorded ${recorded}; valid ${validFrom}–${validTo})`);
   }
   lines.push('');
   lines.push('Derived from log.md / log-archive.md / decisions.md / code-map.md — every edge cites its source; weak evidence is marked. recall with withContext uses the live derivation, so it never depends on this cache.');

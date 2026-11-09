@@ -108,8 +108,9 @@ Phase 0 **完全不落盘**（纯运行时派生，零迁移风险）。Phase 1 
 
 借 Graphiti/Zep 的 bi-temporal 思路，但用 T 号当天然时间轴，不引入时间戳数据库：
 
-- `recordedAt = T<n>`：事实在哪一轮被记下。
-- `validFrom / validTo`：由 `corrections` 的 superseded 链、`Supersedes`、`log amend` 推导。
+- `recordedAt = T<n>`：事实在哪一轮被记下；`validFrom` 默认等于 `recordedAt`。
+- `validTo` 是**不包含**的 T 号边界：普通 T-block 的 `Corrects T<n>` 关闭被更正轮的事实边；ADR 的 `Supersedes: ADR-n` 关闭旧 ADR 的有效期。更正引用和 `supersedes` 边本身保留为历史关系。
+- `log amend` 只补充原 T-block 缺失内容，并不记录独立的修改轮次；因此补出的边沿用原 T 号作为 `recordedAt`，无法还原 amendment 实际发生时间。
 - 「T7 当时我以为 X」类问题答的是 recordedAt，不是当前值；现有 `superseded` 语义已经把新旧并存，正好接上。
 
 ### 3.6 可溯源性
@@ -143,8 +144,8 @@ query → 倒排召回（现有 search，语义不变）
 |---|---|---|---|
 | 单轮带上下文 | `recall T<n> --with-context` | `context_pocket_recall` + `withContext` | Phase 0 |
 | 查看派生图 | `graph [--type <type>] [--json]` | `context_pocket_graph` | Phase 1 |
-| 文件多跳反查 | `why <file> --expand <n>` | `context_pocket_why` + `expand` | Phase 3 |
-| 搜索邻接扩展 | `search <kw> --expand <n>` | `context_pocket_search` + `expand` | Phase 3 |
+| 文件多跳反查 | `why <file> --expand <n> [--as-of <T>]` | `context_pocket_why` + `expand` / `asOf` | Phase 3 |
+| 搜索邻接扩展 | `search <kw> --expand <n> [--as-of <T>]` | `context_pocket_search` + `expand` / `asOf` | Phase 3 |
 | 重建索引缓存 | `graph rebuild` / `graph verify` | 同 | Phase 1 |
 
 ---
@@ -172,7 +173,7 @@ query → 倒排召回（现有 search，语义不变）
 | MCP 工具 | 8 | 28 | stdio `tools/list` 现场数 + 绝对值 |
 | 包内文件 | 27 | 61 | `npm pack --dry-run` 解析文件数 |
 | 冷启动模块数 / `status` best-of-5 | 17 / 97.0 ms | 25 / 114.3 ms | 模块数绝对值 + 墙钟耗时实测比较 |
-| npm 包体积 | 96.8 kB | 约 400.8 kB | dry-run 输出绝对值锁；npm 只显示一位小数，容差 0.1 kB |
+| npm 包体积 | 96.8 kB | 约 407.8 kB | dry-run 输出基线锁；npm 只显示一位小数，容差 1% 且不低于 2 kB |
 
 ---
 
@@ -347,6 +348,5 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 
 ### 下一步
 
-- Phase 0 的价值确认（真实口袋上人工用 `recall --with-context` / `graph`）。
-- Phase 3：完整 2.0 的图索引、多跳与时间有效性（§7 退出 gate）。
-- Phase 4：npm 首发收尾（`npm view context-pocket` 不再是 404）。
+- Phase 3：完整包 `search` / `why` 支持 1–3 跳图扩展与 `--as-of` 时间切片；图缓存 schema 升至 `graph/2`，边记录 `recordedAt` / `validFrom` / `validTo`。此版本按 `ContextPocket-2.3` / `ContextPocket-2.3-Lite` 命名，并准备 GitHub Release ZIP 资产。
+- Phase 4：以 `ContextPocket-2.3` / `ContextPocket-2.3-Lite` 为发布名称，完成示例口袋、双语文档与发布收尾。
