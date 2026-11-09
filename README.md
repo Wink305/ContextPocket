@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.2](https://img.shields.io/badge/version-2.2-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.3](https://img.shields.io/badge/version-2.3-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -22,20 +22,18 @@
 - Captures: requirements, code changes, decisions, pitfalls, preferences.
 - Links turns, files and decisions into a traceable graph, so `recall --with-context` answers *what happened around this turn* — not just *what it said*.
 
-## ContextPocket 2.2 and 2.2 Lite
+## ContextPocket 2.3 and 2.3 Lite
 
-**ContextPocket 2.2** adds node-based context: turns, files and decisions are connected in a traceable graph, so `recall --with-context` shows what happened around a turn, and `graph` lets you inspect, rebuild and verify the whole graph index. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
+**ContextPocket 2.3** adds sourced multi-hop graph context and historical validity filtering: `search <kw> --expand 2` and `why <file> --expand 2` trace related turns, files and decisions up to three hops, while `--as-of <T>` filters the graph context to facts valid at that turn. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
 
-**ContextPocket 2.2 Lite** builds on the same node schema and pocket format, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eight CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild.
+**ContextPocket 2.3 Lite** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eight CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
-| **2.2** | Larger, long-running projects | Cached graph index with rebuild / verify; contextual recall | 10 core files · 28 commands / tools |
-| **2.2 Lite** | Small projects and everyday conversation memory | Runtime-derived, single-hop links; no cache | 5 core files · 8 commands / tools |
+| **2.3** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
+| **2.3 Lite** | Small projects and everyday conversation memory | Runtime-derived temporal links; no cache | 5 core files · 8 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip) — the current release (tags `2.2` / `2.2-lite`). The previous stable release stays [ContextPocket 2.0](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip). Each archive includes its `package.json`, README and license; no npm registry release is involved.
-
-The next planned release names are **ContextPocket-2.3** and **ContextPocket-2.3-Lite**.
+Download the GitHub Release archives: [ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket 2.3 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.3-lite/ContextPocket-2.3-Lite.zip) — the current release (tags `2.3` / `2.3-lite`). Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
 🚀 **How to use**
 
@@ -438,7 +436,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.2 Lite package, which shares the node-based context schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.3 Lite package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 

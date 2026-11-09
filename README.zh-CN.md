@@ -3,6 +3,7 @@
 > **[English](README.md)** · [文档目录](docs/) · [更新日志](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version: 2.3](https://img.shields.io/badge/version-2.3-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -20,20 +21,18 @@
 - 下次任何 Agent 读一遍，5 秒续上进度。
 - 记录内容：需求、代码变更、决策、踩坑、偏好。
 
-## ContextPocket 2.2 与 2.2 Lite
+## ContextPocket 2.3 与 2.3 Lite
 
-**ContextPocket 2.2** 加入节点式上下文：把轮次、文件和决策连接成可追溯的图，`recall --with-context` 可展示关联历史；完整包还可查看、重建和校验图索引。它保留更完整的 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。
+**ContextPocket 2.3** 增加带来源的多跳图上下文与历史有效期筛选：`search <关键词> --expand 2` 和 `why <文件> --expand 2` 可追踪最多三跳的关联轮次、文件和决策；`--as-of <T>` 按指定轮次筛选当时有效的图事实。完整包保留 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。
 
-**ContextPocket 2.2 Lite** 建立在相同的节点 schema 和口袋格式之上，为小型项目和日常对话记忆简化读写路径。它使用 5 个核心 Markdown 文件、8 条 CLI 命令 / MCP 工具；搜索现场扫描、关联图运行时派生，不创建搜索索引或图缓存。
+**ContextPocket 2.3 Lite** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径。它使用 5 个核心 Markdown 文件、8 条 CLI 命令 / MCP 工具；搜索现场扫描、关联图运行时派生，不创建搜索索引或图缓存。
 
 | 版本 | 适用场景 | 上下文关联图 | 规模 |
 |---|---|---|---|
-| **2.2** | 较大、长期维护的项目 | 带缓存的图索引，可重建 / 校验；支持关联上下文回看 | 10 个核心文件 · 28 条命令 / 工具 |
-| **2.2 Lite** | 小型项目和日常对话记忆 | 运行时派生单跳关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
+| **2.3** | 较大、长期维护的项目 | 带历史有效期筛选的多跳关联上下文 | 10 个核心文件 · 28 条命令 / 工具 |
+| **2.3 Lite** | 小型项目和日常对话记忆 | 运行时派生带时间字段的关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
 
-下载 GitHub Release 压缩包：[ContextPocket 2.2](https://github.com/Wink305/ContextPocket/releases/download/2.2/ContextPocket-2.2.zip) · [ContextPocket 2.2 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.2-lite/ContextPocket-2.2-Lite.zip)——当前发行版（tag `2.2` / `2.2-lite`）。上一版仍是 [ContextPocket 2.0 完整版](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0.zip) · [ContextPocket 2.0 Lite](https://github.com/Wink305/ContextPocket/releases/download/v2.0/ContextPocket2.0Lite.zip)。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
-
-下一次计划发布名称为 **ContextPocket-2.3** 和 **ContextPocket-2.3-Lite**。
+下载 GitHub Release 压缩包：[ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket 2.3 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.3-lite/ContextPocket-2.3-Lite.zip)——当前发行版（tag `2.3` / `2.3-lite`）。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
 
 🚀 **方法**
 
@@ -433,7 +432,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 - tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
 ```
 
-**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket 2.2 Lite 包**，建立在 2.2 节点式上下文与共用 schema 之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
+**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket 2.3 Lite 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
 
 ---
 

@@ -9,12 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- **Phase 3 graph context**: `search` and `why` can expand matching nodes through up to
-  three sourced graph hops without changing text-match order. Optional `--as-of <T>`
-  slices graph context using recorded/valid intervals: `Corrects T<n>` closes the
-  corrected turn's factual edges, and ADR `Supersedes` closes the prior decision.
-  Graph cache schema is now `graph/2`; Lite derives the same temporal Node schema at
-  runtime and still writes no graph cache.
+## [2.3] - 2026-11-09
+
+### 多跳图上下文与历史有效期
+
+> ContextPocket-2.3 增加带来源的多跳图上下文与历史时间切片；Lite 同步图节点/边的时间字段，
+> 继续保持无缓存、同源 schema。
+
+- **`search` / `why` 多跳扩展**：完整包支持 1–3 跳图上下文，保留原始文本命中顺序，并为每条路径展示边方向、关系、来源与 T-id；弱证据边不参与扩展，最多展示 100 个图节点。
+- **历史有效期**：`--as-of <T>` 按图事实的记录时间与有效区间筛选上下文。显式 `Corrects T<n>` 关闭被更正轮次的事实边；ADR `Supersedes` 关闭旧决策的有效期，边界为不包含的 T-id。
+- **图缓存 schema 升级**：完整包缓存升级为 `graph/2`，旧版缓存会被判定为过期并自动重建。
+- **Lite schema 一致性**：Lite 同步派生 `recordedAt`、`validFrom`、`validTo` 字段；不增加图缓存或多跳扩展，仍只读写 Markdown 源文件。
+- **双语使用文档**：更新 CLI、MCP 的 `search` / `why` 用法，以及 2.3 / 2.3 Lite 下载入口。
+
+**验证**：完整测试、lint、MCP smoke 全部通过；主包与 Lite 的 ZIP 资产基于各自发布白名单打包。
 
 ---
 

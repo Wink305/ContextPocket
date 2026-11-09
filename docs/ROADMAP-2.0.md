@@ -348,5 +348,5 @@ npm 的 `package.json` / dist-tag 仍必须是三位 semver（`2.0.0`，npm 不�
 
 ### 下一步
 
-- Phase 3（已实现，未发行）：完整包 `search` / `why` 支持 1–3 跳图扩展与 `--as-of` 时间切片；图缓存 schema 升至 `graph/2`，边记录 `recordedAt` / `validFrom` / `validTo`。
+- Phase 3：完整包 `search` / `why` 支持 1–3 跳图扩展与 `--as-of` 时间切片；图缓存 schema 升至 `graph/2`，边记录 `recordedAt` / `validFrom` / `validTo`。此版本按 `ContextPocket-2.3` / `ContextPocket-2.3-Lite` 命名，并准备 GitHub Release ZIP 资产。
 - Phase 4：以 `ContextPocket-2.3` / `ContextPocket-2.3-Lite` 为发布名称，完成示例口袋、双语文档与发布收尾。
