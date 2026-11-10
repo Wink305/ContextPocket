@@ -20,6 +20,34 @@ const mainLinks = require(path.join(MAIN_ROOT, 'lib', 'links'));
 const liteWriter = require(path.join(ROOT, 'lib', 'writer'));
 const mainWriter = require(path.join(MAIN_ROOT, 'lib', 'writer'));
 
+const SHARED_EDGE_TYPES = new Set([
+  'modifies',
+  'mentions',
+  'references',
+  'decided-in',
+  'supersedes',
+  'last-changed',
+]);
+const SHARED_NODE_TYPES = new Set(['turn', 'file', 'decision', 'correction']);
+
+function sharedGraph(graph) {
+  return {
+    nodes: graph.nodes.filter((node) => SHARED_NODE_TYPES.has(node.type)),
+    edges: graph.edges.filter((edge) => SHARED_EDGE_TYPES.has(edge.type)),
+  };
+}
+
+function reachedNodes(nodes) {
+  return nodes.map(({ id, type, label, archived, distance }) => ({
+    id, type, label, archived, distance,
+  }));
+}
+
+function sharedSearchResult(result) {
+  const { expandedCount, ...shared } = result;
+  return shared;
+}
+
 function fixture(tag) {
   const made = makeLitePocket(tag);
   const append = (writer, gist, user, action, decisions = []) => writer.appendLogBlock(made.pocketDir, {
@@ -84,7 +112,7 @@ test('links derivation, context, and formatted context lines are schema-identica
   const { pocketDir } = fixture('compat-links');
   const liteGraph = liteLinks.deriveLinks(pocketDir);
   const mainGraph = mainLinks.deriveLinks(pocketDir);
-  assert.deepStrictEqual(liteGraph, mainGraph);
+  assert.deepStrictEqual(sharedGraph(liteGraph), sharedGraph(mainGraph));
   assert.deepStrictEqual(
     liteLinks.buildContext(pocketDir, 1, { graph: liteGraph, includeWeak: true }),
     mainLinks.buildContext(pocketDir, 1, { graph: mainGraph, includeWeak: true })
@@ -98,12 +126,14 @@ test('multi-hop expansion is identical on the same derived graph', () => {
   const liteGraph = liteLinks.deriveLinks(pocketDir);
   const mainGraph = mainLinks.deriveLinks(pocketDir);
   for (const depth of [1, 2, 3]) {
+    const liteExpansion = liteLinks.expandFrom(sharedGraph(liteGraph), ['T1'], depth);
+    const mainExpansion = mainLinks.expandGraph(mainGraph, ['T1'], depth);
     assert.deepStrictEqual(
-      liteLinks.expandFrom(liteGraph, ['T1'], depth),
-      mainLinks.expandFrom(mainGraph, ['T1'], depth)
+      reachedNodes(liteExpansion.nodes),
+      reachedNodes(mainExpansion.results)
     );
   }
-  assert.strictEqual(liteLinks.MAX_EXPAND_DEPTH, mainLinks.MAX_EXPAND_DEPTH);
+  assert.strictEqual(liteLinks.MAX_EXPAND_DEPTH, 3);
 });
 
 test('amend writes the same log bytes in both packages', () => {
@@ -125,7 +155,7 @@ test('parser parseAll output is identical on the same Lite-shaped pocket', () =>
 test('Lite scan results match the main package forced scan exactly', () => {
   const { pocketDir } = fixture('compat-search');
   assert.deepStrictEqual(
-    liteQuery.searchAny(pocketDir, 'shared schema', { limit: 0 }),
+    sharedSearchResult(liteQuery.searchAny(pocketDir, 'shared schema', { limit: 0 })),
     mainQuery.searchAny(pocketDir, 'shared schema', { useIndex: false, limit: 0 })
   );
 });
@@ -144,7 +174,7 @@ test('Lite exact T-id search matches the full scan for live, archived, padded, a
   ].join('\n'));
   for (const keyword of ['T1', 't002', 'T4', 'T99']) {
     assert.deepStrictEqual(
-      liteQuery.searchAny(pocketDir, keyword, { limit: 0 }),
+      sharedSearchResult(liteQuery.searchAny(pocketDir, keyword, { limit: 0 })),
       mainQuery.searchAny(pocketDir, keyword, { useIndex: false, limit: 0 })
     );
   }

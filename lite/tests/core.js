@@ -190,6 +190,18 @@ test('search and why expand walk the runtime graph and leave the direct results 
   assert.strictEqual(cli.json.expandedCount, 2);
 });
 
+test('graph expansion ignores weak mention edges', () => {
+  const { pocketDir } = makeLitePocket('expand-weak');
+  append(pocketDir, 'direct hit', { action: ['Modified src/shared.js'] });
+  append(pocketDir, 'weak mention', {
+    action: ['Modified src/other.js'],
+    uncertain: ['Check src/shared.js later'],
+  });
+
+  const expanded = searchAny(pocketDir, 'direct hit', { expand: 2 });
+  assert.deepStrictEqual(expanded.results.filter((result) => result.expanded), []);
+});
+
 test('log amend fills only missing sections, preserves WHEN, and diff/handoff round-trip', () => {
   const { projectDir, pocketDir } = makeLitePocket('amend-diff-handoff');
   append(pocketDir, 'first', { when: '2026-11-01', action: ['Modified src/a.js'] });

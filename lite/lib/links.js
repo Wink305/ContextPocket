@@ -390,6 +390,7 @@ function expandFrom(graph, seedIds, depth) {
   const nodeById = new Map((graph.nodes || []).map((n) => [n.id, n]));
   const adj = new Map();
   for (const e of graph.edges || []) {
+    if (e.evidence === WEAK) continue;
     if (!adj.has(e.from)) adj.set(e.from, []);
     if (!adj.has(e.to)) adj.set(e.to, []);
     adj.get(e.from).push({ edge: e, other: e.to });

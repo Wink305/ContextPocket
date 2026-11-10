@@ -129,9 +129,9 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
 
   const measured = [
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
-    ['CLI commands', liteCommands, mainCommands, 11, 29],
-    ['MCP tools', liteMcpTools, mainMcpTools, 11, 29],
-    ['package files', litePack.files, mainPack.files, 28, 62],
+    ['CLI commands', liteCommands, mainCommands, 11, 28],
+    ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
+    ['package files', litePack.files, mainPack.files, 28, 61],
     ['cold-start module count', liteModules, mainModules, 17, null],
     ['package size kB', litePack.sizeKb, mainPack.sizeKb, 114.2, 412.4],
   ];

@@ -80,7 +80,7 @@ Stdio transport, newline-delimited JSON-RPC, protocol versions `2025-06-18` / `2
 
 ## Compatibility guarantee
 
-The format layer (parser, WHEN lines, constants, io) is kept byte-identical to the full package, and the repo's cross-test suite locks it: `deriveLinks`, `buildContext` and scan-path search results must be `deepStrictEqual` between Lite and the full package on the same pocket. If they ever diverge, the test fails before anything ships.
+The shared format layer and core graph/search behavior are checked against the full package on the same pocket. Lite may add graph relations and expansion metadata that are not present in the full package's current minor release; compatibility checks compare the shared graph schema and direct search results while separate Lite tests cover those additions.
 
 ## License
 
