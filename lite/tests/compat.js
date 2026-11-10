@@ -93,6 +93,30 @@ test('links derivation, context, and formatted context lines are schema-identica
   assert.deepStrictEqual(liteLinks.formatContextLines(context), mainLinks.formatContextLines(context));
 });
 
+test('multi-hop expansion is identical on the same derived graph', () => {
+  const { pocketDir } = fixture('compat-expand');
+  const liteGraph = liteLinks.deriveLinks(pocketDir);
+  const mainGraph = mainLinks.deriveLinks(pocketDir);
+  for (const depth of [1, 2, 3]) {
+    assert.deepStrictEqual(
+      liteLinks.expandFrom(liteGraph, ['T1'], depth),
+      mainLinks.expandFrom(mainGraph, ['T1'], depth)
+    );
+  }
+  assert.strictEqual(liteLinks.MAX_EXPAND_DEPTH, mainLinks.MAX_EXPAND_DEPTH);
+});
+
+test('amend writes the same log bytes in both packages', () => {
+  const liteFixture = fixture('compat-amend-lite');
+  const mainFixture = fixture('compat-amend-main');
+  const payload = { decisions: ['compat decision'], pitfalls: ['compat pitfall'] };
+  const liteResult = liteWriter.amendLogBlock(liteFixture.pocketDir, 1, payload);
+  const mainResult = mainWriter.amendLogBlock(mainFixture.pocketDir, 1, payload);
+  assert.deepStrictEqual(liteResult.filled, mainResult.filled);
+  assert.deepStrictEqual(liteResult.skipped, mainResult.skipped);
+  assert.strictEqual(readPocketFile(liteFixture.pocketDir, 'log.md'), readPocketFile(mainFixture.pocketDir, 'log.md'));
+});
+
 test('parser parseAll output is identical on the same Lite-shaped pocket', () => {
   const { pocketDir } = fixture('compat-parser');
   assert.deepStrictEqual(liteParser.parseAll(pocketDir), mainParser.parseAll(pocketDir));

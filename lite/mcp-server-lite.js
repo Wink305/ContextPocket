@@ -4,8 +4,9 @@
 /**
  * ContextPocket Lite — MCP 服务器
  *
- * 8 个工具，与 CLI 的 8 条命令一一对应（context_pocket_<name>）：
- * bootstrap / status / verify / recall / search / why / graph / log_append。
+ * 11 个工具，与 CLI 的 11 条命令一一对应（context_pocket_<name>）：
+ * bootstrap / status / verify / recall / search / why / diff / graph /
+ * log_append / log_amend / handoff。
  * stdio 传输层（换行分隔 JSON-RPC）与主包 mcp-server.js 同一套实现。
  *
  * Zero-dependency. Works in Node.js 14+.
@@ -16,10 +17,10 @@ const { findPocketDir, readConfig, stripPlaceholders, toTId, intOption } = requi
 const { parseAll } = require('./lib/parser');
 const { verify } = require('./lib/validator');
 const { bootstrap } = require('./lib/bootstrap');
-const { recall, recallWindow, searchAny, why } = require('./lib/query');
-const { appendLogBlock } = require('./lib/writer');
+const { recall, recallWindow, searchAny, why, diff } = require('./lib/query');
+const { appendLogBlock, amendLogBlock, generateHandoff } = require('./lib/writer');
 const { deriveLinks, buildContext, formatContextLines } = require('./lib/links');
-const { turnFields, textOption } = require('./lib/fields');
+const { turnFields, textOption, sectionFields, hasAnySection } = require('./lib/fields');
 const { describeWhen } = require('./lib/when');
 const { TOOL_DESCRIPTIONS, SERVER_INSTRUCTIONS } = require('./lib/help');
 
@@ -147,7 +148,7 @@ function handleInitialize(id, params) {
 }
 
 // ============================================================
-// 工具定义（8 个，与 CLI 的 8 条命令一一对应）
+// 工具定义（11 个，与 CLI 的 11 条命令一一对应）
 // ============================================================
 
 const TOOLS = [
@@ -239,6 +240,11 @@ const TOOLS = [
         toDate: { type: 'string', description: 'Date window upper bound, yyyy-mm-dd (closed)' },
         limit: { type: 'integer', description: 'Page size (0 = all)' },
         offset: { type: 'integer', description: 'Skip the first N results' },
+        expand: {
+          type: 'integer',
+          description: 'Walk the derived link graph N hops from each hit and append the turns it reaches (1-3; 0 = off). CLI equivalent: --expand',
+          default: 0,
+        },
       },
       required: ['keyword'],
     },
@@ -258,8 +264,25 @@ const TOOLS = [
           description: 'Max hits (default: 10)',
           default: 10,
         },
+        expand: {
+          type: 'integer',
+          description: 'Walk the derived link graph N hops from the direct hits and append the turns it reaches (1-3; 0 = off). CLI equivalent: --expand',
+          default: 0,
+        },
       },
       required: ['filePath'],
+    },
+  },
+  {
+    name: 'context_pocket_diff',
+    description: TOOL_DESCRIPTIONS.context_pocket_diff,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tA: { type: 'integer', description: 'Earlier T-block ID' },
+        tB: { type: 'integer', description: 'Later T-block ID' },
+      },
+      required: ['tA', 'tB'],
     },
   },
   {
@@ -270,7 +293,8 @@ const TOOLS = [
       properties: {
         type: {
           type: 'string',
-          enum: ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'],
+          enum: ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
+            'tagged', 'opened-in', 'completed-in', 'implements'],
           description: 'Filter to one edge type',
         },
         limit: {
@@ -324,6 +348,37 @@ const TOOLS = [
       required: ['gist'],
     },
   },
+  {
+    name: 'context_pocket_log_amend',
+    description: TOOL_DESCRIPTIONS.context_pocket_log_amend,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tId: { type: 'integer', description: 'T-number of the block to amend (e.g. 7)' },
+        author: { type: 'string', description: 'Fill a MISSING ### Author section (never overwrites an author already on that block)' },
+        user: { type: 'string', description: "The user's original request for that turn" },
+        action: { type: 'string', description: 'What was done in that turn' },
+        commits: { type: 'string', description: 'Commit hashes from that turn (comma-separated)' },
+        decisions: { type: 'string', description: 'Decisions or constraints from that turn' },
+        pitfalls: { type: 'string', description: 'Pitfalls from that turn (alias: pitfall)' },
+        pitfall: { type: 'string', description: 'Alias of pitfalls' },
+        preferences: { type: 'string', description: 'Preferences from that turn' },
+        conflicts: { type: 'string', description: 'Conflicts from that turn' },
+        uncertain: { type: 'string', description: 'Uncertain items from that turn' },
+        attachments: { type: 'string', description: 'Attachment references from that turn' },
+        when: { type: 'string', description: 'Time for that turn, same forms as context_pocket_log_append. Added only if the block has no time line; a timestamp recorded at the time is never overwritten.' },
+      },
+      required: ['tId'],
+    },
+  },
+  {
+    name: 'context_pocket_handoff',
+    description: TOOL_DESCRIPTIONS.context_pocket_handoff,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 function handleToolsList(id) {
@@ -358,11 +413,20 @@ function handleToolsCall(id, params) {
       case 'context_pocket_why':
         result = toolWhy(args || {});
         break;
+      case 'context_pocket_diff':
+        result = toolDiff(args || {});
+        break;
       case 'context_pocket_graph':
         result = toolGraph(args || {});
         break;
       case 'context_pocket_log_append':
         result = toolLogAppend(args || {});
+        break;
+      case 'context_pocket_log_amend':
+        result = toolLogAmend(args || {});
+        break;
+      case 'context_pocket_handoff':
+        result = toolHandoff();
         break;
       default:
         sendResponse(id, {
@@ -693,20 +757,25 @@ function toolSearch(args) {
     untilT: typeof args.untilT === 'number' && args.untilT > 0 ? args.untilT : null,
     fromDate: typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null,
     toDate: typeof args.toDate === 'string' && args.toDate ? args.toDate : null,
+    expand: intOption(args.expand, 0),
   });
 
+  // 扩展出来的轮次单独一组：不是关键词命中，是通过图上的关系连过来的
+  const direct = results.filter((r) => !r.expanded);
+  const linked = results.filter((r) => r.expanded);
+
   const lines = [];
-  const shown = limit !== null && results.length < total
-    ? ` · showing ${offset + 1}–${offset + results.length}`
+  const shown = limit !== null && direct.length < total
+    ? ` · showing ${offset + 1}–${offset + direct.length}`
     : '';
   lines.push(`## Search: "${keyword}"`);
   lines.push(`${total} match${total !== 1 ? 'es' : ''} found${shown}`);
   lines.push('');
 
-  if (results.length === 0) {
+  if (direct.length === 0) {
     lines.push('*(no matches)*');
   } else {
-    for (const r of results) {
+    for (const r of direct) {
       const printHighlights = (r) => {
         if (!r.highlights || r.highlights.length === 0) return;
         for (const h of r.highlights.slice(0, 3)) {
@@ -741,10 +810,19 @@ function toolSearch(args) {
     }
   }
 
+  if (linked.length > 0) {
+    lines.push('');
+    lines.push(`### Related via graph (${linked.length} turn${linked.length === 1 ? '' : 's'})`);
+    for (const r of linked) {
+      const hops = r.distance + ' hop' + (r.distance === 1 ? '' : 's');
+      lines.push(`- **T${r.id}** **[linked]**: ${r.gist} *(via ${r.via}, ${hops})*`);
+    }
+  }
+
   // 截断必须可见：否则调用方以为"就这些"，而真实总数在 total 里
   if (hasMore) {
     lines.push('');
-    lines.push(`_${total - offset - results.length} more — next page: {"offset": ${offset + results.length}}; all of them: {"limit": 0}_`);
+    lines.push(`_${total - offset - direct.length} more — next page: {"offset": ${offset + direct.length}}; all of them: {"limit": 0}_`);
   }
 
   return {
@@ -765,18 +843,22 @@ function toolWhy(args) {
 
   // 与 CLI 的 why 同一条归一：limit=0 不该被当成"没给"而变回默认值
   const limit = Math.max(1, intOption(args.limit, 10));
-  const results = why(pocketDir, filePath, { limit });
+  const results = why(pocketDir, filePath, { limit, expand: intOption(args.expand, 0) });
+
+  // linked = 通过图上的关系连过来的轮次（它没碰过这个文件）
+  const direct = results.filter(r => r.evidence !== 'linked');
+  const linked = results.filter(r => r.evidence === 'linked');
 
   const lines = [];
-  const changedN = results.filter(r => r.evidence === 'changed').length;
+  const changedN = direct.filter(r => r.evidence === 'changed').length;
   lines.push(`## Why: "${filePath}"`);
-  lines.push(`${results.length} T-block${results.length !== 1 ? 's' : ''} referenced this file (${changedN} changed it, ${results.length - changedN} only mentioned it)`);
+  lines.push(`${direct.length} T-block${direct.length !== 1 ? 's' : ''} referenced this file (${changedN} changed it, ${direct.length - changedN} only mentioned it)`);
   lines.push('');
 
-  if (results.length === 0) {
+  if (direct.length === 0) {
     lines.push('*(no references found)*');
   } else {
-    for (const r of results) {
+    for (const r of direct) {
       const tagsStr = r.tags.length > 0
         ? ' ' + r.tags.map(t => `[${t}]`).join('')
         : '';
@@ -793,6 +875,15 @@ function toolWhy(args) {
     }
   }
 
+  if (linked.length > 0) {
+    lines.push('');
+    lines.push(`### Related via graph (${linked.length} turn${linked.length === 1 ? '' : 's'})`);
+    for (const r of linked) {
+      const hops = r.distance + ' hop' + (r.distance === 1 ? '' : 's');
+      lines.push(`- **T${r.id}** **[linked]**: ${r.gist} *(via ${r.via}, ${hops})*`);
+    }
+  }
+
   return {
     content: [{ type: 'text', text: lines.join('\n') }],
   };
@@ -806,7 +897,8 @@ function toolGraph(args) {
     ? null
     : String(args.type).trim();
 
-  const KNOWN_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'];
+  const KNOWN_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
+    'tagged', 'opened-in', 'completed-in', 'implements'];
   if (typeFilter && !KNOWN_TYPES.includes(typeFilter)) {
     return {
       content: [{ type: 'text', text: `❌ Error: unknown edge type "${typeFilter}". Known types: ${KNOWN_TYPES.join(', ')}.` }],
@@ -849,7 +941,7 @@ function toolGraph(args) {
     lines.push(`- \`${e.from}\` —${e.type}→ \`${e.to}\`${weak}${via} (${src})`);
   }
   lines.push('');
-  lines.push('Derived from log.md / log-archive.md / decisions.md / code-map.md — every edge cites its source; weak evidence is marked.');
+  lines.push('Derived from log.md / log-archive.md / decisions.md / code-map.md / requirements.md — every edge cites its source; weak evidence is marked.');
 
   return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
@@ -885,7 +977,7 @@ function toolLogAppend(args) {
   }
   // 本轮新建的块缺了 verify 会判 ERROR 的小节：当场给修法
   if (result.missingSections && result.missingSections.length > 0) {
-    output += `\n🧾 T${result.tId} is missing ${result.missingSections.join(' / ')} — verify counts that as an ERROR. Lite has no log amend: edit that block in log.md directly and add the missing "### ${result.missingSections.join('" / "### ')}" section(s).`;
+    output += `\n🧾 T${result.tId} is missing ${result.missingSections.join(' / ')} — verify counts that as an ERROR. Fill it now: context_pocket_log_amend { tId: ${result.tId}, ${result.missingSections.map((s) => (s === 'User' ? 'user: "…"' : 'action: "…"')).join(', ')} }`;
   }
 
   if (args.verify !== false) {
@@ -897,5 +989,125 @@ function toolLogAppend(args) {
 
   return {
     content: [{ type: 'text', text: output }],
+  };
+}
+
+function toolLogAmend(args) {
+  const pocketDir = getPocketDir();
+
+  const tId = toTId(args.tId);
+  if (Number.isNaN(tId)) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: tId (integer) is required' }],
+      isError: true,
+    };
+  }
+
+  const payload = sectionFields(args);
+  if (!hasAnySection(payload)) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: pass at least one section to fill' }],
+      isError: true,
+    };
+  }
+
+  const result = amendLogBlock(pocketDir, tId, payload);
+  if (!result.success) {
+    return {
+      content: [{ type: 'text', text: `❌ Error: ${result.error}` }],
+      isError: true,
+    };
+  }
+
+  let output;
+  if (result.unchanged && result.filled.length === 0) {
+    output = `ℹ️ **T${tId} unchanged** — those sections already exist and are never overwritten.`;
+  } else {
+    output = `✅ **T${tId} amended** — filled: ${result.filled.join(', ')}`;
+  }
+  if (result.when) {
+    output += `\n⏱ ${result.when}`;
+  }
+  if (result.skipped.length > 0) {
+    output += `\n\nAlready present, left untouched: ${result.skipped.join(', ')}`;
+  }
+
+  return { content: [{ type: 'text', text: output }] };
+}
+
+function toolHandoff() {
+  const pocketDir = getPocketDir();
+  const result = generateHandoff(pocketDir);
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `✅ **Handoff generated:** T${result.tId} · ${result.date}\n\nFile: ContextPocket/handoff.md`,
+      },
+    ],
+  };
+}
+
+function toolDiff(args) {
+  const pocketDir = getPocketDir();
+  const tA = toTId(args.tA);
+  const tB = toTId(args.tB);
+
+  if (Number.isNaN(tA) || Number.isNaN(tB)) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: both tA and tB are required (positive integers)' }],
+      isError: true,
+    };
+  }
+
+  const result = diff(pocketDir, tA, tB);
+
+  const lines = [];
+  lines.push(`## Diff: T${result.tA} → T${result.tB}`);
+  lines.push(`*${result.gistA} → ${result.gistB}*`);
+  lines.push('');
+
+  lines.push('### Requirements');
+  if (result.requirements.added.length === 0 &&
+      result.requirements.completed.length === 0 &&
+      result.requirements.cancelled.length === 0) {
+    lines.push('*(no changes)*');
+  } else {
+    for (const r of result.requirements.added) {
+      lines.push(`- ➕ R${r.id}: ${r.text} (opened T${r.openedAt})`);
+    }
+    for (const r of result.requirements.completed) {
+      lines.push(`- ✅ R${r.id}: ${r.text} (completed T${r.completedAt})`);
+    }
+    for (const r of result.requirements.cancelled) {
+      lines.push(`- ❌ R${r.id}: ${r.text} (cancelled T${r.cancelledAt})`);
+    }
+  }
+  lines.push('');
+
+  lines.push('### Decisions');
+  if (result.decisions.added.length === 0) {
+    lines.push('*(no new ADRs)*');
+  } else {
+    for (const adr of result.decisions.added) {
+      lines.push(`- ➕ ADR-${adr.id}: ${adr.title} (T${adr.createdAt})`);
+    }
+  }
+  lines.push('');
+
+  lines.push('### Files');
+  if (result.files.added.length === 0 &&
+      result.files.removed.length === 0 &&
+      result.files.modified.length === 0) {
+    lines.push('*(no file changes detected)*');
+  } else {
+    for (const f of result.files.added) lines.push(`- ➕ ${f}`);
+    for (const f of result.files.removed) lines.push(`- ➖ ${f}`);
+    for (const f of result.files.modified) lines.push(`- 🔄 ${f}`);
+  }
+
+  return {
+    content: [{ type: 'text', text: lines.join('\n') }],
   };
 }

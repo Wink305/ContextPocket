@@ -3,21 +3,23 @@
 /**
  * ContextPocket Lite — 查询模块
  *
- * recall / search / why 的读侧，函数体从主包 lib/query.js 逐字搬运；
- * 被裁掉的是 diff（两轮对比，读 requirements/decisions 的增量）、
- * check-conflicts 六维冲突引擎（写时冲突闸与扫描都属 full 能力面）。
+ * recall / diff / search / why 的读侧，函数体从主包 lib/query.js 逐字搬运；
+ * 被裁掉的是 check-conflicts 六维冲突引擎（写时冲突闸与扫描都属 full 能力面）。
  * 保留的每一个函数与主包逐字一致 —— 时间窗口判据、证据分级、
  * 更正闭环的语义不允许两个包各说一套（compat.js 有回归锁）。
  *
  * search 只走现场扫描（lib/search.js 的 scanAll），没有索引缓存。
+ * 多跳扩展（--expand）走 links.js 的现场派生图（deriveLinks），同样零缓存：
+ * expandTurns 与主包唯一差别是图从 deriveLinks 取，而非主包的 readGraph 缓存。
  *
  * Zero-dependency. Works in Node.js 14+.
  */
 
 const path = require('path');
-const { parseLogAll } = require('./parser');
-const { readFileSafe, intOption } = require('./core');
+const { parseLogAll, parseAll } = require('./parser');
+const { readFileSafe, intOption, extractFilesFromBlock } = require('./core');
 const { scanAll } = require('./search');
+const { deriveLinks, expandFrom } = require('./links');
 
 // search 一页默认多少条：够一次屏幕，又不至于把 800 轮历史全量打印
 const DEFAULT_SEARCH_LIMIT = 50;
@@ -28,20 +30,40 @@ const DEFAULT_SEARCH_LIMIT = 50;
 
 /**
  * 取某个 T-block 的原始文本：先 log.md，再 log-archive.md。
+ *
+ * 性能：recall 刚用 parseLogAll 解析过两份文件，块落在哪份、第几行已经知道
+ * （block.source / block.startLine）。把这个 hints 收下来，就只读那一份文件、
+ * 从已知行切起，省掉旧实现"两份各读一遍 + 从头扫到块头"的重复劳动。
+ * 归档轮次因此少读一次 log.md。输出逐字不变：startLine 先按旧判据校验
+ * （行首 `## T<tId> ·` 且编号命中），对不上就回落到原来的全文件扫描 ——
+ * 畸形编号（块 id 是占位号段、行首却是原始畸形号）仍与旧实现一样取不到 rawText。
+ *
+ * @param {string} pocketDir
+ * @param {number} tId
+ * @param {object} [block] parseLogAll 已解析出的块（提供 source/startLine 提示）
  * @returns {{rawText: string|null, source: string|null}}
  */
-function rawBlockText(pocketDir, tId) {
-  for (const file of ['log.md', 'log-archive.md']) {
+function rawBlockText(pocketDir, tId, block) {
+  const files = block && block.source ? [block.source] : ['log.md', 'log-archive.md'];
+  for (const file of files) {
     const content = readFileSafe(path.join(pocketDir, file));
     if (!content) continue;
 
     const lines = content.split('\n');
     let startLine = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const match = lines[i].match(/^##\s+T(\d+)\s*·/);
-      if (match && parseInt(match[1], 10) === tId) {
-        startLine = i;
-        break;
+    // 已知行号先验证再用：省掉从头扫描，但绝不信任一个对不上编号的提示
+    const hint = block && block.source === file && Number.isInteger(block.startLine) ? block.startLine : -1;
+    if (hint >= 0 && hint < lines.length) {
+      const hm = lines[hint].match(/^##\s+T(\d+)\s*·/);
+      if (hm && parseInt(hm[1], 10) === tId) startLine = hint;
+    }
+    if (startLine === -1) {
+      for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(/^##\s+T(\d+)\s*·/);
+        if (match && parseInt(match[1], 10) === tId) {
+          startLine = i;
+          break;
+        }
       }
     }
     if (startLine === -1) continue;
@@ -71,7 +93,7 @@ function recall(pocketDir, tId) {
   const block = logData.blocks.find(b => b.id === tId);
   if (!block) return null;
 
-  const { rawText, source } = rawBlockText(pocketDir, tId);
+  const { rawText, source } = rawBlockText(pocketDir, tId, block);
   return { ...block, rawText, source, archived: source === 'log-archive.md', corrections: correctionsFor(logData, tId) };
 }
 
@@ -162,23 +184,166 @@ function recallWindow(pocketDir, opts = {}) {
 }
 
 // ============================================================
-// 文件抽取（关联图派生也用这一份：Action 里「这轮动过哪些文件」全项目只有一个判据）
+// 文件抽取：实现住在 lib/core.js（extractFilesFromBlock）
+// ============================================================
+//
+// 关联图 links.js 与 diff 都要用它。留在 query 会形成 links → query → links 的
+// 循环依赖（query 现在又要从 links 拿 deriveLinks/expandFrom 做多跳扩展），
+// 所以与主包一样收敛到叶子模块 core，这里只再导出一次，老调用方不必改。
+
+// ============================================================
+// diff — 对比两轮
 // ============================================================
 
-function extractFilesFromBlock(block) {
-  const files = [];
-  if (block.actions) {
-    for (const action of block.actions) {
-      if (!action) continue;
-      // 优先用 files（含自然语言 Action 里提到的所有路径），回落 file
-      if (action.files && action.files.length > 0) {
-        files.push(...action.files);
-      } else if (action.file) {
-        files.push(action.file);
-      }
+/**
+ * 对比两个 T-block，输出需求 / 决策 / 文件三个维度的增量。
+ * 与主包 lib/query.js 逐字同源：归档轮次照样可比（块取自 parseLogAll），
+ * 找不到任一轮抛 `T<n> not found`，由入口层翻译成报错。
+ *
+ * @param {string} pocketDir
+ * @param {number} tA
+ * @param {number} tB
+ * @returns {object} 差异结果
+ */
+function diff(pocketDir, tA, tB) {
+  const data = parseAll(pocketDir);
+  // 块可以来自 log.md 或 log-archive.md：归档不应该让 diff 报 "T<n> not found"
+  const blocks = parseLogAll(pocketDir).blocks;
+  const blockA = blocks.find(b => b.id === tA);
+  const blockB = blocks.find(b => b.id === tB);
+
+  if (!blockA) {
+    throw new Error(`T${tA} not found`);
+  }
+  if (!blockB) {
+    throw new Error(`T${tB} not found`);
+  }
+
+  const result = {
+    tA,
+    tB,
+    gistA: blockA.gist,
+    gistB: blockB.gist,
+    requirements: { added: [], completed: [], cancelled: [] },
+    decisions: { added: [] },
+    files: { added: [], removed: [], modified: [] },
+  };
+
+  // 1. 需求变化：在 tA 之后、tB 之前/之内新开 / 完成 / 取消的
+  for (const req of data.requirements.items) {
+    const openedAt = req.openedAt;
+    const completedAt = req.completedAt;
+    const cancelledAt = req.cancelledAt;
+
+    if (openedAt > tA && openedAt <= tB) {
+      result.requirements.added.push({
+        id: req.id,
+        text: req.text,
+        status: req.status,
+        openedAt,
+      });
+    }
+    if (completedAt && completedAt > tA && completedAt <= tB) {
+      result.requirements.completed.push({
+        id: req.id,
+        text: req.text,
+        completedAt,
+      });
+    }
+    if (cancelledAt && cancelledAt > tA && cancelledAt <= tB) {
+      result.requirements.cancelled.push({
+        id: req.id,
+        text: req.text,
+        cancelledAt,
+      });
     }
   }
-  return files;
+
+  // 2. 决策变化（新增 ADR）
+  for (const adr of data.decisions.adrs) {
+    if (adr.createdAt > tA && adr.createdAt <= tB) {
+      result.decisions.added.push({
+        id: adr.id,
+        title: adr.title,
+        createdAt: adr.createdAt,
+      });
+    }
+  }
+
+  // 3. 文件变化（从 Action 节提取）
+  const filesA = extractFilesFromBlock(blockA);
+  const filesB = extractFilesFromBlock(blockB);
+
+  const setA = new Set(filesA);
+  const setB = new Set(filesB);
+
+  for (const f of filesB) {
+    if (!setA.has(f)) {
+      result.files.added.push(f);
+    }
+  }
+  for (const f of filesA) {
+    if (!setB.has(f)) {
+      result.files.removed.push(f);
+    }
+  }
+  // 两个都有的视为修改过
+  for (const f of filesB) {
+    if (setA.has(f)) {
+      result.files.modified.push(f);
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+// 多跳扩展（--expand <n>）：why / search 共享的一份实现
+// ============================================================
+
+/**
+ * 从种子节点出发走 N 跳，把新到达的**轮次**取出来。
+ *
+ * 只取 turn 节点：文件和 ADR 混进「哪些轮次碰过这个文件」的结果里，语义会变含混
+ * （它们不是轮次）。它们在 `graph` 命令里看得到。
+ *
+ * 与主包唯一差别：图从现场 deriveLinks 取（Lite 零缓存），而非主包 readGraph
+ * 的 assets/graph.jsonl。expandFrom 是纯函数，两边对同一份口袋给出同一组节点。
+ *
+ * @param {string} pocketDir
+ * @param {string[]} seedIds 起点节点 id
+ * @param {number} depth 跳数（1-3）
+ * @returns {Array<{id:number, gist:string, tags:string[], archived:boolean, distance:number, via:string}>}
+ */
+function expandTurns(pocketDir, seedIds, depth) {
+  if (!seedIds || seedIds.length === 0) return [];
+  const graph = deriveLinks(pocketDir);
+  const res = expandFrom(graph, seedIds, depth);
+  const out = [];
+  for (const n of res.nodes) {
+    if (n.type !== 'turn') continue;
+    const id = parseInt(String(n.id).slice(1), 10);
+    if (!Number.isFinite(id)) continue;
+    out.push({
+      id,
+      gist: n.label,
+      tags: [],
+      archived: n.archived,
+      distance: n.distance,
+      via: n.via,
+    });
+  }
+  return out;
+}
+
+/** 索引行 → 图节点 id。认不出来的类型（偏好行）返回 null。 */
+function rowToNodeId(row) {
+  if (!row) return null;
+  if (row.type === 'T') return 'T' + row.id;
+  if (row.type === 'FIX') return 'T' + row.targetId + '-fix';
+  if (row.type === 'ADR') return 'adr:ADR-' + row.adrId;
+  if (row.type === 'R') return 'req:R' + row.rId;
+  return null;
 }
 
 // ============================================================
@@ -293,7 +458,8 @@ function filterByTime(rows, opts = {}) {
  * @param {number} [opts.untilT] - T 号上界（闭区间）
  * @param {string} [opts.fromDate] - 日期下界 yyyy-mm-dd（闭区间）
  * @param {string} [opts.toDate] - 日期上界 yyyy-mm-dd（闭区间）
- * @returns {{ results: object[], total: number, offset: number, limit: number|null, hasMore: boolean, viaIndex: boolean }}
+ * @param {number} [opts.expand=0] - 多跳扩展深度（0 = 不扩展，行为逐字不变；上限 3）
+ * @returns {{ results: object[], total: number, offset: number, limit: number|null, hasMore: boolean, viaIndex: boolean, expandedCount: number }}
  */
 function searchAny(pocketDir, keyword, opts = {}) {
   const rows = scanAll(pocketDir, keyword);
@@ -307,13 +473,39 @@ function searchAny(pocketDir, keyword, opts = {}) {
   const limit = wanted > 0 ? wanted : null;
   const results = limit === null ? filtered.slice(offset) : filtered.slice(offset, offset + limit);
 
+  // 多跳扩展：默认 0 = 行为逐字不变（compat 锁盯着这一点）。扩展出来的轮次
+  // **追加在分页之后**，所以 total / hasMore 仍然是关键词命中的口径，不会被撑大。
+  // 图走现场 deriveLinks（零缓存），与主包 readGraph 对同一份口袋给出同一组节点。
+  const depth = intOption(opts.expand, 0);
+  let expanded = [];
+  if (depth > 0 && results.length > 0) {
+    const seeds = results.map(rowToNodeId).filter(Boolean);
+    const seen = new Set(results.filter((r) => r.type === 'T').map((r) => 'T' + r.id));
+    expanded = expandTurns(pocketDir, seeds, depth)
+      .filter((t) => !seen.has('T' + t.id))
+      .map((t) => ({
+        type: 'T',
+        id: t.id,
+        gist: t.gist,
+        tags: t.tags,
+        archived: t.archived,
+        when: null,
+        matchCount: 0,
+        highlights: [],
+        distance: t.distance,
+        via: t.via,
+        expanded: true,
+      }));
+  }
+
   return {
-    results,
+    results: results.concat(expanded),
     total,
     offset,
     limit,
     hasMore: offset + results.length < total,
     viaIndex: false,
+    expandedCount: expanded.length,
   };
 }
 
@@ -336,6 +528,7 @@ function searchAny(pocketDir, keyword, opts = {}) {
  * @param {string} filePath - 完整或部分文件路径
  * @param {object} [opts]
  * @param {number} [opts.limit=10] - 最多返回 N 条
+ * @param {number} [opts.expand=0] - 多跳扩展深度（0 = 不扩展；扩展轮次 evidence='linked'）
  * @returns {object[]} 匹配的 T-block 列表（改过的在前面，组内最近的在前面）
  */
 function why(pocketDir, filePath, opts = {}) {
@@ -387,16 +580,43 @@ function why(pocketDir, filePath, opts = {}) {
   // 组内倒序（最近的在前面），strong 组整体优先，最后截断到 limit
   changed.reverse();
   mentioned.reverse();
-  return changed.concat(mentioned).slice(0, limit);
+  const direct = changed.concat(mentioned).slice(0, limit);
+
+  // 多跳扩展：默认 0 = 行为逐字不变。扩展出来的轮次追加在后面，
+  // evidence 标成 'linked'（不是 changed 也不是 mentioned —— 它没碰过这个文件，
+  // 是通过图上的关系连过来的），调用方据此分开显示。
+  const depth = intOption(opts.expand, 0);
+  if (depth > 0 && direct.length > 0) {
+    const seen = new Set(direct.map((r) => 'T' + r.id));
+    const extra = expandTurns(pocketDir, [...seen], depth)
+      .filter((t) => !seen.has('T' + t.id))
+      .map((t) => ({
+        id: t.id,
+        gist: t.gist,
+        tags: t.tags,
+        archived: t.archived,
+        evidence: 'linked',
+        distance: t.distance,
+        via: t.via,
+        references: [],
+      }));
+    return direct.concat(extra);
+  }
+  return direct;
 }
 
 module.exports = {
   recall,
   recallWindow,
-  // 关联图派生也用这一份文件抽取：Action 里「这轮动过哪些文件」全项目只能有一个判据
+  diff,
+  // 文件抽取的实现已收敛到 core（避免 links → query → links 循环）；这里再导出一次，
+  // 老调用方与 compat 测试不必改 import 路径
   extractFilesFromBlock,
   searchAny,
   why,
+  // 多跳扩展：why / search 共享。rowToNodeId 把检索行映射成图节点 id
+  expandTurns,
+  rowToNodeId,
   // searchAny 与 recallWindow 共用的时间窗口过滤层：一个按关键词找，一个按坐标浏览，
   // 但"哪一轮在窗口里"只能有一份判据
   filterByTime,

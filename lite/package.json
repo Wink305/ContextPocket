@@ -1,7 +1,7 @@
 {
   "name": "context-pocket-lite",
-  "version": "2.4",
-  "description": "The lightweight sibling of context-pocket: same pocket format, 8 commands, 8 MCP tools, zero caches, zero dependencies. Records AI coding conversation turns into a project-local ContextPocket/ folder of plain Markdown.",
+  "version": "2.5",
+  "description": "The lightweight sibling of context-pocket: same pocket format, 11 commands, 11 MCP tools, zero caches, zero dependencies. Records AI coding conversation turns into a project-local ContextPocket/ folder of plain Markdown.",
   "keywords": [
     "context",
     "memory",
@@ -49,6 +49,7 @@
     "mcp-server-lite.js",
     "SKILL.md",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ]
 }

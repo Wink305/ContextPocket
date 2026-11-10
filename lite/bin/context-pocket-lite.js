@@ -4,7 +4,8 @@
 /**
  * ContextPocket Lite — CLI 入口
  *
- * 8 条命令：bootstrap / status / log append / recall / search / why / verify / graph。
+ * 11 条命令：bootstrap / status / log append / log amend / recall / search / why /
+ * diff / verify / graph / handoff。
  * 骨架与主包 bin/context-pocket.js 同源（参数解析、--json 契约、退出码语义），
  * 帮助文本单源在 lite/lib/help.js。CLI 命令与 MCP 工具（mcp-server-lite.js）
  * 一一对应，lite/tests/core.js 钉着这个对称。
@@ -24,9 +25,9 @@ const { findPocketDir, readConfig, parseAll } = (() => {
 const { POCKET_DIR_NAME } = require('../lib/constants');
 const { bootstrap } = require('../lib/bootstrap');
 const { verify } = require('../lib/validator');
-const { recall, recallWindow, searchAny, why } = require('../lib/query');
+const { recall, recallWindow, searchAny, why, diff } = require('../lib/query');
 const { deriveLinks, buildContext, formatContextLines } = require('../lib/links');
-const { turnFields, textOption } = require('../lib/fields');
+const { turnFields, textOption, sectionFields, hasAnySection } = require('../lib/fields');
 const { describeWhen, describeWhenLine } = require('../lib/when');
 const { colorize, formatVerifyResult, formatStatus } = require('../lib/formatter');
 const { pkgVersion } = require('../lib/version');
@@ -37,9 +38,9 @@ const { pkgVersion } = require('../lib/version');
 
 // 明确"带值"的选项名（Lite 命令面用到的那个子集；规则与主包同一套）
 const VALUE_OPTIONS = new Set([
-  'action', 'attachments', 'author', 'commits', 'conflicts', 'decisions', 'dir', 'f', 'file',
+  'action', 'attachments', 'author', 'commits', 'conflicts', 'decisions', 'dir', 'expand', 'f', 'file',
   'file-path', 'from', 'gist', 'gitignore', 'language', 'limit', 'offset', 'pitfall', 'pitfalls',
-  'preferences', 'project-type', 'since', 'tags', 'to', 'type', 'uncertain', 'until', 'user', 'when',
+  'preferences', 'project-type', 'since', 't-a', 't-b', 'tags', 'to', 'type', 'uncertain', 'until', 'user', 'when',
 ]);
 
 // 纯开关型选项：绝不吞掉后面的裸词
@@ -49,7 +50,7 @@ const BOOL_OPTIONS = new Set([
 
 // 真实存在的两段式命令
 const SUBCOMMANDS_BY_COMMAND = {
-  log: ['append'],
+  log: ['append', 'amend'],
 };
 
 function isKnownOption(token) {
@@ -623,13 +624,16 @@ function cmdSearch(options, positional) {
   const toDate = textOption(options, 'to') || null;
 
   // Lite 没有索引：永远现场扫描（与主包 `search --no-index` 同一份实现、同一份排序）
-  const { results, total, hasMore, offset, limit } = searchAny(pocketDir, keyword, {
+  // --expand：从命中出发走 n 跳现场派生的关联图，扩展轮次追加在分页之后
+  const expand = intOption(options.expand, 0);
+  const { results, total, hasMore, offset, limit, expandedCount } = searchAny(pocketDir, keyword, {
     limit: options.limit,
     offset: options.offset,
     sinceT,
     untilT,
     fromDate,
     toDate,
+    expand,
   });
 
   if (options.json) {
@@ -640,12 +644,14 @@ function cmdSearch(options, positional) {
       untilT,
       fromDate,
       toDate,
-      count: results.length,
+      count: results.length - expandedCount,
       total,
       offset,
       limit,
       hasMore,
       viaIndex: false,
+      expandedCount,
+      expand,
       results,
     });
   }
@@ -654,17 +660,22 @@ function cmdSearch(options, positional) {
   const label = timeWindowLabel(sinceT, untilT, fromDate, toDate);
 
   console.log('');
+  // 扩展出来的轮次单独一组：它们不是关键词命中，是通过图上的关系连过来的，
+  // 混在命中里会让「3 matches found」这句话变假。
+  const direct = results.filter((r) => !r.expanded);
+  const linked = results.filter((r) => r.expanded);
+
   console.log(colorize(`  Search: "${keyword}"`, 'bold') + (label ? colorize('  ( ' + label + ' )', 'dim') : ''));
-  const shown = limit !== null && results.length < total
-    ? colorize(` · showing ${offset + 1}–${offset + results.length}`, 'dim')
+  const shown = limit !== null && direct.length < total
+    ? colorize(` · showing ${offset + 1}–${offset + direct.length}`, 'dim')
     : '';
   console.log(`  ${total} match${total !== 1 ? 'es' : ''} found${shown}`);
   console.log('  ' + colorize('─'.repeat(40), 'dim'));
 
-  if (results.length === 0) {
+  if (direct.length === 0) {
     console.log('  (no matches)');
   } else {
-    for (const r of results) {
+    for (const r of direct) {
       const printHighlights = (r) => {
         if (r.highlights && r.highlights.length > 0) {
           for (const h of r.highlights.slice(0, 3)) {
@@ -700,9 +711,18 @@ function cmdSearch(options, positional) {
     }
   }
 
+  if (linked.length > 0) {
+    console.log('  ' + colorize('─'.repeat(40), 'dim'));
+    console.log(colorize(`  Related via graph (${linked.length} turn${linked.length === 1 ? '' : 's'}):`, 'cyan'));
+    for (const r of linked) {
+      const hops = r.distance + ' hop' + (r.distance === 1 ? '' : 's');
+      console.log(`  ${colorize('T' + r.id, 'bold')} ${colorize('[linked]', 'magenta')} · ${r.gist} ${colorize('(via ' + r.via + ', ' + hops + ')', 'dim')}`);
+    }
+  }
+
   // 截断必须可见：否则用户以为"就这些"，而真实总数在 total 里
   if (hasMore) {
-    console.log('  ' + colorize(`  ↳ ${total - offset - results.length} more — next page: --offset ${offset + results.length}`, 'dim'));
+    console.log('  ' + colorize(`  ↳ ${total - offset - direct.length} more — next page: --offset ${offset + direct.length}`, 'dim'));
     console.log('  ' + colorize('    all of them: --limit 0', 'dim'));
   }
   console.log('');
@@ -726,26 +746,39 @@ function cmdWhy(options, positional) {
   }
 
   const limit = Math.max(1, intOption(options.limit, 10));
-  const results = why(pocketDir, filePath, { limit });
+  const expand = intOption(options.expand, 0);
+  const results = why(pocketDir, filePath, { limit, expand });
+
+  // linked = 通过图上的关系连过来的轮次（它没碰过这个文件）；分开显示，
+  // count 也只数真正提到过这个文件的那些。
+  const direct = results.filter(r => r.evidence !== 'linked');
+  const linked = results.filter(r => r.evidence === 'linked');
 
   if (options.json) {
-    emitJson({ ok: true, file: filePath, count: results.length, limit, results });
+    emitJson({
+      ok: true,
+      file: filePath,
+      count: direct.length,
+      limit,
+      results,
+      expanded: { depth: expand, count: linked.length },
+    });
   }
 
   console.log('');
   console.log(colorize(`  Why: "${filePath}"`, 'bold'));
-  const changedN = results.filter(r => r.evidence === 'changed').length;
-  const mentionedN = results.length - changedN;
+  const changedN = direct.filter(r => r.evidence === 'changed').length;
+  const mentionedN = direct.length - changedN;
   console.log(
-    `  ${results.length} T-block${results.length !== 1 ? 's' : ''} referenced this file` +
-    (results.length > 0 ? colorize(` (${changedN} changed it, ${mentionedN} only mentioned it)`, 'dim') : '')
+    `  ${direct.length} T-block${direct.length !== 1 ? 's' : ''} referenced this file` +
+    (direct.length > 0 ? colorize(` (${changedN} changed it, ${mentionedN} only mentioned it)`, 'dim') : '')
   );
   console.log('  ' + colorize('─'.repeat(40), 'dim'));
 
-  if (results.length === 0) {
+  if (direct.length === 0) {
     console.log('  (no references found)');
   } else {
-    for (const r of results) {
+    for (const r of direct) {
       const tagsStr = r.tags.length > 0
         ? ' ' + r.tags.map(t => colorize(`[${t}]`, 'cyan')).join('')
         : '';
@@ -764,6 +797,15 @@ function cmdWhy(options, positional) {
       console.log(colorize('     (in Attachments / Uncertain / Conflicts / Pitfalls …). Treat the "why" as unresolved.', 'dim'));
     }
   }
+
+  if (linked.length > 0) {
+    console.log('  ' + colorize('─'.repeat(40), 'dim'));
+    console.log(colorize(`  Related via graph (${linked.length} turn${linked.length === 1 ? '' : 's'}):`, 'cyan'));
+    for (const r of linked) {
+      const hops = r.distance + ' hop' + (r.distance === 1 ? '' : 's');
+      console.log(`  ${colorize('T' + r.id, 'bold')} ${colorize('[linked]', 'magenta')} · ${r.gist} ${colorize('(via ' + r.via + ', ' + hops + ')', 'dim')}`);
+    }
+  }
   console.log('');
 }
 
@@ -772,7 +814,8 @@ function cmdWhy(options, positional) {
 // ============================================================
 
 // graph 认的边类型；--type 给别的值是用户拼错了，明确报错而不是静默过滤成空
-const GRAPH_EDGE_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'];
+const GRAPH_EDGE_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
+  'tagged', 'opened-in', 'completed-in', 'implements'];
 
 function cmdGraph(options) {
   const pocketDir = ensurePocket(options);
@@ -838,7 +881,7 @@ function cmdGraph(options) {
     console.log(colorize('    (no edges' + (typeFilter ? ` of type "${typeFilter}"` : '') + ' derived from this pocket)', 'dim'));
   }
   console.log('');
-  console.log(colorize('  Derived from log.md / log-archive.md / decisions.md / code-map.md —', 'dim'));
+  console.log(colorize('  Derived from log.md / log-archive.md / decisions.md / requirements.md / code-map.md —', 'dim'));
   console.log(colorize('  every edge cites its source line; weak evidence is marked.', 'dim'));
   console.log('');
 }
@@ -872,10 +915,10 @@ function cmdLogAppend(options) {
     console.log(`\n  ✅ T${result.tId} added: ${fields.gist}\n` + whenSuffix + skipSuffix);
 
     // 本轮新建的块缺了 verify 会判 ERROR 的小节：当场说，别等提交撞墙。
-    // Lite 没有 log amend，修法是直接手补这一块的小节（markdown 是真相源）。
+    // 修法是 `log amend`（只填缺失小节、不覆盖历史），不必手改 markdown。
     if (result.missingSections && result.missingSections.length > 0) {
       console.log(colorize(`  ⚠️  T${result.tId} 没有 ${result.missingSections.join(' / ')} 节 — verify 会判成 ERROR：`, 'yellow'));
-      console.log(colorize('     直接编辑 log.md 里这一块，补上 "### ' + result.missingSections.join('" 与 "### ') + '" 小节\n', 'dim'));
+      console.log(colorize(`     用 context-pocket-lite log amend ${result.tId} --user "…" --action "…" 补齐（只填缺失小节，不覆盖历史）\n`, 'dim'));
     }
   }
 
@@ -910,10 +953,151 @@ function cmdLogAppend(options) {
 }
 
 // ============================================================
+// 命令：diff — 对比两轮（需求 / 决策 / 文件增量）
+// ============================================================
+
+function cmdDiff(options, positional) {
+  const pocketDir = ensurePocket(options);
+  const aStr = positional[0] || textOption(options, 't-a');
+  const bStr = positional[1] || textOption(options, 't-b');
+
+  if (!aStr || !bStr) {
+    failJson(options, 'two T-ids are required. Usage: context-pocket-lite diff <T-a> <T-b>');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' two T-ids are required');
+    console.error('     Usage: context-pocket-lite diff <T-a> <T-b>  (or --t-a <T> --t-b <T>)\n');
+    process.exit(1);
+  }
+
+  const tA = toTId(aStr);
+  const tB = toTId(bStr);
+  if (Number.isNaN(tA) || Number.isNaN(tB)) {
+    const bad = Number.isNaN(tA) ? aStr : bStr;
+    failJson(options, 'Invalid T-id: ' + bad);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' Invalid T-id: ' + bad + '\n');
+    process.exit(1);
+  }
+
+  let result;
+  try {
+    result = diff(pocketDir, tA, tB);
+  } catch (e) {
+    // diff 对找不到的轮次抛 `T<n> not found`：翻译成一行错误，别把堆栈丢给 --json 消费方
+    failJson(options, e.message);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + e.message + '\n');
+    process.exit(1);
+  }
+
+  if (options.json) emitJson({ ok: true, ...result });
+
+  console.log('');
+  console.log(colorize(`  Diff: T${result.tA} → T${result.tB}`, 'bold'));
+  console.log('  ' + colorize('─'.repeat(40), 'dim'));
+  console.log(`  T${result.tA} · ${result.gistA}`);
+  console.log(`  T${result.tB} · ${result.gistB}`);
+  console.log('');
+
+  const section = (title, rows, render) => {
+    console.log(colorize(`  ${title} (${rows.length})`, 'cyan'));
+    if (rows.length === 0) {
+      console.log(colorize('    (none)', 'dim'));
+    } else {
+      for (const r of rows) console.log('    ' + render(r));
+    }
+    console.log('');
+  };
+
+  section('Requirements added', result.requirements.added,
+    (r) => `R${r.id} (${r.status}) · ${r.text}`);
+  section('Requirements completed', result.requirements.completed,
+    (r) => `R${r.id} · ${r.text} (T${r.completedAt})`);
+  section('Requirements cancelled', result.requirements.cancelled,
+    (r) => `R${r.id} · ${r.text} (T${r.cancelledAt})`);
+  section('Decisions added', result.decisions.added,
+    (r) => `ADR-${r.id} · ${r.title} (T${r.createdAt})`);
+  section('Files added', result.files.added, (f) => f);
+  section('Files removed', result.files.removed, (f) => f);
+  section('Files modified', result.files.modified, (f) => f);
+}
+
+// ============================================================
+// 命令：log amend — 补已有轮的缺失小节（只填缺失、不覆盖历史）
+// ============================================================
+
+function cmdLogAmend(options, positional) {
+  const pocketDir = ensurePocket(options);
+  const tIdStr = positional[0] || tIdOption(options);
+
+  if (!tIdStr) {
+    failJson(options, 'T-id is required. Usage: context-pocket-lite log amend <T-id> [--user "…" --action "…"]');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' T-id is required');
+    console.error('     Usage: context-pocket-lite log amend <T-id> --user "…" --action "…"\n');
+    process.exit(1);
+  }
+
+  const tId = toTId(tIdStr);
+  if (Number.isNaN(tId)) {
+    failJson(options, 'Invalid T-id: ' + tIdStr);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' Invalid T-id: ' + tIdStr + '\n');
+    process.exit(1);
+  }
+
+  // 字段形状与 append / MCP 共用一份定义（lib/fields.js 的 sectionFields）。
+  // hasAnySection 是"你没打算改任何东西"的守卫：只给了空值就等于没说不改什么。
+  const fields = sectionFields(options);
+  if (!hasAnySection(fields)) {
+    failJson(options, 'at least one section to fill is required (--user / --action / --decisions / … / --when)');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' at least one section is required');
+    console.error('     Give the sections you want to fill, e.g. --user "…" --action "…"\n');
+    process.exit(1);
+  }
+
+  const result = amendLogBlock(pocketDir, tId, fields);
+  if (!result.success) {
+    failJson(options, result.error || ('could not amend T' + tId));
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + (result.error || ('could not amend T' + tId)) + '\n');
+    process.exit(1);
+  }
+
+  if (options.json) emitJson({ ok: true, ...result });
+
+  if (result.unchanged) {
+    const already = result.skipped && result.skipped.length > 0
+      ? ` — already present: ${result.skipped.join(', ')}`
+      : '';
+    console.log(colorize(`\n  ℹ️  T${tId}: nothing to fill${already} (amend never overwrites history)`, 'dim'));
+    if (result.when) console.log(colorize(`     ${result.when}`, 'dim'));
+    console.log('');
+    return;
+  }
+
+  console.log(`\n  ✅ T${tId} amended — filled: ${result.filled.join(', ')}`);
+  if (result.skipped && result.skipped.length > 0) {
+    console.log(colorize(`     already present (not overwritten): ${result.skipped.join(', ')}`, 'dim'));
+  }
+  if (result.when) console.log(colorize(`     ${result.when}`, 'dim'));
+  console.log('');
+}
+
+// ============================================================
+// 命令：handoff — 派生交接摘要
+// ============================================================
+
+function cmdHandoff(options) {
+  const pocketDir = ensurePocket(options);
+  const result = generateHandoff(pocketDir);
+
+  if (options.json) emitJson({ ok: true, ...result });
+
+  console.log(`\n  ✅ handoff.md generated · T${result.tId} · ${result.date}`);
+  console.log(colorize('     One-page summary for the next session. It turns STALE the moment a newer T-block lands.', 'dim'));
+  console.log('');
+}
+
+// ============================================================
 // 分发
 // ============================================================
 
-const { appendLogBlock } = require('../lib/writer');
+const { appendLogBlock, amendLogBlock, generateHandoff } = require('../lib/writer');
 
 function main() {
   const { command, subcommand, options, positional } = parseArgs(process.argv);
@@ -924,7 +1108,7 @@ function main() {
     return;
   }
 
-  // help / 无命令：主帮助页，或 `help <command>` 的单命令帮助
+  // help / 无命令：主帮助页；单命令帮助走 `<command> --help`（与主包同一条路径）
   if (command === null || command === undefined || command === 'help') {
     if (options.h || options.help) {
       printCommandHelp(subcommand || positional[0], options);
@@ -965,9 +1149,19 @@ function main() {
     case 'graph':
       cmdGraph(options);
       return;
+    case 'diff':
+      cmdDiff(options, positional);
+      return;
+    case 'handoff':
+      cmdHandoff(options);
+      return;
     case 'log':
       if (subcommand === 'append') {
         cmdLogAppend(options);
+        return;
+      }
+      if (subcommand === 'amend') {
+        cmdLogAmend(options, positional);
         return;
       }
       break;

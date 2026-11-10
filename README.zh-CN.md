@@ -21,18 +21,18 @@
 - 下次任何 Agent 读一遍，5 秒续上进度。
 - 记录内容：需求、代码变更、决策、踩坑、偏好。
 
-## ContextPocket 2.3 与 2.4 Lite
+## ContextPocket 2.3 与 ContextPocket Lite 2.5
 
 **ContextPocket 2.3** 增加带来源的多跳图上下文与历史有效期筛选：`search <关键词> --expand 2` 和 `why <文件> --expand 2` 可追踪最多三跳的关联轮次、文件和决策；`--as-of <T>` 按指定轮次筛选当时有效的图事实。完整包保留 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。
 
-**ContextPocket 2.4 Lite** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径。它使用 5 个核心 Markdown 文件、8 条 CLI 命令 / MCP 工具；搜索现场扫描、关联图运行时派生，不创建搜索索引或图缓存。精确查询 `T<n>` 时会跳过无关元数据解析。
+**ContextPocket Lite 2.5** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径：5 个核心 Markdown 文件、11 条 CLI 命令 / MCP 工具，搜索始终现场扫描 Markdown，关联图运行时派生——不建搜索索引、不建图缓存。精确查询 `T<n>` 时会跳过无关元数据解析。2.5 新增：`log amend`、`diff`、`handoff`，以及 `search` / `why` 的 `--expand` 多跳关联。
 
 | 版本 | 适用场景 | 上下文关联图 | 规模 |
 |---|---|---|---|
 | **2.3** | 较大、长期维护的项目 | 带历史有效期筛选的多跳关联上下文 | 10 个核心文件 · 28 条命令 / 工具 |
-| **2.4 Lite** | 小型项目和日常对话记忆 | 运行时派生带时间字段的关联，不建缓存 | 5 个核心文件 · 8 条命令 / 工具 |
+| **2.5 Lite** | 小型项目和日常对话记忆 | 运行时派生多跳关联，不建缓存 | 5 个核心文件 · 11 条命令 / 工具 |
 
-下载 GitHub Release 压缩包：[ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket 2.4 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.4-lite/ContextPocket-2.4-Lite.zip)——当前 tag 为 `2.3` / `2.4-lite`。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
+下载 GitHub Release 压缩包：[ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket Lite 2.5](https://github.com/Wink305/ContextPocket/releases/download/2.5-lite/ContextPocket-2.5-Lite.zip)——当前 tag 为 `2.3` / `2.5-lite`。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
 
 🚀 **方法**
 
@@ -432,7 +432,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 - tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
 ```
 
-**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket 2.4 Lite 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
+**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket Lite 2.5 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
 
 ---
 

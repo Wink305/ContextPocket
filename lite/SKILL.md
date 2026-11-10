@@ -3,10 +3,10 @@ name: ContextPocket Lite
 description: >
   Persist per-turn dev context into <project-root>/ContextPocket/ with the lightweight
   edition of ContextPocket 2.0's node-based context design. Optimized for small projects
-  and everyday conversation memory: 8 commands / 8 MCP tools, zero caches, zero dependencies.
+  and everyday conversation memory: 11 commands / 11 MCP tools, zero caches, zero dependencies.
   Same pocket format as the full package — a Lite pocket can be handed to the full
   package at any time for archive / migrate / repair / index / hub.
-version: 2.4
+version: 2.5
 format: v2
 tags: [dev-tools, context, memory, productivity, agent-handoff, lite]
 ---
@@ -36,13 +36,13 @@ Check for `bin/context-pocket-lite.js` and `mcp-server-lite.js` next to this fil
 
 ### Mode 1: MCP mode (best reliability)
 - Configure your agent to load `mcp-server-lite.js` from the Skill directory (stdio, JSON-RPC).
-- 8 tools: `context_pocket_bootstrap`, `context_pocket_status`, `context_pocket_verify`, `context_pocket_recall`, `context_pocket_search`, `context_pocket_why`, `context_pocket_graph`, `context_pocket_log_append`.
+- 11 tools: `context_pocket_bootstrap`, `context_pocket_status`, `context_pocket_verify`, `context_pocket_recall`, `context_pocket_search`, `context_pocket_why`, `context_pocket_diff`, `context_pocket_graph`, `context_pocket_log_append`, `context_pocket_log_amend`, `context_pocket_handoff`.
 - Never manually edit markdown files while a tool exists for the job.
 
 ### Mode 2: CLI mode (good reliability)
 - Script path: `<skill-dir>/bin/context-pocket-lite.js`
 - Invoke: `node <skill-dir>/bin/context-pocket-lite.js <command> --dir <project-root>`
-- Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 8 the MCP server registers).
+- Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 11 the MCP server registers).
 
 ### Mode 3: Pure skill mode (compatibility fallback)
 - Manually write the markdown files following the T-block spec below.
@@ -52,29 +52,32 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 
 ---
 
-## The 8 commands
+## The 11 commands
 
 | Command | Key options | Notes |
 | --- | --- | --- |
 | `bootstrap` | `--language zh\|en`, `--project-type`, `--gitignore false` | Creates exactly 5 files; refuses to overwrite an existing pocket |
 | `status` | — | Latest T, block count, mode |
-| `log append` | `--gist` (required), `--user`, `--action`, `--result`, `--verify-section`, `--tags`, `--files`, `--when`, `--no-verify` | The only write command. Gist must be text. `--verify` runs a verify pass after the write (default on) |
-| `recall <T-id>` | `--with-context`, `--since-t/--until-t`, `--from/--to`, `--limit` | Window mode replays a time range instead of one turn |
-| `search <kw>` | `--since-t/--until-t`, `--from/--to`, `--limit`, `--offset` | Always a full scan; `viaIndex` is always `false`. Results are page-shaped (`total`, `hasMore`) |
-| `why <file>` | `--limit` | Which turns changed / mentioned this file |
+| `log append` | `--gist` (required), `--user`, `--action`, `--author`, `--tags`, `--commits`, `--decisions`, `--pitfalls`, `--preferences`, `--conflicts`, `--attachments`, `--uncertain`, `--when`, `--verify` | Appends one T-block. `--gist` must be text. `--verify` runs a verify pass after the write (off by default in the CLI; the MCP tool checks by default) |
+| `log amend` | `<T-id>`, same section flags as append, `--when` | Fills only MISSING sections; never overwrites text already on the block. A recorded timestamp is history and is not rewritten |
+| `recall <T-id>` | `--with-context`, `--since/--until`, `--from/--to`, `--limit`, `--offset` | Window mode replays a time range instead of one turn |
+| `search <kw>` | `--since/--until`, `--from/--to`, `--limit`, `--offset`, `--expand <1-3>` | Always a full scan; `viaIndex` is always `false`. `--expand` appends turns reached through the derived graph |
+| `why <file>` | `--limit`, `--expand <1-3>` | Which turns changed / mentioned this file; evidence is `changed`, `mentioned` or (with `--expand`) `linked` |
+| `diff <T-a> <T-b>` | — | What changed between two turns: requirements opened/completed/cancelled, new ADRs, files added/removed/modified |
 | `verify` | `--quiet` | 7 checks: file existence, T-id continuity, T-block format, header T, implausible ids, log size, secret leaks. Errors block commits; warnings do not |
-| `graph` | `--type`, `--limit` | Runtime-derived link graph. `derived: runtime`, zero cache files. No rebuild/verify subcommands — there is no cache to manage |
+| `graph` | `--type`, `--limit` | Runtime-derived link graph (10 edge types). `derived: runtime`, zero cache files. No rebuild/verify subcommands — there is no cache to manage |
+| `handoff` | — | Writes `ContextPocket/handoff.md`: latest T, current state, recent turns, resume pointer |
 
-**Not in Lite** (they live in the full package): `log amend`, `req`/`decision`/`absolute`/`preference` writers, `sync`, `diff`, `check-conflicts`, `code-map update`, `state update`, `handoff`, `archive`, `migrate`, `repair`, `install-hook`, `index`, `distill`, `import`, `hub`. To fix a mistake in an existing T-block, edit `log.md` directly — Lite has no amend.
+**Not in Lite** (they live in the full package): `req`/`decision`/`absolute`/`preference` writers, `sync`, `check-conflicts`, `code-map update`, `state update`, `archive`, `migrate`, `repair`, `install-hook`, `index`, `distill`, `import`, `hub`.
 
 ---
 
 ## Per-turn rules
 
 1. **Before working**: read `ContextPocket/log.md` (or run `status` + `recall` on the latest turns). If the pocket doesn't exist, run `bootstrap`.
-2. **After each substantive turn**: `log append` with at minimum `--gist`, `--user`, `--action`. A T-block missing its `User` or `Action` section is a verify ERROR — fill it in the same turn, by hand if needed.
-3. **`--when` is the timestamp line.** Omit it and the block gets no `--- WHEN: ---` line; time-window recall/search will then skip that turn. Give at least a date (`2026-11-08`).
-4. **`--files` on Action** is what makes `why` and `graph` work. List every file the turn touched.
+2. **After each substantive turn**: `log append` with at minimum `--gist`, `--user`, `--action`. A T-block missing its `User` or `Action` section is a verify ERROR — fill it in the same turn with `log amend <T-id>` (amend only fills missing sections).
+3. **`--when` is the timestamp line.** Omit it and the block is stamped with the write moment. Give an explicit value (`2026-11-08`, or `2026-10-03 09:00 → 11:30`) when the turn happened earlier; time-window recall/search reads that line.
+4. **Write file paths into the Action text** (e.g. `--action "Modified src/login.jsx"`). There is no `--files` flag in Lite: `why` and `graph` read paths out of the Action section as written.
 5. **`log append` does not conflict-check in Lite** (the return says `conflictCheckSkipped: true`). If two agents write concurrently, renumbering is manual: Lite only reads and appends, `repair` lives in the full package.
 6. **Log size**: `verify` warns as `log.md` approaches `archive_at`. Archiving is a full-package operation — Lite never moves history on its own.
 
@@ -103,14 +106,13 @@ T-block skeleton (v2 — the WHEN line is mandatory for new blocks):
 ### Action
 - 创建 src/login.jsx，含表单校验
 
-### Result
-- 组件就位，可渲染
-
-### Verify
-- npm test 通过
+### Decisions & Constraints
+- 表单校验走前端，提交接口稍后接
 ```
 
-No `assets/` directory ever exists in a Lite pocket. If you see one, the full package has operated on this pocket — that's fine, both packages interoperate on the same format.
+The canonical section set is: Author, User, Action, Commits, Decisions & Constraints, Pitfalls, Preferences, Conflicts, Attachments, Uncertain. Only sections with content are written; User and Action are required by verify.
+
+No `assets/` directory ever exists in a Lite pocket. `handoff.md` is the only optional extra file: `handoff` derives it from the five sources and it is safe to delete or regenerate at any time. If you see `assets/`, the full package has operated on this pocket — that's fine, both packages interoperate on the same format.
 
 ---
 

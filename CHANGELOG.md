@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5-lite] - 2026-11-09
+
+### ContextPocket Lite 2.5 — 补块、对比、交接，仍是零缓存
+
+> Lite 独立版本线发 2.5（对外展示 `2.5-lite`）；主包版本线保持独立（当前 2.3）。
+
+- **能力对齐**：新增 `log amend`（只补缺失小节）、`diff`（两轮之间的需求/ADR/文件变化）、
+  `handoff`（生成 `ContextPocket/handoff.md`）；`search` / `why` 新增 `--expand <1-3>`，沿运行时
+  派生图把关联轮次追加在结果之后（默认 0，输出逐字不变）。
+- **稳健性**：MCP `context_pocket_graph` 的边类型枚举从 6 种补到 10 种；`log amend` 保留
+  块头的时间行，已记录的时刻不被覆盖。
+- **性能**：`recall <T-id>` 的 `rawText` 只读该块所在文件并校验块头，输出逐字节不变。
+- **文档与抄本**：Lite README / SKILL 按 11 条命令更新，清理不存在的选项写法；版本同步为
+  `2.5` / `2.5-lite`。细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
 ## [2.4-lite] - 2026-11-09
 
 ### Lite 查询优化

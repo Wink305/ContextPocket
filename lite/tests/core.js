@@ -15,8 +15,8 @@ const {
 } = require('./harness');
 
 const { LITE_CORE_FILES } = require(path.join(ROOT, 'lib', 'constants'));
-const { appendLogBlock } = require(path.join(ROOT, 'lib', 'writer'));
-const { recall, recallWindow, searchAny, why } = require(path.join(ROOT, 'lib', 'query'));
+const { appendLogBlock, amendLogBlock, generateHandoff } = require(path.join(ROOT, 'lib', 'writer'));
+const { recall, recallWindow, searchAny, why, diff } = require(path.join(ROOT, 'lib', 'query'));
 const { verify } = require(path.join(ROOT, 'lib', 'validator'));
 const { deriveLinks } = require(path.join(ROOT, 'lib', 'links'));
 
@@ -148,22 +148,127 @@ test('graph derives runtime edges without creating files', () => {
   assert.strictEqual(fs.existsSync(path.join(pocketDir, 'assets')), false);
 });
 
+test('search and why expand walk the runtime graph and leave the direct results untouched', () => {
+  const { pocketDir } = makeLitePocket('expand');
+  // T1/T2 共用 src/shared.js（两跳可达）；T3 只碰 src/noise.js
+  append(pocketDir, 'alpha shared', { action: ['Modified src/shared.js'] });
+  append(pocketDir, 'beta shared', { action: ['Modified src/shared.js'] });
+  append(pocketDir, 'gamma noise', { action: ['Modified src/noise.js'] });
+  // why 的种子：T4 只在 Uncertain 里提到 src/target.js，同时改了 src/shared.js，
+  // 于是 why target 的扩展经过 file:src/shared.js 才到达 T1/T2
+  append(pocketDir, 'delta mentions target', {
+    action: ['Modified src/shared.js'],
+    uncertain: ['Check src/target.js later'],
+  });
+
+  const plain = searchAny(pocketDir, 'alpha', {});
+  assert.strictEqual(plain.expandedCount, 0);
+  assert.deepStrictEqual(plain.results.map((r) => r.id), [1]);
+
+  const expanded = searchAny(pocketDir, 'alpha', { expand: 2 });
+  // T2 与 T4 都经 file:src/shared.js 在第二跳到达
+  assert.strictEqual(expanded.expandedCount, 2);
+  assert.strictEqual(expanded.total, 1);
+  assert.strictEqual(expanded.results[0].id, 1);
+  const linked = expanded.results.filter((r) => r.expanded);
+  assert.deepStrictEqual(linked.map((r) => r.id).sort(), [2, 4]);
+  assert.ok(linked.every((r) => r.distance === 2 && r.via === 'modifies'));
+
+  // 一跳只够到 file 节点，不产生 linked 轮次
+  assert.strictEqual(searchAny(pocketDir, 'alpha', { expand: 1 }).expandedCount, 0);
+
+  const whyPlain = why(pocketDir, 'src/target.js');
+  assert.deepStrictEqual(whyPlain.map((r) => r.id), [4]);
+  const whyExpanded = why(pocketDir, 'src/target.js', { expand: 2 });
+  const whyLinked = whyExpanded.filter((r) => r.evidence === 'linked');
+  assert.deepStrictEqual(whyLinked.map((r) => r.id).sort(), [1, 2]);
+  assert.ok(whyLinked.every((r) => r.distance === 2 && r.references.length === 0));
+
+  // CLI 的 --expand 与库层同一条路径
+  const cli = runCliJson(['search', 'alpha', '--expand', '2', '--json'], path.dirname(pocketDir));
+  assert.strictEqual(cli.json.expand, 2);
+  assert.strictEqual(cli.json.expandedCount, 2);
+});
+
+test('log amend fills only missing sections, preserves WHEN, and diff/handoff round-trip', () => {
+  const { projectDir, pocketDir } = makeLitePocket('amend-diff-handoff');
+  append(pocketDir, 'first', { when: '2026-11-01', action: ['Modified src/a.js'] });
+  append(pocketDir, 'second', { action: ['Modified src/b.js'] });
+
+  const amend = amendLogBlock(pocketDir, 1, { decisions: ['chose A'] });
+  assert.strictEqual(amend.success, true);
+  assert.deepStrictEqual(amend.filled, ['Decisions & Constraints']);
+  let log = readPocketFile(pocketDir, 'log.md');
+  assert.match(log, /^--- WHEN: 2026-11-01 \(day\) ---$/m);
+  assert.match(log, /### Decisions & Constraints\n- chose A/);
+
+  // amend 从不覆盖已有小节
+  const again = amendLogBlock(pocketDir, 1, { decisions: ['chose B'], user: ['hijack'] });
+  assert.strictEqual(again.success, true);
+  assert.strictEqual(again.unchanged, true);
+  assert.deepStrictEqual(again.skipped.sort(), ['Decisions & Constraints', 'User']);
+  log = readPocketFile(pocketDir, 'log.md');
+  assert.doesNotMatch(log, /chose B/);
+
+  const d = diff(pocketDir, 1, 2);
+  assert.strictEqual(d.tA, 1);
+  assert.strictEqual(d.gistB, 'second');
+  assert.deepStrictEqual(d.files.added, ['src/b.js']);
+  assert.deepStrictEqual(d.files.removed, ['src/a.js']);
+
+  const handoff = generateHandoff(pocketDir);
+  assert.strictEqual(handoff.tId, 2);
+  assert.ok(fs.existsSync(path.join(pocketDir, 'handoff.md')));
+  assert.match(readPocketFile(pocketDir, 'handoff.md'), /T2/);
+  assert.strictEqual(verify(pocketDir).errorCount, 0);
+
+  // MCP 面：同样的 3 个工具都在
+  const mcp = runMcp(projectDir, [
+    { name: 'context_pocket_diff', arguments: { tA: 1, tB: 2 } },
+    { name: 'context_pocket_log_amend', arguments: { tId: 2, pitfalls: 'none' } },
+    { name: 'context_pocket_handoff' },
+  ]);
+  assert.strictEqual(mcp.calls[0].isError, undefined);
+  assert.match(mcp.calls[0].content[0].text, /## Diff: T1 → T2/);
+  assert.match(mcp.calls[1].content[0].text, /T2 amended/);
+  assert.match(mcp.calls[2].content[0].text, /Handoff generated/);
+});
+
+test('recall raw text is byte-identical through the block-hint fast path', () => {
+  const { pocketDir } = makeLitePocket('recall-raw');
+  append(pocketDir, 'one', { action: ['Modified src/one.js'] });
+  append(pocketDir, 'two', { action: ['Modified src/two.js'] });
+
+  const log = readPocketFile(pocketDir, 'log.md');
+  const first = recall(pocketDir, 1);
+  const second = recall(pocketDir, 2);
+  assert.ok(log.includes(first.rawText));
+  assert.ok(log.includes(second.rawText));
+  assert.match(first.rawText, /^## T1 · one/m);
+  assert.doesNotMatch(first.rawText, /## T2 · two/);
+  assert.match(second.rawText, /^## T2 · two/m);
+
+  // 块头 id 与请求不一致时退回全文扫描，而不是切错块（T1 不匹配 T10）
+  const fromCli = runCliJson(['recall', '2', '--json'], path.dirname(pocketDir));
+  assert.strictEqual(fromCli.json.t.rawText, second.rawText);
+});
+
 test('CLI help, MCP tool list, version, unknown commands, and command-specific help stay in contract', () => {
   const { projectDir } = makeLitePocket('surface');
   const help = runCliJson(['help', '--json'], projectDir).json;
   const commandCount = help.groups.reduce((sum, group) => sum + group.commands.length, 0);
   const mcp = runMcp(projectDir);
-  assert.strictEqual(commandCount, 8);
-  assert.strictEqual(mcp.tools.length, 8);
+  assert.strictEqual(commandCount, 11);
+  assert.strictEqual(mcp.tools.length, 11);
   assert.strictEqual(mcp.initialize.serverInfo.name, 'context-pocket-lite');
   assert.strictEqual(mcp.initialize.protocolVersion, '2025-06-18');
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.4-lite/);
+  assert.match(version.stdout, /2\.5-lite/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.4');
-  assert.strictEqual(versionJson.display, '2.4-lite');
+  assert.strictEqual(versionJson.version, '2.5');
+  assert.strictEqual(versionJson.display, '2.5-lite');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);

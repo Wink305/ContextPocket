@@ -22,18 +22,18 @@
 - Captures: requirements, code changes, decisions, pitfalls, preferences.
 - Links turns, files and decisions into a traceable graph, so `recall --with-context` answers *what happened around this turn* — not just *what it said*.
 
-## ContextPocket 2.3 and 2.4 Lite
+## ContextPocket 2.3 and ContextPocket Lite 2.5
 
 **ContextPocket 2.3** adds sourced multi-hop graph context and historical validity filtering: `search <kw> --expand 2` and `why <file> --expand 2` trace related turns, files and decisions up to three hops, while `--as-of <T>` filters the graph context to facts valid at that turn. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
 
-**ContextPocket 2.4 Lite** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eight CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. Exact `T<n>` searches avoid parsing unrelated metadata.
+**ContextPocket Lite 2.5** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. Exact `T<n>` searches avoid parsing unrelated metadata. New in 2.5: `log amend`, `diff`, `handoff`, and `--expand` multi-hop context on `search` / `why`.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
 | **2.3** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
-| **2.4 Lite** | Small projects and everyday conversation memory | Runtime-derived temporal links; no cache | 5 core files · 8 commands / tools |
+| **2.5 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket 2.4 Lite](https://github.com/Wink305/ContextPocket/releases/download/2.4-lite/ContextPocket-2.4-Lite.zip) — current tags `2.3` / `2.4-lite`. Each archive includes its `package.json`, README and license; no npm registry release is involved.
+Download the GitHub Release archives: [ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket Lite 2.5](https://github.com/Wink305/ContextPocket/releases/download/2.5-lite/ContextPocket-2.5-Lite.zip) — current tags `2.3` / `2.5-lite`. Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
 🚀 **How to use**
 
@@ -436,7 +436,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket 2.4 Lite package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket Lite 2.5 package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 

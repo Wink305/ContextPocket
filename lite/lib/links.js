@@ -23,9 +23,8 @@
  */
 
 const path = require('path');
-const { parseLogAll, parseDecisions } = require('./parser');
-const { readFileSafe } = require('./core');
-const { extractFilesFromBlock } = require('./query');
+const { parseLogAll, parseDecisions, parseRequirements } = require('./parser');
+const { readFileSafe, extractFilesFromBlock } = require('./core');
 
 const STRONG = 'strong';
 const WEAK = 'weak';
@@ -40,6 +39,23 @@ function turnNodeId(tId) {
 
 function fileNodeId(p) {
   return 'file:' + normFile(p);
+}
+
+function reqNodeId(rId) {
+  return 'req:R' + rId;
+}
+
+function tagNodeId(name) {
+  return 'tag:' + String(name).trim();
+}
+
+/**
+ * 模板占位符形态的值（`<entry-file>`、`<req>`、`<files>`）——不是真实内容，
+ * 不该变成图里的假节点（与主包 lib/links.js 同一份判据）。
+ */
+function isPlaceholderValue(v) {
+  const s = String(v === undefined || v === null ? '' : v).trim();
+  return s.length >= 2 && s.startsWith('<') && s.endsWith('>');
 }
 
 function adrNodeId(n) {
@@ -92,6 +108,13 @@ function deriveLinks(pocketDir) {
     const from = turnNodeId(block.id);
     const source = block.source || 'log.md';
     addNode(from, 'turn', block.gist, { archived: !!block.archived, source });
+
+    // 轮次自带的标签 → tag 节点（强证据：标签是块标题里显式写着的）
+    for (const tag of (block.tags || [])) {
+      const to = tagNodeId(tag);
+      addNode(to, 'tag', String(tag).trim());
+      addEdge({ from, to, type: 'tagged', source, tId: block.id });
+    }
 
     for (const f of extractFilesFromBlock(block)) {
       const to = fileNodeId(f);
@@ -157,6 +180,34 @@ function deriveLinks(pocketDir) {
     }
   }
 
+  // 需求节点：条目里明确写着 opened T<n> / completed T<m> / impl: <files>，全是强证据。
+  // Lite 的口袋没有 requirements.md，parseRequirements 返回空，这里自然不产生节点 ——
+  // 但派生规则与主包同一份，将来 Lite 若带上需求文件也自动一致。
+  for (const req of parseRequirements(pocketDir).items) {
+    if (isPlaceholderValue(req.text)) continue;
+    const from = reqNodeId(req.id);
+    addNode(from, 'requirement', req.text, { source: 'requirements.md', status: req.status });
+
+    if (req.openedAt) {
+      addEdge({ from, to: turnNodeId(req.openedAt), type: 'opened-in', source: 'requirements.md', tId: req.openedAt });
+    }
+    if (req.completedAt) {
+      addEdge({ from, to: turnNodeId(req.completedAt), type: 'completed-in', source: 'requirements.md', tId: req.completedAt });
+    }
+    for (const f of req.impl || []) {
+      if (isPlaceholderValue(f)) continue;
+      const to = fileNodeId(f);
+      addNode(to, 'file', normFile(f));
+      addEdge({ from, to, type: 'implements', source: 'requirements.md', tId: req.openedAt });
+    }
+    for (const tag of req.tags || []) {
+      if (isPlaceholderValue(tag)) continue;
+      const to = tagNodeId(tag);
+      addNode(to, 'tag', String(tag).trim());
+      addEdge({ from, to, type: 'tagged', source: 'requirements.md', tId: req.openedAt });
+    }
+  }
+
   // code-map 的 `T<n>: <last change>` 行按最近的文件条目归属。
   // 尽力而为：手写格式解析不到就不建边，绝不猜 —— 无来源的边一律不建。
   const codeMap = readFileSafe(path.join(pocketDir, 'code-map.md')) || '';
@@ -172,6 +223,8 @@ function deriveLinks(pocketDir) {
       const text = line.slice(connIdx + 4).trim();
       const entry = /^(.+?)\s*→\s*(.+)$/.exec(text);
       const name = entry ? entry[1].trim() : text;
+      // 模板里的 `<entry-file>` / `<subdir-1>/` 是占位，不是真路径
+      if (isPlaceholderValue(name)) continue;
       if (name.endsWith('/')) {
         dirsAtDepth[depth] = name;
         dirsAtDepth.length = depth + 1;
@@ -302,10 +355,93 @@ function formatContextLines(ctx) {
   return lines;
 }
 
+// ============================================================
+// 多跳扩展（--expand <n>）
+// ============================================================
+
+/** 深度上限：再深也不会更有用，只会让输出变成一堵墙。 */
+const MAX_EXPAND_DEPTH = 3;
+
+/**
+ * 从种子节点出发走 N 跳，返回新到达的节点与走过的边。
+ *
+ * **方向**：图里的边是有向的（`references` 是「T2 引用了 T1」），但"找相关"这件事
+ * 不认方向 —— 从 T1 反着走得到的正是「谁引用了我」，而入向上下文本来就是反着用。
+ * 所以邻接按无向构造；命中的每条边仍带着它本来有向的那一侧（from/to），输出里
+ * 能说清「谁 → 谁」，不会把方向说反。
+ *
+ * **防环**：按节点 id 记 visited，一个节点只被展开一次 —— 环不会打转，
+ * 菱形关系也不会把同一个节点算成两条路径。
+ *
+ * 与主包 lib/links.js 逐字同源。差别只在调用方：主包从 readGraph（缓存）取图，
+ * Lite 永远现场 deriveLinks —— expandFrom 本身是纯函数，收的就是 deriveLinks 的
+ * 返回值形状，零写盘、零缓存，「更轻」不打折。
+ *
+ * @param {object} graph deriveLinks() 的结果
+ * @param {string[]} seedIds 起点节点 id
+ * @param {number} depth 跳数（0 = 不扩展；上限 MAX_EXPAND_DEPTH）
+ * @returns {{depth:number, nodes:Array, edges:Array}}
+ */
+function expandFrom(graph, seedIds, depth) {
+  const d = Math.max(0, Math.min(MAX_EXPAND_DEPTH, parseInt(depth, 10) || 0));
+  const out = { depth: d, nodes: [], edges: [] };
+  if (d === 0 || !seedIds || seedIds.length === 0) return out;
+
+  const nodeById = new Map((graph.nodes || []).map((n) => [n.id, n]));
+  const adj = new Map();
+  for (const e of graph.edges || []) {
+    if (!adj.has(e.from)) adj.set(e.from, []);
+    if (!adj.has(e.to)) adj.set(e.to, []);
+    adj.get(e.from).push({ edge: e, other: e.to });
+    adj.get(e.to).push({ edge: e, other: e.from });
+  }
+
+  const seen = new Set(seedIds);
+  const usedEdges = new Set();
+  const reached = new Map();
+
+  let frontier = seedIds.slice();
+  for (let step = 1; step <= d; step++) {
+    const next = [];
+    for (const id of frontier) {
+      for (const link of (adj.get(id) || [])) {
+        const e = link.edge;
+        const key = [e.from, e.type, e.to].join('\u0000');
+        if (!usedEdges.has(key)) {
+          usedEdges.add(key);
+          out.edges.push(e);
+        }
+        if (seen.has(link.other)) continue;
+        const node = nodeById.get(link.other);
+        if (!node) continue;
+        seen.add(link.other);
+        reached.set(link.other, {
+          id: node.id,
+          type: node.type,
+          label: node.label,
+          distance: step,
+          via: e.type,
+          viaFrom: e.from,
+          viaTo: e.to,
+          archived: !!node.archived,
+        });
+        next.push(link.other);
+      }
+    }
+    frontier = next;
+    if (frontier.length === 0) break;
+  }
+
+  out.nodes = [...reached.values()].sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id));
+  return out;
+}
+
 module.exports = {
   deriveLinks,
   buildContext,
   formatContextLines,
+  expandFrom,
+  MAX_EXPAND_DEPTH,
   STRONG,
   WEAK,
 };
