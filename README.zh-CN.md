@@ -9,17 +9,18 @@
 
 > **SKILL 文档拆成 3 份**：[SKILL.md](SKILL.md)（日常必读主体） · [SKILL-advanced.md](SKILL-advanced.md)（模板 / 归档 / 边界情况） · [SKILL-reference.md](SKILL-reference.md)（Layout + 各文件模板 + log.md T-block 完整规范）。
 
-📌 **使用场景**
+📌 **适用场景**
 
-- 切换 Agent / 换模型后，新会话从零开始。
-- 长会话 token 爆了，历史被压缩丢失。
-- 接手别人的 AI 项目，不知道前面做了什么。
+- 切换 Agent 或模型后，新会话可能拿不到之前的上下文。
+- 长会话达到 token 上限后，早期内容可能被压缩或丢失。
+- 接手 AI 辅助开发的项目时，很难快速了解之前做过什么。
 
-✨ **效果**
+✨ **ContextPocket 能做什么**
 
-- 自动把每轮开发对话记录到项目的 `ContextPocket/` 文件夹。
-- 下次任何 Agent 读一遍，5 秒续上进度。
-- 记录内容：需求、代码变更、决策、踩坑、偏好。
+- 配置好兼容的 Agent 后，将开发过程中的对话记录到项目的 `ContextPocket/` 文件夹。
+- 为后续会话提供简明的项目记录，方便接续工作。
+- 用纯 Markdown 保存需求、代码变更、决策、踩坑和偏好。
+- 关联轮次、文件与决策，让 `recall --with-context` 不只回答「这一轮说了什么」，也能展示「前后发生了什么」。
 
 ## ContextPocket 2.3 与 ContextPocket Lite 2.5
 
@@ -34,11 +35,11 @@
 
 下载 GitHub Release 压缩包：[ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket Lite 2.5](https://github.com/Wink305/ContextPocket/releases/download/2.5-lite/ContextPocket-2.5-Lite.zip)——当前 tag 为 `2.3` / `2.5-lite`。每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。
 
-🚀 **方法**
+🚀 **开始使用**
 
-1. **安装** — 在[快速开始](#1-安装)里三选一：装成全局命令、免安装直接 `node` 调用、或复制到 Agent 的 skill 目录
-2. **激活** — 自动完成，不用输入任何命令（见下方[⚡ 快速响应](#-快速响应)）
-3. **正常工作** — Agent 自动记录；换 Agent / 换模型后也会自动接上
+1. **安装** — 在[快速开始](#1-安装)里选择一种方式：安装 CLI 命令、直接用 Node.js 调用脚本，或复制到 Agent 的 skill 目录。
+2. **激活** — 兼容的 Agent 可以在首次使用时初始化口袋；无需在对话中输入初始化命令。
+3. **正常工作** — 已配置的 Agent 会记录工作内容，后续会话可以从同一份项目文件继续。
 
 ---
 
@@ -177,7 +178,7 @@ Windows 下请用正斜杠，或者把 JSON 字符串里的反斜杠转义掉：
 
 ### 2. 激活
 
-激活是**自动的**，不需要输入任何命令。项目里还没有 `ContextPocket/` 时，Agent 会在第一轮实质对话时主动提出初始化；已经有了就读 `index.md` + `state.md` 继续记录。
+激活是**自动的**，不需要在对话中输入命令。项目里还没有 `ContextPocket/` 时，Agent 会在第一轮实质对话时提出初始化；已经有了就先读 `index.md` 和 `state.md`，再继续记录。
 
 Agent 会自动：
 - 在项目根创建 `ContextPocket/` 文件夹
@@ -186,12 +187,12 @@ Agent 会自动：
 
 ### 3. 正常工作
 
-接下来每次你和 Agent 对话，Agent 会**自动**追加一个 `T<n>` 块到 `log.md`，记录：
+配置好 ContextPocket 后，Agent 会为每轮需要记录的开发对话**自动**向 `log.md` 追加一个 `T<n>` 块，记录：
 - 你说了什么（User）
 - Agent 做了什么（Action，具体到文件路径）
 - 改了哪些代码 / 做了哪些决定
 
-你不需要做任何额外操作。
+日常使用时无需额外操作。
 
 ### 4. 切换/交接
 
@@ -201,7 +202,7 @@ Agent 会自动：
 读 ContextPocket/index.md
 ```
 
-新 Agent 会自动接上记录——5 秒内进入状态。
+新 Agent 读取口袋后即可接续工作和记录。
 
 ---
 
