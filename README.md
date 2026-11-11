@@ -9,18 +9,18 @@
 
 > **SKILL docs** are split into 3 files: [SKILL.md](SKILL.md) (daily-read main) · [SKILL-advanced.md](SKILL-advanced.md) (templates / archive / edge cases) · [SKILL-reference.md](SKILL-reference.md) (Layout + per-file templates + log.md T-block spec).
 
-📌 **When to use**
+📌 **When it helps**
 
-- Switching agents or models? The new session starts from zero.
-- Long session hit the token limit? History gets compressed and lost.
-- Inheriting someone else's AI project? No clue what was done before.
+- Switching agents or models? A new session may start without the context from the last one.
+- Long session hit the token limit? Earlier details can be compressed or lost.
+- Inheriting an AI-assisted project? It can be hard to tell what has already been done.
 
-✨ **What it does**
+✨ **What ContextPocket does**
 
-- Automatically records every dev conversation turn into your project's `ContextPocket/` folder.
-- Next agent reads it once and picks up progress in 5 seconds.
-- Captures: requirements, code changes, decisions, pitfalls, preferences.
-- Links turns, files and decisions into a traceable graph, so `recall --with-context` answers *what happened around this turn* — not just *what it said*.
+- With a compatible agent configured, records development turns in your project's `ContextPocket/` folder.
+- Gives the next session a concise project record to continue from.
+- Keeps requirements, code changes, decisions, pitfalls, and preferences in plain Markdown.
+- Connects turns, files, and decisions, so `recall --with-context` can show *what happened around a turn* — not just *what it said*.
 
 ## ContextPocket 2.3 and ContextPocket Lite 2.5
 
@@ -35,11 +35,11 @@
 
 Download the GitHub Release archives: [ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket Lite 2.5](https://github.com/Wink305/ContextPocket/releases/download/2.5-lite/ContextPocket-2.5-Lite.zip) — current tags `2.3` / `2.5-lite`. Each archive includes its `package.json`, README and license; no npm registry release is involved.
 
-🚀 **How to use**
+🚀 **Getting started**
 
-1. **Install** — pick one of the three methods in [Quick Start](#1-install) (CLI command, no-install script call, or skill-directory copy)
-2. **Activate** — automatic; nothing to type (see [Quick responses](#-quick-responses) below)
-3. **Work normally** — the agent auto-records, and a new agent / model picks recording back up on its own
+1. **Install** — choose one of the three methods in [Quick Start](#1-install): a CLI command, a direct Node.js script call, or a skill-directory copy.
+2. **Activate** — a compatible agent can initialize the pocket when you first use it; no setup command is needed in the conversation.
+3. **Work normally** — the configured agent records the work, and a later session can continue from the same project files.
 
 ---
 
@@ -178,7 +178,7 @@ See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the full list of supporte
 
 ### 2. Activate
 
-Activation is **automatic** — there is no command to type. In a project that has no `ContextPocket/` yet, the agent offers to bootstrap it on the first substantive turn; if one already exists, it reads `index.md` + `state.md` and keeps recording.
+Activation is **automatic** — there is no command to type in the conversation. In a project without a `ContextPocket/` folder, the agent offers to initialize one on the first substantive turn; if one already exists, it reads `index.md` and `state.md` before continuing.
 
 The agent will automatically:
 - Create a `ContextPocket/` folder at the project root
@@ -187,12 +187,12 @@ The agent will automatically:
 
 ### 3. Work normally
 
-Every time you chat with the agent, it will **automatically** append a `T<n>` block to `log.md`, recording:
+With ContextPocket configured, the agent **automatically** appends a `T<n>` block to `log.md` for each recorded development turn, including:
 - What you said (User)
 - What the agent did (Action — with specific file paths)
 - Code changes / decisions made
 
-You don't need to do anything special.
+No extra step is needed during normal work.
 
 ### 4. Switch / Hand off
 
@@ -202,7 +202,7 @@ When switching agents or models, have the new session read the pocket:
 Read ContextPocket/index.md
 ```
 
-The new agent picks recording back up automatically — up and running in 5 seconds.
+The new agent can read the pocket and continue recording from there.
 
 ---
 
