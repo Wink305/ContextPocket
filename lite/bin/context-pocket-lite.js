@@ -626,7 +626,7 @@ function cmdSearch(options, positional) {
   // Lite 没有索引：永远现场扫描（与主包 `search --no-index` 同一份实现、同一份排序）
   // --expand：从命中出发走 n 跳现场派生的关联图，扩展轮次追加在分页之后
   const expand = intOption(options.expand, 0);
-  const { results, total, hasMore, offset, limit, expandedCount } = searchAny(pocketDir, keyword, {
+  const { results, total, hasMore, offset, limit, expandedCount, expansionTruncated } = searchAny(pocketDir, keyword, {
     limit: options.limit,
     offset: options.offset,
     sinceT,
@@ -651,6 +651,7 @@ function cmdSearch(options, positional) {
       hasMore,
       viaIndex: false,
       expandedCount,
+      expansionTruncated,
       expand,
       results,
     });
@@ -719,6 +720,11 @@ function cmdSearch(options, positional) {
       console.log(`  ${colorize('T' + r.id, 'bold')} ${colorize('[linked]', 'magenta')} · ${r.gist} ${colorize('(via ' + r.via + ', ' + hops + ')', 'dim')}`);
     }
   }
+  // 截断提示独立于 linked 块：最坏情况是扩展轮次全被截掉（linked 为空），
+  // 这时更需要告诉用户"还有更多"，而不是静默
+  if (expansionTruncated) {
+    console.log(colorize('  (additional graph context omitted at the 100-node safety limit)', 'dim'));
+  }
 
   // 截断必须可见：否则用户以为"就这些"，而真实总数在 total 里
   if (hasMore) {
@@ -761,7 +767,7 @@ function cmdWhy(options, positional) {
       count: direct.length,
       limit,
       results,
-      expanded: { depth: expand, count: linked.length },
+      expanded: { depth: expand, count: linked.length, truncated: !!results.expansionTruncated },
     });
   }
 
@@ -805,6 +811,9 @@ function cmdWhy(options, positional) {
       const hops = r.distance + ' hop' + (r.distance === 1 ? '' : 's');
       console.log(`  ${colorize('T' + r.id, 'bold')} ${colorize('[linked]', 'magenta')} · ${r.gist} ${colorize('(via ' + r.via + ', ' + hops + ')', 'dim')}`);
     }
+  }
+  if (results.expansionTruncated) {
+    console.log(colorize('  (additional graph context omitted at the 100-node safety limit)', 'dim'));
   }
   console.log('');
 }

@@ -12,10 +12,10 @@
  */
 
 /** 拿不到 package.json 时的兜底值。改动它必须同时改 lite/package.json。 */
-const FALLBACK_VERSION = '2.5';
+const FALLBACK_VERSION = '2.6-Lite-preview';
 
 /** 对外展示版本（--version 标题行 / version --json 的 display），不进任何包元数据。 */
-const DISPLAY_VERSION = '2.5-lite';
+const DISPLAY_VERSION = '2.6-Lite-preview';
 
 /**
  * @param {string} [dir] 包根目录（默认本文件所在 lib 的上一级）

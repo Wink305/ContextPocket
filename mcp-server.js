@@ -442,7 +442,8 @@ const TOOLS = [
         },
         type: {
           type: 'string',
-          enum: ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'],
+          enum: ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
+            'tagged', 'opened-in', 'completed-in', 'implements'],
           description: 'view only — restrict edges to one type',
         },
         limit: {
@@ -1762,7 +1763,8 @@ function toolGraph(args) {
     };
   }
 
-  const KNOWN_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'];
+  const KNOWN_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
+    'tagged', 'opened-in', 'completed-in', 'implements'];
   if (typeFilter && !KNOWN_TYPES.includes(typeFilter)) {
     return {
       content: [{ type: 'text', text: `❌ Error: unknown edge type "${typeFilter}". Known types: ${KNOWN_TYPES.join(', ')}.` }],

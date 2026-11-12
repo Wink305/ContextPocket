@@ -1094,8 +1094,8 @@ test('cli: graph view builds the cache on first call and reports it fresh afterw
   assert.strictEqual(j.ok, true, JSON.stringify(j));
   assert.strictEqual(j.cache.status, 'fresh');
   assert.strictEqual(j.cache.rebuilt, false, '第二次走缓存，不再写盘');
-  assert.strictEqual(j.stats.edges, j.stats.byType.modifies + j.stats.byType.references
-    + j.stats.byType['decided-in'] + j.stats.byType.supersedes + j.stats.byType['last-changed'] + j.stats.byType.mentions);
+  assert.strictEqual(j.stats.edges, Object.values(j.stats.byType).reduce((a, b) => a + b, 0),
+    'byType 各类之和必须等于总边数（类型集合随派生规则演进，不钉死名单）');
   assert.ok(j.edges.every((e) => typeof e.source === 'string' && typeof e.tId === 'number'));
 });
 

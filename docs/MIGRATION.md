@@ -10,7 +10,7 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `2.3` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `2.4-preview` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
 
 ### 兼容性原则
@@ -176,27 +176,30 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 > 这是 Phase 1（关联图缓存）的落盘说明。**它不是数据格式版本的一跳**：
 > `ContextPocket/readme.md` 的 `format:` 戳不动，登记表里没有它的迁移步骤。
 > 图是纯派生品 —— 真值永远在 `log.md` / `log-archive.md` / `decisions.md` /
-> `code-map.md` 四份 Markdown 里，缓存删了随时逐字重建。
+> `code-map.md` / `requirements.md` 五份 Markdown 里，缓存删了随时逐字重建。
 
 ### 它是什么
 
 `ContextPocket/assets/graph.jsonl`，一行一条 JSON 记录，第一行是 meta：
 
 ```jsonl
-{"kind":"meta","schema":"graph/1","sources":{"log.md":"<sha1>", ...}}
+{"kind":"meta","schema":"graph/3","sources":{"log.md":"<sha1>", ...}}
 {"kind":"node","id":"T1","type":"turn","label":"初版","archived":false,"source":"log.md"}
-{"kind":"edge","from":"T1","to":"file:src/a.ts","type":"modifies","evidence":"strong","source":"log.md","tId":1,"via":null}
+{"kind":"edge","from":"T1","to":"file:src/a.ts","type":"modifies","evidence":"strong","source":"log.md","tId":1,"recordedAt":1,"validFrom":1,"validTo":null,"via":null}
 ```
 
-节点类型 `turn` / `file` / `decision` / `correction`；边类型 `modifies` /
-`mentions`（弱证据）/ `references` / `decided-in` / `supersedes` /
-`last-changed`。每条边带 `source`（来自哪份文件）与 `tId`（哪一轮），
+节点类型 `turn` / `file` / `decision` / `correction` / `tag` / `requirement`；
+边类型 `modifies` / `mentions`（弱证据）/ `references` / `decided-in` /
+`supersedes` / `last-changed` / `tagged` / `opened-in` / `completed-in` /
+`implements`。每条边带 `source`（来自哪份文件）与 `tId`（哪一轮），
 `evidence: "weak"` 的边绝不冒充改动 —— 与 `why` 的证据分层同一套。
+`recordedAt` / `validFrom` / `validTo` 是事实的记录轮与有效区间（`Corrects`
+与 `Supersedes` 会关闭旧事实），`--as-of` 历史切片据此筛选。
 
 ### 与 format v1/v2 的关系（重要）
 
 - **不需要迁移**：v1 与 v2 的口袋都直接可用，第一次跑 `context-pocket graph`
-  时缓存自动生成（只新增 `assets/graph.jsonl`，四份源 Markdown 一个字节不动）。
+  时缓存自动生成（只新增 `assets/graph.jsonl`，五份源 Markdown 一个字节不动）。
 - **旧 skill 读新口袋**：1.x 的读者只认白名单里的 Markdown 与
   `assets/search-index.json`，多出来的 `graph.jsonl` 被原样忽略、不报错。
 - **新 skill 读旧口袋**：没有缓存就现场派生，`recall --with-context` 的输出
@@ -206,7 +209,7 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 
 ### 新鲜度与自愈
 
-- meta 行记着四个源文件各自的 sha1；源动了，缓存判 `stale`。
+- meta 行记着五个源文件各自的 sha1；源动了，缓存判 `stale`。
 - `graph`（查看）遇到 missing / stale / corrupt / schema 不符，**当场重写**再输出
   —— 与 `search` 对 `search-index.json` 的自愈语义相同。
 - `graph verify` 只报不写：`fresh` 通过；`missing` 也通过（缓存是可选物）；
@@ -214,7 +217,8 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
   字节与现场派生对不上）都是失败、退 1。
 - `graph rebuild` 强制重写。**回归锁**：删掉缓存 → rebuild → 与删除前逐字节一致
   （`tests/pocket.js`）。派生规则变更时 bump `GRAPH_SCHEMA`（`"graph/1"` →
-  `"graph/2"`），旧缓存据此判 stale 自动重写，不需要任何手工迁移步骤。
+  `"graph/2"` 加时间字段 → `"graph/3"` 加 tag/requirement 派生），旧缓存据此判
+  corrupt 自动重写，不需要任何手工迁移步骤。
 
 ### 灰色地带
 

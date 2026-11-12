@@ -33,9 +33,13 @@ function countCommands(bin, cwd) {
 
 function packStats(cwd) {
   const command = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'npm';
+  // --loglevel=notice 必须显式给：`npm test --silent` 会往子进程环境注入
+  // npm_config_loglevel=silent，内层 npm pack 继承后 notice 行全部静默，
+  // 只剩 stdout 一行文件名，下面的正则必然解析失败。显式 CLI 旗标优先于
+  // 环境配置，保证套件无论以何种 loglevel 启动都能量到体积。
   const args = process.platform === 'win32'
-    ? ['/d', '/s', '/c', 'npm pack --dry-run']
-    : ['pack', '--dry-run'];
+    ? ['/d', '/s', '/c', 'npm pack --dry-run --loglevel=notice']
+    : ['pack', '--dry-run', '--loglevel=notice'];
   const result = spawnSync(command, args, { cwd, env: process.env, encoding: 'utf8', timeout: 60000 });
   if (result.error) throw result.error;
   const output = (result.stdout || '') + '\n' + (result.stderr || '');
@@ -133,7 +137,9 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
     ['package files', litePack.files, mainPack.files, 28, 61],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 114.2, 412.4],
+    // 117.7 / 411.8：2.6-Lite-preview / 2.4-preview 定版实测（图扩展上限 + 截断提示
+    // + 整图同源回移与回归测试落地后的体积），按「基线随每次定版更新」追平
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 117.7, 411.8],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

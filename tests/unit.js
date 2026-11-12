@@ -235,6 +235,62 @@ test('sanitizeBlockquote prefixes every line', () => {
 });
 
 // ------------------------------------------------------------
+// io：进程间锁
+// ------------------------------------------------------------
+
+test('io: withLock acquires, reenters, and releases the lock file', () => {
+  const dir = tmpProject('lock-basic');
+  const target = path.join(dir, 'data.json');
+  const lockPath = io.lockPathFor(target);
+  assert.ok(!fs.existsSync(lockPath));
+  const result = io.withLock(target, () => {
+    assert.ok(fs.existsSync(lockPath), '持锁期间锁文件必须在');
+    const owner = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
+    assert.strictEqual(owner.pid, process.pid);
+    // 重入：同进程同把锁不能死锁
+    return io.withLock(target, () => 42);
+  });
+  assert.strictEqual(result, 42);
+  assert.ok(!fs.existsSync(lockPath), '释放后锁文件要删掉');
+});
+
+test('io: a stale lock (dead owner or expired) is reclaimed without residue', () => {
+  const dir = tmpProject('lock-stale');
+  const target = path.join(dir, 'data.json');
+  const lockPath = io.lockPathFor(target);
+
+  // 分支一：持有进程已死。用一个不可能存在的 pid（Linux pid_max ≤ 4194304，
+  // Windows 实际 pid 远小于此）——不能 spawn 子进程取 pid：spawnSync 持有的
+  // 进程句柄未释放时，Windows 上 process.kill(pid, 0) 仍会成功。
+  fs.writeFileSync(lockPath, JSON.stringify({ pid: 999999999, at: Date.now() }));
+  assert.strictEqual(io.withLock(target, () => 'a'), 'a', '死持有者的锁要能回收');
+  assert.ok(!fs.existsSync(lockPath));
+
+  // 分支二：持有者还活着（本进程）但锁已过期。过期判据是文件 mtime，
+  // 不是内容里的 at —— 所以要把 mtime 拨回 20 秒前
+  fs.writeFileSync(lockPath, JSON.stringify({ pid: process.pid, at: Date.now() }));
+  const past = new Date(Date.now() - 20000);
+  fs.utimesSync(lockPath, past, past);
+  assert.strictEqual(io.withLock(target, () => 'b'), 'b', '过期锁要能回收');
+  assert.ok(!fs.existsSync(lockPath));
+  assert.ok(!fs.readdirSync(dir).some((f) => f.includes('.stale.')), 'rename 回收后不留残骸');
+});
+
+test('io: release never deletes a lock that was reclaimed and rewritten by someone else', () => {
+  const dir = tmpProject('lock-release-owner');
+  const target = path.join(dir, 'data.json');
+  const lockPath = io.lockPathFor(target);
+  const newOwner = { pid: process.pid + 1, at: Date.now() + 12345 };
+  io.withLock(target, () => {
+    // 模拟：持锁期间被判 stale 回收，另一个进程写进了它的新锁
+    fs.writeFileSync(lockPath, JSON.stringify(newOwner));
+  });
+  assert.ok(fs.existsSync(lockPath), '别人的新锁不能被我们的释放动作删掉');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(lockPath, 'utf-8')), newOwner);
+  fs.unlinkSync(lockPath);
+});
+
+// ------------------------------------------------------------
 // parser
 // ------------------------------------------------------------
 

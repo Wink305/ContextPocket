@@ -750,7 +750,7 @@ function toolSearch(args) {
   }
 
   // Lite 没有索引：永远现场扫描（noIndex 收下但已无意义，保留参数形状兼容）
-  const { results, total, hasMore, offset, limit } = searchAny(pocketDir, keyword, {
+  const { results, total, hasMore, offset, limit, expansionTruncated } = searchAny(pocketDir, keyword, {
     limit: args.limit,
     offset: args.offset,
     sinceT: typeof args.sinceT === 'number' && args.sinceT > 0 ? args.sinceT : null,
@@ -818,6 +818,10 @@ function toolSearch(args) {
       lines.push(`- **T${r.id}** **[linked]**: ${r.gist} *(via ${r.via}, ${hops})*`);
     }
   }
+  // 截断提示独立于 linked 块：扩展轮次全被截掉时更要说明"还有更多"
+  if (expansionTruncated) {
+    lines.push('- *(additional graph context omitted at the 100-node safety limit)*');
+  }
 
   // 截断必须可见：否则调用方以为"就这些"，而真实总数在 total 里
   if (hasMore) {
@@ -882,6 +886,9 @@ function toolWhy(args) {
       const hops = r.distance + ' hop' + (r.distance === 1 ? '' : 's');
       lines.push(`- **T${r.id}** **[linked]**: ${r.gist} *(via ${r.via}, ${hops})*`);
     }
+  }
+  if (results.expansionTruncated) {
+    lines.push('- *(additional graph context omitted at the 100-node safety limit)*');
   }
 
   return {

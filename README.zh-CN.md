@@ -3,7 +3,7 @@
 > **[English](README.md)** · [文档目录](docs/) · [更新日志](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.3](https://img.shields.io/badge/version-2.3-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.4-preview](https://img.shields.io/badge/version-2.4--preview-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -228,7 +228,7 @@ Agent 会自动：
 | 对比两轮 | `diff Ta Tb` | 差异 |
 | 列出待确认项 | 直接读 `❓` 行（无工具） | 列出清单，然后问"逐条确认吗？" |
 | 检查前后矛盾 | `check-conflicts` | 按严重度分级的结果 |
-| 看项目的**关系形状** | `graph [--type <type>] [--json]` | 从口袋里派生出的节点与边：轮次 ↔ 文件 ↔ ADR，每条边都标出来源 |
+| 看项目的**关系形状** | `graph [--type <type>] [--json]` | 从口袋里派生出的节点与边：轮次 ↔ 文件 ↔ ADR ↔ 标签 ↔ 需求，每条边都标出来源 |
 | 修复重复或错位的 T 号 | 先 `repair --dry-run` | 改号方案 + 仍在指旧号的文字 |
 | 检查 git 漏记 | `sync`（加 `--auto` 才写入） | 补记了几轮 |
 | 导入旧会话 | `import` | 导入了几轮 |
@@ -239,7 +239,7 @@ Agent 会自动：
 
 > 💡 用大白话比记命令名更顺；如果你想要零歧义，直接把子命令名说出来也行（`context-pocket verify`）。
 
-**关联图层。** `recall --with-context` 与 `graph` 读取由口袋源文件派生的关联图——轮次 ↔ 文件 ↔ ADR。`search <关键词> --expand 2` 和 `why <文件> --expand 2` 可追加最多两跳、带来源的图上下文，不改变原有文本命中顺序；`--as-of <T>` 可按历史 T 号筛选当时有效的事实。显式的 `Corrects T<n>` 和 ADR `Supersedes` 关系会关闭旧事实的有效区间，每条边仍保留来源。问题落在**关系**上时用它（「这轮前后发生了什么」「哪些决策碰过这个文件」）；问题落在**内容**上时别用（「T7 当时说了什么」），普通 `recall` / `search` 更快且答案完整。
+**关联图层。** `recall --with-context` 与 `graph` 读取由口袋源文件派生的关联图——轮次 ↔ 文件 ↔ ADR ↔ 标签 ↔ 需求。`search <关键词> --expand 2` 和 `why <文件> --expand 2` 可追加最多两跳、带来源的图上下文，不改变原有文本命中顺序；`--as-of <T>` 可按历史 T 号筛选当时有效的事实。显式的 `Corrects T<n>` 和 ADR `Supersedes` 关系会关闭旧事实的有效区间，每条边仍保留来源。问题落在**关系**上时用它（「这轮前后发生了什么」「哪些决策碰过这个文件」）；问题落在**内容**上时别用（「T7 当时说了什么」），普通 `recall` / `search` 更快且答案完整。
 
 ---
 
@@ -259,7 +259,7 @@ Agent 会自动：
 | `context-pocket search <关键词> --dir <root> [--limit N] [--offset N] [--no-index]` | 在全量历史上做关键词搜索：T-block（gist、标签、每一个小节，含已归档轮次）、ADR、需求与偏好。自动走 `assets/search-index.json` 索引，加 `--no-index` 直接扫 Markdown —— 两条路径的匹配与排序完全相同，所以 `--limit`/`--offset` 翻的是同一份结果（`--limit 0` 为全部）。匹配规则：拉丁词按分隔符拆开，中文按**相邻两字组合**建索引，且查询词必须**全部**命中。所以长中文串里的短语能搜到（`时间分页` 能找到「给搜索加时间分页」），换个顺序就不行（`分页时间` 搜不到）；单独一个汉字只能命中那个字独立出现的地方 |
 | `context-pocket why <文件路径> --dir <root>` | 反向检索：哪些 T-block 提到过这个文件，并按证据强弱分开 —— `[changed]`（该轮 Action 小节里有这个路径）与 `[mentioned only]`（只在 Uncertain / Attachments / Conflicts / Pitfalls 里出现）。改过它的那几轮排前面，所以 `--limit` 截掉的是弱证据，不会把真实改动挤掉（借鉴 ThoughtDAG） |
 | `context-pocket check-conflicts --dir <root>` | 6 维冲突扫描，三级严重度（critical / warning / info） |
-| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | 查看派生关联图（T ↔ 文件 ↔ ADR；边：modifies / mentions / references / decided-in / supersedes / last-changed，每条带来源与 T 号）。`graph rebuild` 从 Markdown 逐字重建 `assets/graph.jsonl` 缓存；`graph verify` 只报缓存与源是否一致 |
+| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | 查看派生关联图（T ↔ 文件 ↔ ADR ↔ 标签 ↔ 需求；边：modifies / mentions / references / decided-in / supersedes / last-changed / tagged / opened-in / completed-in / implements，每条带来源与 T 号）。`graph rebuild` 从 Markdown 逐字重建 `assets/graph.jsonl` 缓存；`graph verify` 只报缓存与源是否一致 |
 | `context-pocket log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | 追加一轮 T-block 到 log.md（务必带 `--user "<用户原话>"`，否则 verify 报错并被 hook 拦下提交）。`--when` 可省略：默认盖成“你记录它的那一刻”，只有当这一轮实际发生在别的时间才用它覆盖。`--author "<谁在记>"` 把写入者写进这一块的 `### Author` 小节——多个 Agent 共用一份 pocket 时该带上；不传就没有这一小节，工具绝不会替你猜一个名字。每一次追加还会拿这一轮去比对 pocket 里已经写着的东西，把**新撞上的**那些以 `[auto]` 前缀写进这一块的 `### Conflicts` 小节（`--no-conflict-check` 可以跳过，跳过也会明说一句）。比对只做通报，永远不拦这次记录 |
 | `context-pocket log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | 补齐**已写入** T-block 中缺失的小节；绝不覆盖已有内容——`--when` 可以补一条缺失的时间行、或把只知道天的精确到时刻，但会拒绝改写一个已经记下过的时间点；`--author` 只补缺失的 `### Author` 小节，不覆盖块上已有的署名 |
 | `context-pocket absolute add --dir <root> --text "..." [--gist "..."]` | 追加一条🔒绝对保留到 absolute.md（原样保存，永不压缩） |

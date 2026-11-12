@@ -362,7 +362,8 @@ function getTodayStr() {
  * 住在 core 而不是 query：关联图 links.js 与查询 query.js 都要用它，
  * 若留在 query 会形成 links → query → links 的循环依赖（query 又要从 links
  * 拿 deriveLinks/expandFrom 做多跳扩展）。core 是叶子模块，两边都从这里取，
- * 「这轮动过哪些文件」全项目只能有一个判据。与主包 lib/core.js 逐字同源。
+ * 「这轮动过哪些文件」全项目只能有一个判据。实现与主包 lib/query.js 里的
+ * 同名函数逐字同义（主包放在 query，Lite 收敛到 core，判据只有一份）。
  *
  * @param {object} block 已解析的 T-block（带 actions）
  * @returns {string[]}

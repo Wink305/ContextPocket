@@ -58,12 +58,6 @@ function todayDate(date) {
   return nowStamp(date).slice(0, 10);
 }
 
-/** `2026-10-03 14:47` → 'HH:mm' 部分（补全区间右端用） */
-function timePart(stamp) {
-  const m = TIME_RE.exec(stamp);
-  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : null;
-}
-
 /**
  * 把用户/Agent 给的一句话解析成时间值。**认不出来就原样留着**，不猜。
  *

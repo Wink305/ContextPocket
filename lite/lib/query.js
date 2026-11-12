@@ -313,10 +313,10 @@ function diff(pocketDir, tA, tB) {
  * @param {string} pocketDir
  * @param {string[]} seedIds 起点节点 id
  * @param {number} depth 跳数（1-3）
- * @returns {Array<{id:number, gist:string, tags:string[], archived:boolean, distance:number, via:string}>}
+ * @returns {{turns: Array<{id:number, gist:string, tags:string[], archived:boolean, distance:number, via:string}>, hasMore: boolean}}
  */
 function expandTurns(pocketDir, seedIds, depth) {
-  if (!seedIds || seedIds.length === 0) return [];
+  if (!seedIds || seedIds.length === 0) return { turns: [], hasMore: false };
   const graph = deriveLinks(pocketDir);
   const res = expandFrom(graph, seedIds, depth);
   const out = [];
@@ -333,7 +333,7 @@ function expandTurns(pocketDir, seedIds, depth) {
       via: n.via,
     });
   }
-  return out;
+  return { turns: out, hasMore: !!res.hasMore };
 }
 
 /** 索引行 → 图节点 id。认不出来的类型（偏好行）返回 null。 */
@@ -478,10 +478,13 @@ function searchAny(pocketDir, keyword, opts = {}) {
   // 图走现场 deriveLinks（零缓存），与主包 readGraph 对同一份口袋给出同一组节点。
   const depth = intOption(opts.expand, 0);
   let expanded = [];
+  let expansionTruncated = false;
   if (depth > 0 && results.length > 0) {
     const seeds = results.map(rowToNodeId).filter(Boolean);
     const seen = new Set(results.filter((r) => r.type === 'T').map((r) => 'T' + r.id));
-    expanded = expandTurns(pocketDir, seeds, depth)
+    const expansion = expandTurns(pocketDir, seeds, depth);
+    expansionTruncated = expansion.hasMore;
+    expanded = expansion.turns
       .filter((t) => !seen.has('T' + t.id))
       .map((t) => ({
         type: 'T',
@@ -506,6 +509,7 @@ function searchAny(pocketDir, keyword, opts = {}) {
     hasMore: offset + results.length < total,
     viaIndex: false,
     expandedCount: expanded.length,
+    expansionTruncated,
   };
 }
 
@@ -588,7 +592,8 @@ function why(pocketDir, filePath, opts = {}) {
   const depth = intOption(opts.expand, 0);
   if (depth > 0 && direct.length > 0) {
     const seen = new Set(direct.map((r) => 'T' + r.id));
-    const extra = expandTurns(pocketDir, [...seen], depth)
+    const expansion = expandTurns(pocketDir, [...seen], depth);
+    const extra = expansion.turns
       .filter((t) => !seen.has('T' + t.id))
       .map((t) => ({
         id: t.id,
@@ -600,7 +605,11 @@ function why(pocketDir, filePath, opts = {}) {
         via: t.via,
         references: [],
       }));
-    return direct.concat(extra);
+    const rows = direct.concat(extra);
+    // 数组形状不变（老调用方逐字兼容）；截断旗标挂在数组上，
+    // CLI/MCP 的人读输出与 --json 的 expanded 对象据此提示安全上限。
+    rows.expansionTruncated = expansion.hasMore;
+    return rows;
   }
   return direct;
 }

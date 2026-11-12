@@ -1238,7 +1238,8 @@ function cmdCheckConflicts(options) {
 // ============================================================
 
 // graph 认的边类型；--type 给别的值是用户拼错了，明确报错而不是静默过滤成空
-const GRAPH_EDGE_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed'];
+const GRAPH_EDGE_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
+  'tagged', 'opened-in', 'completed-in', 'implements'];
 
 function cmdGraph(options, sub) {
   const pocketDir = ensurePocket(options);

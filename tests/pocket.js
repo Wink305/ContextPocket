@@ -2398,6 +2398,120 @@ test('links: edge anchors really go red when their source line is removed', () =
   assert.ok(after.edges.some((e) => e.type === 'modifies'), '其它边不受影响');
 });
 
+test('links: tag and requirement derivation matches the Lite rules (backport)', () => {
+  const { pocketDir } = makePocket('links-tags-reqs');
+  writer.appendLogBlock(pocketDir, {
+    gist: '带标签的一轮',
+    tags: ['架构', '检索'],
+    user: ['用户原话：做检索'],
+    action: ['修改 src/a.ts — 建索引'],
+    when: '2026-11-01',
+  });
+  writer.appendLogBlock(pocketDir, {
+    gist: '收尾的一轮',
+    user: ['用户原话：收尾'],
+    action: ['修改 src/b.ts — 收尾'],
+    when: '2026-11-02',
+  });
+  writePocketFile(pocketDir, 'requirements.md', [
+    '# Requirements · T2 · next_id: R5',
+    '',
+    '## Open',
+    '- [ ] R1 倒排检索 [检索] (opened T1) · impl: src/a.ts',
+    '- [ ] R3 <需求描述> [<标签>] (opened T1)',
+    '- [ ] R4 占位实现 (opened T2) · impl: <file>',
+    '',
+    '## Done',
+    '- [x] R2 收尾清理 [架构] (opened T1, completed T2) · impl: src/b.ts',
+    '',
+  ].join('\n'));
+
+  const graph = links.deriveLinks(pocketDir);
+  const node = (id) => graph.nodes.find((n) => n.id === id);
+  const edge = (type, from, to) => graph.edges.find((e) => e.type === type && e.from === from && e.to === to);
+
+  // 轮次标签 → tag 节点 + tagged 边（强证据，source 指向 log.md）
+  assert.ok(node('tag:架构') && node('tag:检索'), '标签要建节点');
+  const turnTag = edge('tagged', 'T1', 'tag:架构');
+  assert.ok(turnTag, '轮次标签边');
+  assert.strictEqual(turnTag.source, 'log.md');
+  assert.strictEqual(turnTag.tId, 1);
+  assert.strictEqual(turnTag.recordedAt, 1);
+
+  // 需求节点带 status 与 source；占位文本整条跳过
+  assert.strictEqual(node('req:R1').type, 'requirement');
+  assert.strictEqual(node('req:R1').status, 'Open');
+  assert.strictEqual(node('req:R1').source, 'requirements.md');
+  assert.strictEqual(node('req:R2').status, 'Done');
+  assert.ok(!node('req:R3'), '占位文本不建需求节点');
+  assert.ok(node('req:R4'), '正文真实、仅 impl 占位的需求仍建节点');
+
+  // opened-in / completed-in / implements / tagged 全部溯源到 requirements.md
+  const opened = edge('opened-in', 'req:R1', 'T1');
+  assert.ok(opened);
+  assert.strictEqual(opened.source, 'requirements.md');
+  assert.strictEqual(opened.tId, 1);
+  const completed = edge('completed-in', 'req:R2', 'T2');
+  assert.ok(completed);
+  assert.strictEqual(completed.tId, 2);
+  assert.strictEqual(completed.recordedAt, 2, 'completed-in 记在完成轮');
+  assert.ok(edge('implements', 'req:R1', 'file:src/a.ts'));
+  assert.ok(edge('implements', 'req:R2', 'file:src/b.ts'));
+  const reqTag = edge('tagged', 'req:R1', 'tag:检索');
+  assert.ok(reqTag);
+  assert.strictEqual(reqTag.source, 'requirements.md');
+
+  // 占位 impl 不建文件节点、不建 implements 边
+  assert.ok(!edge('implements', 'req:R4', 'file:<file>'));
+  assert.ok(!graph.nodes.some((n) => n.id.includes('<')), '图里不许出现占位节点');
+
+  // 同一口袋两次派生逐字一致（派生是纯函数）
+  assert.deepStrictEqual(graph, links.deriveLinks(pocketDir));
+});
+
+test('links: code-map placeholder entries never become file nodes', () => {
+  const { pocketDir } = makePocket('links-codemap-placeholder');
+  writer.appendLogBlock(pocketDir, {
+    gist: '真实改动',
+    user: ['用户原话：改 real.js'],
+    action: ['修改 real.js — 真实文件'],
+    when: '2026-11-01',
+  });
+  writePocketFile(pocketDir, 'code-map.md', [
+    '# Code Map · T1',
+    '',
+    '## Structure',
+    '```',
+    '<project-root>/',
+    '├── <entry-file>     → <职责>',
+    '├── <subdir-1>/',
+    '│   └── <module-a>   → <职责>',
+    '└── real.js          → 真实文件',
+    '    T1: 真实改动',
+    '```',
+    '',
+  ].join('\n'));
+  const graph = links.deriveLinks(pocketDir);
+  // 文件占位、目录占位（带尾斜杠）都不许进图
+  assert.ok(!graph.nodes.some((n) => n.id.includes('<')), '占位路径不建节点');
+  assert.ok(!graph.edges.some((e) => e.from.includes('<') || e.to.includes('<')), '占位路径不建边');
+  // code-map 只给已有文件节点补 last-changed 边，真实文件照常归属
+  assert.ok(graph.edges.some((e) => e.type === 'last-changed' && e.from === 'file:real.js' && e.to === 'T1'),
+    '真实文件的 T 行要连上');
+});
+
+test('links: searchNodeIds maps R rows to requirement graph seeds', () => {
+  assert.deepStrictEqual(
+    links.searchNodeIds([
+      { type: 'T', id: 3 },
+      { type: 'R', rId: 7 },
+      { type: 'ADR', adrId: 2 },
+      { type: 'P', id: 1 },
+    ]),
+    ['T3', 'req:R7', 'adr:ADR-2']
+  );
+});
+
 
 // ============================================================
 // Phase 1：assets/graph.jsonl 缓存
@@ -2425,23 +2539,30 @@ test('graph cache: delete + rebuild reproduces the file byte for byte', () => {
   assert.strictEqual(lines.length, 1 + w1.nodes + w1.edges);
 });
 
-test('graph cache: graph/1 caches are rejected and rebuilt with temporal graph/2 fields', () => {
+test('graph cache: graph/1 and graph/2 caches are rejected and rebuilt as graph/3', () => {
   const { pocketDir } = makeLinkedPocket('graph-schema-upgrade');
   const written = links.writeGraphCache(pocketDir);
-  const legacy = fs.readFileSync(written.path, 'utf-8').replace('"schema":"graph/2"', '"schema":"graph/1"');
-  fs.writeFileSync(written.path, legacy, 'utf-8');
+  const current = fs.readFileSync(written.path, 'utf-8');
 
-  const status = links.graphCacheStatus(pocketDir);
-  assert.strictEqual(status.status, 'corrupt', 'old derivation schema cannot be treated as fresh');
-  const rebuilt = links.readGraph(pocketDir);
-  assert.strictEqual(rebuilt.rebuilt, true);
-  assert.strictEqual(rebuilt.previousStatus, 'corrupt');
-  const parsed = links.parseGraphText(fs.readFileSync(written.path, 'utf-8'));
-  assert.strictEqual(parsed.meta.schema, 'graph/2');
-  assert.ok(parsed.edges.every((edge) =>
-    Object.prototype.hasOwnProperty.call(edge, 'recordedAt') &&
-    Object.prototype.hasOwnProperty.call(edge, 'validFrom') &&
-    Object.prototype.hasOwnProperty.call(edge, 'validTo')));
+  // 两代旧 schema 都要走同一条「corrupt → 重建」路径：
+  // graph/1 缺时间字段，graph/2 缺 tag/requirement 派生，谁都不能当 fresh 用
+  for (const oldSchema of ['graph/1', 'graph/2']) {
+    const legacy = current.replace('"schema":"graph/3"', `"schema":"${oldSchema}"`);
+    assert.notStrictEqual(legacy, current, '替换必须真的发生，否则测试在裸测 fresh 缓存');
+    fs.writeFileSync(written.path, legacy, 'utf-8');
+
+    const status = links.graphCacheStatus(pocketDir);
+    assert.strictEqual(status.status, 'corrupt', `${oldSchema} cannot be treated as fresh`);
+    const rebuilt = links.readGraph(pocketDir);
+    assert.strictEqual(rebuilt.rebuilt, true);
+    assert.strictEqual(rebuilt.previousStatus, 'corrupt');
+    const parsed = links.parseGraphText(fs.readFileSync(written.path, 'utf-8'));
+    assert.strictEqual(parsed.meta.schema, 'graph/3');
+    assert.ok(parsed.edges.every((edge) =>
+      Object.prototype.hasOwnProperty.call(edge, 'recordedAt') &&
+      Object.prototype.hasOwnProperty.call(edge, 'validFrom') &&
+      Object.prototype.hasOwnProperty.call(edge, 'validTo')));
+  }
 });
 
 test('graph cache: status walks missing → fresh → stale, and view self-heals', () => {
@@ -2468,6 +2589,26 @@ test('graph cache: status walks missing → fresh → stale, and view self-heals
   // 再读一次：命中缓存，不再写盘
   const again = links.readGraph(pocketDir);
   assert.strictEqual(again.rebuilt, false);
+});
+
+test('graph cache: requirements.md is a signed source, so editing it goes stale', () => {
+  const { pocketDir } = makeLinkedPocket('graph-req-source');
+  assert.ok(links.GRAPH_SOURCE_FILES.includes('requirements.md'), '需求文件必须在签名清单里');
+  links.writeGraphCache(pocketDir);
+  assert.strictEqual(links.graphCacheStatus(pocketDir).status, 'fresh');
+
+  writePocketFile(pocketDir, 'requirements.md', [
+    '# Requirements · T3',
+    '',
+    '## Open',
+    '- [ ] R1 新需求 [检索] (opened T1) · impl: src/a.ts',
+    '',
+  ].join('\n'));
+  assert.strictEqual(links.graphCacheStatus(pocketDir).status, 'stale', '需求动了缓存必须判 stale');
+
+  const r = links.readGraph(pocketDir);
+  assert.strictEqual(r.rebuilt, true);
+  assert.ok(r.graph.edges.some((e) => e.type === 'opened-in' && e.from === 'req:R1'), '新需求边要进图');
 });
 
 test('graph cache: corrupt cache is reported, and readGraph rewrites it', () => {

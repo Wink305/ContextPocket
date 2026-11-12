@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.3
+version: 2.4-preview
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -43,7 +43,7 @@ The Skill auto-detects which mode is available and falls back gracefully. Always
 - Configure your agent to load `mcp-server.js` from the Skill directory.
 - All writes go through MCP tools (`context_pocket_*`). Never manually edit markdown files.
 - Tools cover: `bootstrap`, `status`, `verify`, `sync`, `log_append`, `log_amend`, `absolute_add`, `recall`, `diff`, `search`, `why`, `graph`, `check_conflicts`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `migrate`, `repair`, `install_hook`, `uninstall_hook`, `index`, `distill`, `import`, `hub` (28 tools).
-- `search` takes a `noIndex` boolean — there is **no** separate `search_no_index` tool. `graph` views the derived link graph (turns ↔ files ↔ ADRs) and takes `action` (view / rebuild / verify), `type`, `limit`.
+- `search` takes a `noIndex` boolean — there is **no** separate `search_no_index` tool. `graph` views the derived link graph (turns ↔ files ↔ ADRs ↔ tags ↔ requirements) and takes `action` (view / rebuild / verify), `type`, `limit`.
 
 ### Mode 2: CLI mode (good reliability)
 - Script path: `<skill-dir>/bin/context-pocket.js`
@@ -82,7 +82,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Compare two turns | `diff Ta Tb` | the delta |
 | List open questions | read `❓` lines directly (no tool) | the list, then "逐条确认吗?" |
 | Check for contradictions | `check-conflicts` | severity-ranked result |
-| Inspect the **shape** of the project | `graph [--type <type>] [--json]` | nodes and edges derived from the pocket: turns ↔ files ↔ ADRs, each edge naming its source |
+| Inspect the **shape** of the project | `graph [--type <type>] [--json]` | nodes and edges derived from the pocket: turns ↔ files ↔ ADRs ↔ tags ↔ requirements, each edge naming its source |
 | Repair duplicated or stale T-numbers | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | "补了 N 个" |
 | Import an earlier session | `import` | "导入了 N 轮" |
@@ -95,7 +95,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 
 ### The graph layer
 
-`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing text-match order; `--as-of <T>` filters the graph slice to facts valid at that T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close old fact intervals. Every edge names its source.
+`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs ↔ tags ↔ requirements — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing text-match order; `--as-of <T>` filters the graph slice to facts valid at that T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close old fact intervals. Every edge names its source.
 
 **Reach for it when the question is about relationships** — "what happened around this turn?", "which decisions touched this file?", "is that decision still current?". `graph` answers shape questions ("how are these files and decisions connected?"); `--with-context` answers one turn's surroundings.
 

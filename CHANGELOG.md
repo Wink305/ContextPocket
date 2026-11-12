@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6-Lite-preview] - 2026-11-12
+
+### ContextPocket Lite 2.6-Lite-preview — 图扩展安全上限 + 两包整图同源
+
+> Lite 独立版本线发 `2.6-Lite-preview`（preview 通道）；主包版本线同日发 `2.4-preview`。
+> 图扩展加 100 节点安全上限、截断如实提示；写入锁竞态、占位过滤两包同修；
+> 两包整图逐字同源由 compat 套件钉死。细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+## [2.4-preview] - 2026-11-12
+
+### 关联图两包同源 + 写入锁竞态修复
+
+- **图派生回移（完整包）**：Lite 2.4/2.5 先行实现的 `tag` / `requirement` 节点与
+  `tagged` / `opened-in` / `completed-in` / `implements` 四类边回移到完整包，
+  两包对同一份口袋派生**逐字一致的整图**（6 类节点 / 10 类边）。
+  `requirements.md` 成为第五个签名源文件；缓存 schema 升为 `graph/3`，
+  `graph/1` / `graph/2` 旧缓存判 corrupt 自动重建。CLI / MCP / help 的边类型
+  清单同步补齐；`search --expand` 的需求行（R）现在也能作图扩展种子；
+  缓存序列化不再丢需求节点的 `status` 字段。
+- **占位过滤加固（两包）**：code-map 树里的 `<entry-file>` / `<subdir-1>/` 等
+  模板占位不建节点、不建边；目录占位带尾斜杠的形态此前会漏过过滤，已修。
+  需求条目的占位文本 / 占位 impl / 占位标签同样跳过。
+- **写入锁竞态修复（两包 io.js）**：stale 锁回收从「直接 unlink」改为「原子
+  rename 后删除」，避免误删别人抢先回收后新建的锁；释放锁时核对锁文件里的
+  pid/at 凭据，只删自己写的那把 —— 持锁超时被回收后不再误删新持有者的锁。
+- **Lite 图扩展安全上限**：`expandFrom` 与主包同口径 —— 种子去重、过滤不存在
+  的节点、最多 100 个节点；截断时 `search` / `why` 如实提示（`--json` 的
+  `expansionTruncated` / `expanded.truncated`，人读与 MCP 输出带可见说明），
+  不再静默丢掉超出的关联轮次。
+- **compat 契约升级**：`lite/tests/compat.js` 删除 SHARED_*_TYPES 白名单，
+  改为整图 `deepStrictEqual` 一致 + 100 节点截断两包对齐；夹具覆盖全部
+  10 类边 / 6 类节点，一致性不再可能靠「两边都空」空转。
+- **文档**：README（双语）/ SKILL / lite README / docs/MIGRATION 的节点、边、
+  源文件清单与 graph schema 说明同步到 graph/3。
+
 ## [2.5-lite] - 2026-11-09
 
 ### ContextPocket Lite 2.5 — 补块、对比、交接，仍是零缓存

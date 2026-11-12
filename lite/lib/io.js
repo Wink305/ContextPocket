@@ -223,6 +223,8 @@ function writeAtomic(filePath, content, opts = {}) {
 
 // 本进程持有的锁：绝对路径 → 引用计数
 const heldLocks = new Map();
+// 本进程写进锁文件的凭据：绝对路径 → {pid, at}。释放时核对，防止误删别人的锁
+const lockOwners = new Map();
 
 function lockPathFor(filePath) {
   return `${filePath}.cp-lock`;
@@ -247,13 +249,14 @@ function acquireLock(lockPath) {
   }
   for (;;) {
     try {
+      const owner = { pid: process.pid, at: Date.now() };
       const fd = fs.openSync(lockPath, 'wx');
       try {
-        fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: Date.now() }));
+        fs.writeSync(fd, JSON.stringify(owner));
       } finally {
         fs.closeSync(fd);
       }
-      return;
+      return owner;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
 
@@ -275,9 +278,14 @@ function acquireLock(lockPath) {
         }
       }
       if (!ownerAlive || age > LOCK_STALE_MS) {
+        // 原子 rename 回收：同一把 stale 锁只有一个进程能改名成功，
+        // 其余拿到 ENOENT 回去重试。直接 unlink 会误删「别人抢先回收后
+        // 刚建的新锁」，让两个进程同时进临界区。
+        const stalePath = `${lockPath}.stale.${process.pid}.${Date.now()}`;
         try {
-          fs.unlinkSync(lockPath);
-        } catch (e4) { /* 别人抢先回收了，重试 */ }
+          fs.renameSync(lockPath, stalePath);
+          try { fs.unlinkSync(stalePath); } catch (e5) { /* 残留无害 */ }
+        } catch (e4) { /* ENOENT：别人抢先回收了，重试 */ }
         continue;
       }
 
@@ -304,7 +312,7 @@ function withLock(filePath, fn) {
   const depth = heldLocks.get(lockPath) || 0;
 
   if (depth === 0) {
-    acquireLock(lockPath);
+    lockOwners.set(lockPath, acquireLock(lockPath));
   }
   heldLocks.set(lockPath, depth + 1);
 
@@ -314,8 +322,15 @@ function withLock(filePath, fn) {
     const next = (heldLocks.get(lockPath) || 1) - 1;
     if (next <= 0) {
       heldLocks.delete(lockPath);
+      const mine = lockOwners.get(lockPath);
+      lockOwners.delete(lockPath);
+      // 只删「自己写的那把锁」：持有超时被回收后，锁文件可能已是别人的新锁，
+      // 无条件 unlink 会把新持有者的锁删掉，放第三个进程进临界区。
       try {
-        fs.unlinkSync(lockPath);
+        const cur = readLockOwner(lockPath);
+        if (mine && cur.pid === mine.pid && cur.at === mine.at) {
+          fs.unlinkSync(lockPath);
+        }
       } catch (e) { /* 已被回收 */ }
     } else {
       heldLocks.set(lockPath, next);

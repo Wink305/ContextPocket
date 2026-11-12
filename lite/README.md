@@ -19,7 +19,7 @@ An AI coding session produces decisions, fixes and preferences that evaporate wh
 | `why <file>` | Reverse lookup: which turns touched this file (`--expand` adds linked turns) |
 | `diff <T-a> <T-b>` | Requirements, ADRs and files that changed between two turns |
 | `verify` | Structure + safety health check (secret scan included) |
-| `graph` | Runtime-derived link graph — derived fresh, never cached |
+| `graph` | Runtime-derived link graph (turns ↔ files ↔ ADRs ↔ tags ↔ requirements, 10 edge types) — derived fresh, never cached |
 | `handoff` | Write `handoff.md`: latest T, current state, recent turns, resume pointer |
 
 The MCP server exposes the same 11 operations as tools (`context_pocket_bootstrap`, `context_pocket_status`, `context_pocket_verify`, `context_pocket_recall`, `context_pocket_search`, `context_pocket_why`, `context_pocket_diff`, `context_pocket_graph`, `context_pocket_log_append`, `context_pocket_log_amend`, `context_pocket_handoff`) — CLI and MCP are symmetric by design.
@@ -80,7 +80,7 @@ Stdio transport, newline-delimited JSON-RPC, protocol versions `2025-06-18` / `2
 
 ## Compatibility guarantee
 
-The shared format layer and core graph/search behavior are checked against the full package on the same pocket. Lite may add graph relations and expansion metadata that are not present in the full package's current minor release; compatibility checks compare the shared graph schema and direct search results while separate Lite tests cover those additions.
+The shared format layer and core graph/search behavior are checked against the full package on the same pocket: both packages must derive the **identical graph** (every node, edge and temporal field, byte for byte) and the same direct search results — the compat suite asserts full-graph identity, not a shared subset. Expansion walks the same graph with the same 100-node safety cap; when the cap truncates, `search` / `why` say so (`expansionTruncated` in JSON, a visible note in human and MCP output). What remains Lite-specific is deliberately trimmed capability, not divergent semantics: no `--as-of` historical slice and single-edge `via` metadata instead of full path provenance.
 
 ## License
 

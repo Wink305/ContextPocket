@@ -202,6 +202,49 @@ test('graph expansion ignores weak mention edges', () => {
   assert.deepStrictEqual(expanded.results.filter((result) => result.expanded), []);
 });
 
+test('expansion truncates at 100 nodes and the flag reaches library, CLI, and MCP', () => {
+  const { projectDir, pocketDir } = makeLitePocket('expand-cap');
+  const files = [];
+  for (let i = 1; i <= 150; i++) files.push(`Modified src/f${String(i).padStart(3, '0')}.js`);
+  appendLogBlock(pocketDir, { gist: 'wide turn', user: ['cap fixture'], action: files, when: '2026-11-01' });
+  append(pocketDir, 'narrow turn', { action: ['Modified src/f001.js'] });
+
+  // 库层：150 个文件节点把 100 位占满，第二跳的 T2 被截掉 —— 旗标必须如实说
+  const expanded = searchAny(pocketDir, 'wide turn', { expand: 2 });
+  assert.strictEqual(expanded.expansionTruncated, true);
+  assert.strictEqual(expanded.expandedCount, 0, '被截掉的轮次不能冒充扩展结果');
+  assert.strictEqual(searchAny(pocketDir, 'wide turn', {}).expansionTruncated, false);
+
+  const whyRows = why(pocketDir, 'src/f001.js', { expand: 1 });
+  assert.strictEqual(whyRows.expansionTruncated, true);
+  assert.deepStrictEqual(whyRows.map((r) => r.id).sort(), [1, 2], '直接命中不受截断影响');
+
+  // CLI：--json 带旗标，人读输出带提示
+  const cliJson = runCliJson(['search', 'wide turn', '--expand', '2', '--json'], projectDir);
+  assert.strictEqual(cliJson.json.expansionTruncated, true);
+  const cliHuman = runCli(['search', 'wide turn', '--expand', '2'], projectDir);
+  assert.ok(cliHuman.stdout.includes('100-node safety limit'), cliHuman.stdout);
+  const whyJson = runCliJson(['why', 'src/f001.js', '--expand', '1', '--json'], projectDir);
+  assert.strictEqual(whyJson.json.expanded.truncated, true);
+
+  // MCP：两个工具的人读输出都要提示
+  const mcp = runMcp(projectDir, [
+    { name: 'context_pocket_search', arguments: { keyword: 'wide turn', expand: 2 } },
+    { name: 'context_pocket_why', arguments: { filePath: 'src/f001.js', expand: 1 } },
+  ]);
+  for (const call of mcp.calls) {
+    assert.ok(!call.isError, JSON.stringify(call));
+    assert.ok(call.content[0].text.includes('100-node safety limit'), call.content[0].text);
+  }
+
+  // 小口袋不截断：旗标与提示都不出现
+  const small = makeLitePocket('expand-cap-small');
+  append(small.pocketDir, 'tiny', { action: ['Modified src/tiny.js'] });
+  assert.strictEqual(searchAny(small.pocketDir, 'tiny', { expand: 2 }).expansionTruncated, false);
+  const smallCli = runCli(['search', 'tiny', '--expand', '2'], small.projectDir);
+  assert.ok(!smallCli.stdout.includes('100-node safety limit'), smallCli.stdout);
+});
+
 test('log amend fills only missing sections, preserves WHEN, and diff/handoff round-trip', () => {
   const { projectDir, pocketDir } = makeLitePocket('amend-diff-handoff');
   append(pocketDir, 'first', { when: '2026-11-01', action: ['Modified src/a.js'] });
@@ -277,10 +320,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.5-lite/);
+  assert.match(version.stdout, /2\.6-Lite-preview/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.5');
-  assert.strictEqual(versionJson.display, '2.5-lite');
+  assert.strictEqual(versionJson.version, '2.6-Lite-preview');
+  assert.strictEqual(versionJson.display, '2.6-Lite-preview');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);

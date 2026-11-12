@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.3](https://img.shields.io/badge/version-2.3-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.4-preview](https://img.shields.io/badge/version-2.4--preview-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -228,7 +228,7 @@ The new agent can read the pocket and continue recording from there.
 | Compare two turns | `diff Ta Tb` | The delta |
 | List open questions | Reads the `❓` lines directly (no tool) | The list, then "Confirm one by one?" |
 | Check for contradictions | `check-conflicts` | Severity-ranked result |
-| Inspect the **shape** of the project | `graph [--type <type>] [--json]` | Nodes and edges derived from the pocket — turns ↔ files ↔ ADRs, each edge naming its source |
+| Inspect the **shape** of the project | `graph [--type <type>] [--json]` | Nodes and edges derived from the pocket — turns ↔ files ↔ ADRs ↔ tags ↔ requirements, each edge naming its source |
 | Repair duplicated or stale T-numbers | `repair --dry-run` first | The renumber plan + the prose still naming an old id |
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | How many turns were backfilled |
 | Import an earlier session | `import` | How many turns were imported |
@@ -239,7 +239,7 @@ The new agent can read the pocket and continue recording from there.
 
 > 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket verify`) also works if you want zero ambiguity.
 
-**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing the order of the original text matches; `--as-of <T>` filters that context to facts valid at a past T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close the old fact's validity interval. Every edge retains its source. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
+**The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs ↔ tags ↔ requirements — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing the order of the original text matches; `--as-of <T>` filters that context to facts valid at a past T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close the old fact's validity interval. Every edge retains its source. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
 
 ---
 
@@ -259,7 +259,7 @@ All commands below work via CLI when Node.js 14+ is available. Type `context-poc
 | `context-pocket search <keyword> --dir <root> [--limit N] [--offset N] [--no-index]` | Keyword search over the whole history: T-blocks (gist, tags, every section, archived turns included), ADRs, requirements and preferences. Auto-uses the `assets/search-index.json` index; `--no-index` scans the markdown instead — both paths match and order identically, so `--limit`/`--offset` page the same list (`--limit 0` = all). Matching: latin words split on separators, Chinese is indexed as adjacent two-character pairs, and **every** query term must hit. A phrase inside a longer Chinese run therefore works (`时间分页` finds 「给搜索加时间分页」) and a reordered one does not (`分页时间`); one lone Chinese character only matches where that character stands alone |
 | `context-pocket why <file-path> --dir <root>` | Reverse lookup: which T-blocks mention this file, split by evidence — `[changed]` (path in that turn's Action section) vs `[mentioned only]` (elsewhere: Uncertain / Attachments / Conflicts / Pitfalls …). Changed turns are listed first, so `--limit` drops the weak ones, never the real edits (Inspired by ThoughtDAG) |
 | `context-pocket check-conflicts --dir <root>` | 6-dimension conflict scan with severity (critical / warning / info) |
-| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | View the derived link graph (T ↔ file ↔ ADR; edges: modifies / mentions / references / decided-in / supersedes / last-changed, each citing source + T-id). `graph rebuild` rewrites the `assets/graph.jsonl` cache byte-identically from the markdown; `graph verify` reports cache-vs-source drift |
+| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | View the derived link graph (T ↔ file ↔ ADR ↔ tag ↔ requirement; edges: modifies / mentions / references / decided-in / supersedes / last-changed / tagged / opened-in / completed-in / implements, each citing source + T-id). `graph rebuild` rewrites the `assets/graph.jsonl` cache byte-identically from the markdown; `graph verify` reports cache-vs-source drift |
 | `context-pocket log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | Append one T-block to log.md (pass `--user "<what the user asked>"` — a block without it fails verify and blocks commits). `--when` is optional: the block is stamped with the moment you record it, and `--when` only overrides that when the turn actually happened at another time. `--author "<who is recording>"` signs the turn in a `### Author` section — use it when several agents share one pocket; omit it and the block simply has no author, the tool never guesses one. Every append also compares this turn against what the pocket already says and writes what it **newly** collides with into the block's `### Conflicts` section prefixed `[auto]` (`--no-conflict-check` opts out and the tool says so). The scan reports, it never blocks the record |
 | `context-pocket log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | Fill in sections **missing** from an existing T-block. Never overwrites existing content — `--when` will add a missing time line or sharpen a day-only one, but refuses to rewrite a moment that was already recorded, and `--author` only adds a missing `### Author` section |
 | `context-pocket absolute add --dir <root> --text "..." [--gist "..."]` | Append a 🔒 red-line entry to absolute.md (verbatim, never compressed) |

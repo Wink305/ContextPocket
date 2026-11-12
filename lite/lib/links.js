@@ -182,7 +182,8 @@ function deriveLinks(pocketDir) {
 
   // 需求节点：条目里明确写着 opened T<n> / completed T<m> / impl: <files>，全是强证据。
   // Lite 的口袋没有 requirements.md，parseRequirements 返回空，这里自然不产生节点 ——
-  // 但派生规则与主包同一份，将来 Lite 若带上需求文件也自动一致。
+  // 派生规则与主包 lib/links.js 同一份（2.5 起主包也已带上同样的规则），
+  // 同一份口袋两边派生出同一张图，compat 测试逐字节盯着。
   for (const req of parseRequirements(pocketDir).items) {
     if (isPlaceholderValue(req.text)) continue;
     const from = reqNodeId(req.id);
@@ -223,8 +224,9 @@ function deriveLinks(pocketDir) {
       const text = line.slice(connIdx + 4).trim();
       const entry = /^(.+?)\s*→\s*(.+)$/.exec(text);
       const name = entry ? entry[1].trim() : text;
-      // 模板里的 `<entry-file>` / `<subdir-1>/` 是占位，不是真路径
-      if (isPlaceholderValue(name)) continue;
+      // 模板里的 `<entry-file>` / `<subdir-1>/` 是占位，不是真路径。
+      // 目录占位带尾斜杠，先剥掉再判，否则 `<subdir-1>/` 会漏进目录前缀
+      if (isPlaceholderValue(name.replace(/\/$/, ''))) continue;
       if (name.endsWith('/')) {
         dirsAtDepth[depth] = name;
         dirsAtDepth.length = depth + 1;
@@ -361,6 +363,8 @@ function formatContextLines(ctx) {
 
 /** 深度上限：再深也不会更有用，只会让输出变成一堵墙。 */
 const MAX_EXPAND_DEPTH = 3;
+// 与主包 expandGraph 的 maxNodes 默认值同一个数：扩展结果的安全上限
+const MAX_EXPAND_NODES = 100;
 
 /**
  * 从种子节点出发走 N 跳，返回新到达的节点与走过的边。
@@ -373,21 +377,26 @@ const MAX_EXPAND_DEPTH = 3;
  * **防环**：按节点 id 记 visited，一个节点只被展开一次 —— 环不会打转，
  * 菱形关系也不会把同一个节点算成两条路径。
  *
- * 与主包 lib/links.js 逐字同源。差别只在调用方：主包从 readGraph（缓存）取图，
- * Lite 永远现场 deriveLinks —— expandFrom 本身是纯函数，收的就是 deriveLinks 的
- * 返回值形状，零写盘、零缓存，「更轻」不打折。
+ * 与主包 expandGraph 同一套语义口径（弱边不走、种子去重、(distance, id)
+ * 稳定排序、100 节点安全上限 + hasMore），实现是独立的 frontier BFS：
+ * 主包带 asOf 时间切片与逐边完整路径，Lite 不做时间切片、只记最后一条边
+ * 的 via —— 这是有意的能力裁剪，不是漂移。调用方差别：主包从 readGraph
+ * （缓存）取图，Lite 永远现场 deriveLinks，零写盘、零缓存，「更轻」不打折。
  *
  * @param {object} graph deriveLinks() 的结果
  * @param {string[]} seedIds 起点节点 id
  * @param {number} depth 跳数（0 = 不扩展；上限 MAX_EXPAND_DEPTH）
- * @returns {{depth:number, nodes:Array, edges:Array}}
+ * @returns {{depth:number, nodes:Array, edges:Array, hasMore:boolean}}
  */
 function expandFrom(graph, seedIds, depth) {
   const d = Math.max(0, Math.min(MAX_EXPAND_DEPTH, parseInt(depth, 10) || 0));
-  const out = { depth: d, nodes: [], edges: [] };
+  const out = { depth: d, nodes: [], edges: [], hasMore: false };
   if (d === 0 || !seedIds || seedIds.length === 0) return out;
 
   const nodeById = new Map((graph.nodes || []).map((n) => [n.id, n]));
+  // 与主包 expandGraph 同一套安全口径：种子去重、只认图上真实存在的节点
+  const seeds = [...new Set(seedIds)].filter((id) => nodeById.has(id));
+  if (seeds.length === 0) return out;
   const adj = new Map();
   for (const e of graph.edges || []) {
     if (e.evidence === WEAK) continue;
@@ -397,11 +406,11 @@ function expandFrom(graph, seedIds, depth) {
     adj.get(e.to).push({ edge: e, other: e.from });
   }
 
-  const seen = new Set(seedIds);
+  const seen = new Set(seeds);
   const usedEdges = new Set();
   const reached = new Map();
 
-  let frontier = seedIds.slice();
+  let frontier = seeds.slice();
   for (let step = 1; step <= d; step++) {
     const next = [];
     for (const id of frontier) {
@@ -433,7 +442,12 @@ function expandFrom(graph, seedIds, depth) {
     if (frontier.length === 0) break;
   }
 
-  out.nodes = [...reached.values()].sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id));
+  // 与主包 expandGraph 同一套安全上限：先按 (distance, id) 稳定排序，
+  // 再截到 MAX_EXPAND_NODES；hasMore 告诉调用方「还有，但被安全阀拦了」，
+  // 大口袋上不会吐出无上限的扩展结果。
+  const all = [...reached.values()].sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id));
+  out.nodes = all.slice(0, MAX_EXPAND_NODES);
+  out.hasMore = all.length > MAX_EXPAND_NODES;
   return out;
 }
 
@@ -443,6 +457,7 @@ module.exports = {
   formatContextLines,
   expandFrom,
   MAX_EXPAND_DEPTH,
+  MAX_EXPAND_NODES,
   STRONG,
   WEAK,
 };

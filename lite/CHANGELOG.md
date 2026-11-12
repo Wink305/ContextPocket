@@ -2,6 +2,31 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.6-Lite-preview] - 2026-11-12
+
+### 图扩展安全上限 + 两包整图同源
+
+- **100 节点安全上限**：`search --expand` / `why --expand` 的图扩展与主包同口径 ——
+  种子去重、只认图上真实存在的节点、最多返回 100 个节点。截断不再静默：
+  `--json` 带 `expansionTruncated`（why 为 `expanded.truncated`），人读输出与
+  MCP 输出附可见提示「additional graph context omitted at the 100-node safety limit」。
+  直接命中与分页口径不受影响。
+- **整图同源**：主包回移了 tag/requirement 派生后，两包对同一份口袋派生逐字一致的
+  整图。compat 套件删除 SHARED_*_TYPES 白名单，改为整图 `deepStrictEqual` +
+  截断对齐测试；夹具覆盖全部 10 类边 / 6 类节点。
+- **占位过滤加固**：code-map 目录占位（`<subdir-1>/` 这类带尾斜杠的形态）此前漏过
+  占位过滤，会与主包一起修掉；占位路径不建节点、不建边。
+- **写入锁竞态修复**：stale 锁回收改为原子 rename；释放时核对 pid/at 凭据，
+  只删自己写的锁，持锁超时被回收后不再误删新持有者的锁。
+- **清理**：移除 `when.js` 里从未被调用的 `timePart`；`core.js` 注释改准
+  （extractFilesFromBlock 判据两包各收敛一份，主包在 query、Lite 在 core）。
+- **截断提示不再依赖 linked 块**：提示文案此前嵌在 `linked.length > 0` 分支里，
+  最坏情况（扩展轮次全被 100 节点上限截掉、linked 为空）反而静默。CLI 与 MCP 的
+  search / why 四处统一移到分支外，截断必有提示。
+- **metrics 测试不再怕 `npm test --silent`**：体积测量依赖 `npm pack --dry-run` 的
+  notice 输出，而 `--silent` 会经 `npm_config_loglevel` 环境变量传给内层 npm，
+  notice 全被吞掉导致解析失败。pack 调用显式带 `--loglevel=notice`，任何启动方式都稳。
+
 ## [2.5] - 2026-11-09
 
 > 2.5 把 Lite 从「8 条命令的读写小包」补齐到能独立完成一次回顾：能补块、能对比两轮、能交接。新增能力全部走现场派生，仍然零缓存、零依赖。对外展示 `2.5-lite`。
@@ -28,6 +53,14 @@ Lite has its own version line. The full package stays on its own releases; a Lit
 
 - `README.md` / `SKILL.md` 按实际 11 条命令重写：删除不存在的 `--files`、`--result`、`--verify-section`、`--since-t/--until-t` 写法，补上 `log amend` / `diff` / `handoff` / `--expand`，并把 T-block 小节清单改回真实的 10 节。
 - 版本抄本同步：`lite/package.json`、`lite/lib/version.js`、`lite/SKILL.md` → `2.5` / `2.5-lite`。
+
+## [2.4] - 2026-11-09
+
+> 补记：2.4 随主包仓库的 `[2.4-lite]` 条目发布，Lite 自己的 changelog 当时漏记，此处按发布内容补回。
+
+### ⚡ 查询优化
+
+- **精确 `T<n>` 搜索走捷径**：只解析活动与归档日志定位单轮，不再为一条 T-id 查询解析无关的决策、需求和偏好文件；搜索结果与完整包强制扫描逐字一致（compat 锁盯着）。
 
 ## [2.2] - 2026-11-08
 
