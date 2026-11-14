@@ -167,7 +167,11 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
 
   assert.ok(liteColdMs < mainColdMs,
     `cold status startup (best-of-5): Lite ${liteColdMs.toFixed(1)} ms must be below full ${mainColdMs.toFixed(1)} ms`);
-  assert.ok(liteExactIdMs < mainExactIdMs,
-    `exact T-id search (median-of-5): Lite ${liteExactIdMs.toFixed(1)} ms must be below full scan ${mainExactIdMs.toFixed(1)} ms`);
+  // P2 回移后两包的精确 T-id 扫描都只读轮次日志，5000 行偏好不再拖累完整包，
+  // 旧「Lite 必须更快」的排序锁失去前提（那是完整包还先解析全部元数据时的对照）。
+  // 改锁单向带宽：完整包不得慢过 Lite 的 2×。谁把捷径退回 collectDocs 之后，
+  // 5000 行偏好会让完整包慢到 Lite 的 ~6×，当场红；完整包正常比 Lite 快不会误报。
+  assert.ok(mainExactIdMs < liteExactIdMs * 2,
+    `exact T-id search (median-of-5): full scan ${mainExactIdMs.toFixed(1)} ms must stay below 2x Lite ${liteExactIdMs.toFixed(1)} ms (both skip unrelated metadata)`);
   console.log(`  metrics: modules Lite ${liteModules} / full ${mainModules}; cold status best-of-5 Lite ${liteColdMs.toFixed(1)} ms / full ${mainColdMs.toFixed(1)} ms; exact T-id median Lite ${liteExactIdMs.toFixed(1)} ms / full scan ${mainExactIdMs.toFixed(1)} ms`);
 });

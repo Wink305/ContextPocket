@@ -1870,6 +1870,39 @@ test('search: sinceT / untilT / fromDate / toDate 四组窗口各自过滤', () 
   assert.strictEqual(query.searchAny(pocketDir, '测试', { fromDate: '2026-12-01' }).results.length, 0, '超出范围返回空');
 });
 
+test('search: 精确 T-id 现场扫描只读轮次日志，不解析无关元数据（P2 捷径前置）', () => {
+  const { pocketDir } = makePocket('exact-id-log-only');
+  record(pocketDir, '捷径轮次');
+  writePocketFile(pocketDir, 'preferences.md', '# Preferences · T1\n- 偏好条目\n');
+  writePocketFile(pocketDir, 'decisions.md', '# Decisions · T1\n\n## ADR-1 · 选型 · T1\n- Decision: A\n');
+  writePocketFile(pocketDir, 'requirements.md', '# Requirements · T1 · next_id: R2\n\n## Open\n- [ ] R1 需求 [perf] (opened T1)\n');
+
+  // 子进程里 spy fs.readFileSync：精确 T-id 不该读到任何元数据文件；非 T-id
+  // 关键词作负对照，证明探针真拦得到 collectDocs 的元数据读取（旧序在此会红）。
+  const script = `
+    const fs = require('fs');
+    const reads = [];
+    const orig = fs.readFileSync;
+    fs.readFileSync = function (p, ...rest) { reads.push(String(p)); return orig.call(this, p, ...rest); };
+    const ix = require(${JSON.stringify(path.join(ROOT, 'lib', 'indexer'))});
+    const dir = ${JSON.stringify(pocketDir)};
+    const idRows = ix.scanAll(dir, 'T1');
+    const idMeta = reads.filter((p) => /preferences|decisions|requirements/.test(p));
+    reads.length = 0;
+    ix.scanAll(dir, '捷径');
+    const kwMetaCount = reads.filter((p) => /preferences|decisions|requirements/.test(p)).length;
+    fs.readFileSync = orig;
+    console.log(JSON.stringify({ idTotal: idRows.length, idHit: idRows[0] && idRows[0].id, idMeta, kwMetaCount }));
+  `;
+  const r = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 30000 });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.strictEqual(out.idTotal, 1);
+  assert.strictEqual(out.idHit, 1);
+  assert.deepStrictEqual(out.idMeta, [], '精确 T-id 扫描不应读取偏好/决策/需求文件');
+  assert.ok(out.kwMetaCount > 0, '负对照失效：非 T-id 关键词扫描应当读取元数据');
+});
+
 test('search: 时间窗口走索引与走扫描同结果（双路径同语义不变量不破坏）', () => {
   const { pocketDir } = makePocket('time-windows-dualpath');
   record(pocketDir, 'foo', { when: '2026-09-01 → 2026-09-03' });
