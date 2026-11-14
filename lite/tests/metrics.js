@@ -137,9 +137,9 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
     ['package files', litePack.files, mainPack.files, 28, 61],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    // 117.7 / 411.8：2.6-Lite-preview / 2.4-preview 定版实测（图扩展上限 + 截断提示
-    // + 整图同源回移与回归测试落地后的体积），按「基线随每次定版更新」追平
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 117.7, 411.8],
+    // 118.1 / 412.4：2.6-Lite-preview2 / 2.4-preview2 定版实测（P2 精确 T-id 捷径
+    // 前置 + 读探针回归锁 + metrics 单向带宽落地后的体积），按「基线随每次定版更新」追平
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 118.1, 412.4],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

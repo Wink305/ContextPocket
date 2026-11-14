@@ -2,6 +2,17 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.6-Lite-preview2] - 2026-11-13
+
+### 精确 T-id 扫描两包同序（性能 + 回归锁）
+
+- **主包 P2 回移**：完整包精确 T-id 现场扫描把只读轮次日志的捷径提前到 `collectDocs`
+  之前，不再先解析偏好/决策/需求；Lite 本就是此序，产品代码无改动，随主包版本线
+  同步升 `2.6-Lite-preview2`。两包精确命中逐字一致仍由 compat 套件钉死。
+- **回归锁**：主包新增读探针测试（精确 T-id 零元数据读取 + 非 T-id 负对照，旧序红/新序绿）。
+- **metrics 断言更新**：`lite/tests/metrics.js` 旧「Lite 必须更快」改为单向带宽
+  「完整包不得慢过 Lite 2×」；5000 行偏好夹具下回退旧序会慢到 ~6× 当场红。
+
 ## [2.6-Lite-preview] - 2026-11-12
 
 ### 图扩展安全上限 + 两包整图同源

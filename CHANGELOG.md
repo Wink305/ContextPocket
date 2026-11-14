@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6-Lite-preview2] - 2026-11-13
+
+### ContextPocket Lite 2.6-Lite-preview2 — 精确 T-id 扫描两包同序
+
+> Lite 独立版本线发 `2.6-Lite-preview2`（preview 通道）；主包版本线同日发 `2.4-preview2`。
+> 本次只动性能与回归锁，能力面不变；Lite 产品代码无改动，随主包版本线同步升版。
+> 细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+## [2.4-preview2] - 2026-11-13
+
+### 精确 T-id 现场扫描跳过无关元数据（P2 回移）
+
+- **性能（完整包）**：精确 T-id（如 `T300`）的现场扫描原先先 `collectDocs` 解析
+  偏好/决策/需求再走捷径；现将只读轮次日志的捷径提前到 `collectDocs` 之前，
+  无索引精确搜索提速 1.5–2.5×，并从「慢于 Lite」翻转为「快于 Lite」。索引路径
+  与命中形状不变（compat 套件锁 parity）。
+- **回归锁**：新增读探针测试，断言精确 T-id 扫描零元数据读取，并以非 T-id 关键词
+  作负对照（旧序红、新序绿）。
+- **metrics**：旧「Lite 精确搜索必须更快」断言被本次改动推翻，改为单向带宽
+  「完整包不得慢过 Lite 2×」，5000 行偏好夹具下回退旧序仍会当场红。
+
 ## [2.6-Lite-preview] - 2026-11-12
 
 ### ContextPocket Lite 2.6-Lite-preview — 图扩展安全上限 + 两包整图同源
