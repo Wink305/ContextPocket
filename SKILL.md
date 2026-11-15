@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.5
+version: 2.6
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -264,6 +264,10 @@ Because every command above relies on the agent following this prose, the bigges
 ## Cross-agent / model-switch handoff
 
 A **model switch** is a handoff: the new model has no conversation memory and must re-read `ContextPocket/` first (see Usage boundary).
+
+> `handoff.md` is generated in three tiers. Read **0 · Start here** first — it carries a
+> STOP CONDITION: confirm the ❓ lines, obey the 🔒 lines, and you may start. The steps
+> below are the full audit path; skip 3–6 unless a "1 · On demand" trigger fires.
 
 - New agent / new model flow:
   1. Sees `ContextPocket/readme.md` in project root (project identity card at a glance).

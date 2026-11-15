@@ -255,3 +255,20 @@ test('Lite-written blocks parse in main and main-written blocks recall in Lite',
   assert.deepStrictEqual(parsedByLite.sections.User, ['Main writer fixture']);
   assert.deepStrictEqual(parsedByLite.sections.Action, ['Modified src/main.js']);
 });
+
+test('handoff.md is byte-identical across both packages on the same pocket', () => {
+  const made = makeLitePocket('compat-handoff');
+  liteWriter.appendLogBlock(made.pocketDir, {
+    gist: 'shared handoff turn',
+    tags: ['compat'],
+    user: ['Compat user'],
+    action: ['Modified src/shared.js'],
+  });
+  liteWriter.generateHandoff(made.pocketDir);
+  const liteText = readPocketFile(made.pocketDir, 'handoff.md');
+  mainWriter.generateHandoff(made.pocketDir);
+  const mainText = readPocketFile(made.pocketDir, 'handoff.md');
+  assert.strictEqual(mainText, liteText);
+  assert.match(mainText, /## 0 · Start here/);
+  assert.match(mainText, /### Node chains/);
+});

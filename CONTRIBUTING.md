@@ -215,9 +215,10 @@ context-pocket/
 2. 把 `CHANGELOG.md` 顶部 `[Unreleased]` 累积的条目切成 `## [<新版本>] - <YYYY-MM-DD>` 一节，
    上面留一个空的 `[Unreleased]` 占位。日期写真实发布当天；已经发生但没有留档的历史版本
    （1.0.0）宁可标"日期未留档"，也不要编一个日期。
-3. README / README.zh-CN **目前没有版本徽章**（`README.md:5-7` 只有 License / format / PRs 三枚），
-   所以这一步通常无事可做；将来若加了版本徽章，定版时必须一起改，别让它停在旧号上。
-   注意 `format-v1` 那枚指的是 `SKILL.md` 的文档排版版本，与包版本、数据格式版本都是三回事。
+3. README / README.zh-CN 顶部的 `Version:` 徽章、版本说明表与下载表都是版本抄本，
+   定版时必须一起改（徽章停在旧号上会让首页和包内版本各说一个号）；`tests/unit.js`
+   不盯这几处，靠发版时逐项核对。注意 `format-v1` 那枚指的是 `SKILL.md` 的文档排版版本，
+   与包版本、数据格式版本都是三回事。
 4. `npm test`、`npm run lint`、`npm run smoke`、`npm run smoke-live` 四条全绿。
    `smoke-live` 是发版门禁活测（`tests/smoke-live.js`）：1.2.0 发版时手工跑过的六项链路
    （整天区间 `--when` 落盘、坏行被 verify/archive 拦住、`stated:` 原话不误报、删行后 amend 补回、

@@ -2,6 +2,19 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.8-lite] - 2026-11-15
+
+### ContextPocket Lite 2.8 — 三段式交接 + 带来源的节点链（稳定版）
+
+> Lite 独立版本线发 `2.8`（对外 `2.8-lite`）；主包同日发 `2.6`。
+> 交接摘要改为「必读 / 按需 / 指针」三段，仍然零缓存、零依赖、11 命令 / 11 工具。
+
+- **三段式交接**：`handoff.md` 的 `0 · Start here` 写 STOP CONDITION、项目身份、State、🔒 红线、❓ 待确认与 Next；`1 · On demand` 只在触发条件下展开；`2 · Pointers` 列真值文件与命令。每节硬上限，截断如实提示。
+- **节点链**：新增 `lib/handoff-path.js`（与主包逐字同源），以未完需求 + 最近 3 个 T 为种子，按边类型规则表现场行走 `deriveLinks()` 的图；链上带 `[T<n>]` 来源，8 链上限 + `hasMore`。不写缓存、不引向量。
+- **失效 ADR 剪枝**：被 `supersedes` 取代的旧决策不进 Key Decisions，链尾标注原因。
+- **回归锁**：新增三段结构 / 停止条件测试，以及 compat「两包 handoff.md 逐字一致」；四门禁全绿。
+- **升级动作**：重跑一次 `handoff` 重新生成交接摘要。**破坏性**：无（数据格式仍 v2）。
+
 ## [2.7-lite] - 2026-11-15
 
 ### ContextPocket Lite 2.7 — 省 token 输出分级 + 精确 T-id 捷径（稳定版）

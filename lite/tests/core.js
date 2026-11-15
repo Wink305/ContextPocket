@@ -426,10 +426,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.7-lite/);
+  assert.match(version.stdout, /2\.8-lite/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.7');
-  assert.strictEqual(versionJson.display, '2.7-lite');
+  assert.strictEqual(versionJson.version, '2.8');
+  assert.strictEqual(versionJson.display, '2.8-lite');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);
@@ -451,4 +451,18 @@ test('lite version copies stay aligned: package.json, lib/version.js, SKILL.md',
   const stamped = skill.match(/^version:\s*(\S+)\s*$/m);
   assert.ok(stamped, 'lite SKILL.md frontmatter needs a version: line');
   assert.strictEqual(stamped[1], pkg.version, 'lite SKILL.md version drifted from lite/package.json');
+});
+
+test('handoff uses the three-tier layout with a stop condition and node chains', () => {
+  const { pocketDir } = makeLitePocket('handoff-tiers');
+  append(pocketDir, 'one');
+  append(pocketDir, 'two');
+  generateHandoff(pocketDir);
+  const text = readPocketFile(pocketDir, 'handoff.md');
+  assert.match(text, /## 0 · Start here/);
+  assert.match(text, /STOP CONDITION/);
+  assert.match(text, /## 1 · On demand/);
+  assert.match(text, /## 2 · Pointers/);
+  assert.match(text, /### Node chains/);
+  assert.match(text, /generated-at: T2/);
 });

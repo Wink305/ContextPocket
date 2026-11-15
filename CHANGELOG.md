@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8-lite] - 2026-11-15
+
+### ContextPocket Lite 2.8 — 三段式交接 + 带来源的节点链
+
+> Lite 独立版本线发 `2.8`（对外展示 `2.8-lite`，稳定通道）；主包版本线同日发 `2.6`。
+> 交接摘要从「一页摊平」升级为「必读 / 按需 / 指针」三段，能力面不变。
+> 细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+- **交接强化**：`handoff.md` 三段式（0 Start here / 1 On demand / 2 Pointers）+ 开头 STOP CONDITION；每节硬上限，截断如实写出「还有多少、去哪看」。
+- **节点链**：以未完需求 + 最近 3 个 T 为种子，按边类型规则表行走关联图，链上每步带 `[T<n>]` 来源；`supersedes` 剪枝，被取代的旧 ADR 不进 Key Decisions。
+- **纯派生**：不引入向量、权重学习或缓存，数据格式仍 v2；两包 `handoff.md` 逐字同源（compat 新增回归锁）。
+- **升级动作**：重跑一次 `handoff` 重新生成交接摘要。**破坏性**：无。
+
+## [2.6] - 2026-11-15
+
+### ContextPocket 2.6 — 三段式交接 + 带来源的节点链 + 安全政策
+
+- **交接强化**：`handoff.md` 由 12 节平铺改为三段式 —— 首段含 STOP CONDITION、项目身份、State / Pitfalls、🔒 红线、❓ 待确认、Next；按需段放节点链、最近轮次、未完需求、当前有效 ADR、限额 Code Map；指针段列真值文件与命令。
+- **节点链（新模块 `lib/handoff-path.js`）**：从「接下来要做的事」出发按边类型死表行走，复用 `deriveLinks()` 与 `activeAt()` 剪掉失效节点，每步带 `direction` / `source` / `[T<n>]`，8 链安全上限 + `hasMore` 如实提示。规则可复现、可审计，不含向量或学出来的权重。
+- **失效决策过滤**：被 `supersedes` 取代的旧 ADR 不再进 Key Decisions，链尾标注剪枝原因；parser 字段与图边取并集。
+- **文档与安全**：双语 README 首屏补「Handoff, not just memory」定位句；新增 [`SECURITY.md`](SECURITY.md)（支持版本、私下报漏洞、安全模型、不做静态加密声明）；修掉 4 处残留旧版本文案；`CONTRIBUTING.md` 的徽章说明追平。
+- **两包同源**：`generateHandoff` 与新增模块在完整包 / Lite 之间逐字同源，`lite/tests/compat.js` 新增「同一口袋 handoff.md 逐字一致」回归锁。
+- **升级动作**：重跑一次 `handoff` 重新生成交接摘要（旧文件头部不变，stale 检查不会误报）。**破坏性**：无（数据格式仍 v2，CLI / MCP 命令面与返回形状不变）。
+
 ## [2.7-lite] - 2026-11-15
 
 ### ContextPocket Lite 2.7 — 省 token 输出分级 + 精确 T-id 捷径（preview 线定版）

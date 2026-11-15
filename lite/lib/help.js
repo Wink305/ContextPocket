@@ -309,11 +309,12 @@ const COMMAND_HELP = {
   "handoff": { argv: ["handoff"], text: `
   Usage: context-pocket-lite handoff [options]
 
-  Derive handoff.md: a one-page summary for the next session (or the next
-  person) — project identity, current state, the last 5 T gists, open
-  requirements, next steps, the top of the code map, key ADRs, open
-  questions, the 🔒 index, and a resume pointer. Also updates the handoff.md
-  line in index.md.
+  Derive handoff.md: a three-tier handoff view for the next session (or the
+  next person). "0 · Start here" carries identity, state, 🔒 red lines, ❓
+  questions, next steps and a STOP CONDITION; "1 · On demand" holds sourced
+  node chains, recent turns, current-only ADRs and the capped code map;
+  "2 · Pointers" lists the sources. Every section is capped and reports what
+  was omitted. Also updates the handoff.md line in index.md.
 
   Pure derivation, safe to regenerate: the truth stays in the markdown
   sources; handoff.md is a disposable view. It is marked STALE the moment a
@@ -344,7 +345,7 @@ const TOOL_DESCRIPTIONS = {
   context_pocket_log_append: `Append a new T-block to log.md. Auto-assigns T-ID, updates index. Always use this instead of manually editing log.md. Lite has no write-time conflict gate (that engine lives in the full package); pass conflicts manually if you know of one. If a section was missed, use context_pocket_log_amend to fill it in later.`,
   context_pocket_log_amend: `Fill missing sections of an existing T-block (e.g. add the User / Action that verify flags as an ERROR). Only fills sections that are absent; NEVER overwrites existing content — history is preserved verbatim. New sections are inserted in canonical order. when only fills or upgrades the WHEN line (never overwrites a precise recorded instant/range; start a T<n>-fix block to correct history).`,
   context_pocket_diff: `Compare two turns and report what changed between them (exclusive of T-a, inclusive of T-b): requirements opened / completed / cancelled, ADRs added, and files added / removed / modified from the two Action sections. Archived turns are comparable too; either T-id missing is an error.`,
-  context_pocket_handoff: `Derive handoff.md — a one-page summary for the next session: project identity, current state, the last 5 T gists, open requirements, next steps, the top of the code map, key ADRs, open questions, the 🔒 index, and a resume pointer (also updates the handoff.md line in index.md). Pure derivation, safe to regenerate; the truth stays in the markdown sources. Marked STALE as soon as a newer T-block lands.`,
+  context_pocket_handoff: `Derive handoff.md — a three-tier handoff view: "0 · Start here" (identity, state, 🔒 red lines, ❓ open questions, next steps and a STOP CONDITION that says when the agent may start), "1 · On demand" (sourced node chains, recent turns, current-only ADRs, capped code map), "2 · Pointers". Superseded ADRs are pruned; every section is capped and reports what was omitted. Also updates the handoff.md line in index.md. Pure derivation, safe to regenerate; the truth stays in the markdown sources. Marked STALE as soon as a newer T-block lands.`,
 };
 
 module.exports = {

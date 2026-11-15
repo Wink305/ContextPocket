@@ -554,6 +554,39 @@ test('generateHandoff summarises the latest turn', () => {
   assert.ok(content.includes('handoff source'));
 });
 
+test('handoff v2: three tiers, stop condition, current-only ADRs, sourced node chains', () => {
+  const { pocketDir } = makePocket('handoff-v2');
+  record(pocketDir, 'handoff graph seed');
+  writer.addDecision(pocketDir, {
+    title: 'old database choice', context: 'c', options: 'o',
+    decision: 'd', consequences: 'x', supersedes: 'none',
+  });
+  writer.addDecision(pocketDir, {
+    title: 'new database choice', context: 'c', options: 'o',
+    decision: 'd', consequences: 'x', supersedes: 'ADR-1',
+  });
+  writer.generateHandoff(pocketDir);
+  const content = readPocketFile(pocketDir, 'handoff.md');
+
+  assert.match(content, /## 0 · Start here/);
+  assert.match(content, /STOP CONDITION/);
+  assert.match(content, /## 1 · On demand/);
+  assert.match(content, /## 2 · Pointers/);
+  assert.match(content, /generated-at: T\d+/);
+  assert.match(content, /### Node chains/);
+  assert.ok(!content.includes('old database choice'), 'a superseded ADR must not reach the handoff');
+  assert.ok(content.includes('new database choice'));
+  assert.match(content, /\[T\d+/, 'chain steps must carry T-id sources');
+});
+
+test('handoff v2: per-section caps report truncation honestly', () => {
+  const { pocketDir } = makePocket('handoff-cap');
+  for (let i = 0; i < 8; i++) record(pocketDir, 'turn ' + i);
+  writer.generateHandoff(pocketDir);
+  const content = readPocketFile(pocketDir, 'handoff.md');
+  assert.match(content, /earlier turns \(see log\.md\)/);
+});
+
 test('lite mode creates fewer files and writers still fill what is missing', () => {
   const { pocketDir } = makePocket('lite', { mode: 'lite' });
   const files = fs.readdirSync(pocketDir);
