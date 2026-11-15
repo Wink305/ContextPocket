@@ -2,6 +2,19 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.10-lite] - 2026-11-15
+
+### ContextPocket Lite 2.10 — 读侧接手视图（稳定版）
+
+> Lite 独立版本线发 `2.10`（对外 `2.10-lite`）；主包同日发 `2.10`。
+> 仍然零缓存、零依赖、11 命令 / 11 工具。
+
+- **`handoff --read`**：只输出 `0 · Start here` 接手视图（含 STOP CONDITION 与 ❓ 清单），比对 `generated-at` 与 log 最新 T；过期拒绝输出、退出 1，`--force` 放行、`--full` 全文、`--json` 结构化。不新增命令或 MCP 工具。
+- **参数解析修正**：`read` / `force` 补进 `parseArgs` 的布尔集合，修掉 `--read --force` 被吞值的问题。
+- **跨 Agent 记忆定位**：产品定位明确为「辅助上下文记忆 + 跨对话、跨 Agent 记忆」；主包新增交接剧本与 T-block 格式规范（format v2 描述性规范 + 金样本 + 独立校验器）。
+- **回归锁**：CLI 读侧用例、两包 `readHandoffView` 逐字一致；四门禁全绿。
+- **升级动作**：无。**破坏性**：无（数据格式仍 v2）。
+
 ## [2.8-lite] - 2026-11-15
 
 ### ContextPocket Lite 2.8 — 三段式交接 + 带来源的节点链（稳定版）

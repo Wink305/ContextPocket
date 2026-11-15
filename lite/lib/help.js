@@ -320,9 +320,17 @@ const COMMAND_HELP = {
   sources; handoff.md is a disposable view. It is marked STALE the moment a
   newer T-block lands, so regenerate it before relying on it.
 
+  Use --read to print the resume view instead of writing: section 0 is shown,
+  a STALE handoff (generated-at vs log latest T) is refused unless --force is
+  given, and the ❓ items to confirm first are listed. No new command or MCP
+  tool is involved — this is a read-side option.
+
   Options:
-    --dir <path>   Project directory
-    --json         One JSON line on stdout
+    --read           Print the resume view instead of writing handoff.md
+    --full           With --read, print the whole handoff.md, not just section 0
+    --force          With --read, allow a STALE view
+    --dir <path>     Project directory
+    --json           One JSON line on stdout
 ` },
 };
 

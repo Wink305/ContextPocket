@@ -110,8 +110,8 @@ const VALUE_OPTIONS = new Set([
 // 纯开关型选项：绝不吞掉后面的裸词（旧实现会把 `--quiet rebuild` 里的
 // "rebuild" 当成 quiet 的值，导致开关失效）
 const BOOL_OPTIONS = new Set([
-  'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'help', 'h', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
-  'quiet', 'rebuild', 'verify', 'version', 'v', 'with-context',
+  'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'force', 'full', 'help', 'h', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
+  'quiet', 'read', 'rebuild', 'verify', 'version', 'v', 'with-context',
 ]);
 
 // 真实存在的两段式命令。只有落在这些组合里的第二个词才当子命令，
@@ -1641,6 +1641,26 @@ function cmdDecisionAdd(options) {
 
 function cmdHandoff(options) {
   const pocketDir = ensurePocket(options);
+
+  // 读侧：不写文件，只给下一个会话 / Agent 的开工前视图。
+  if (options.read) {
+    const view = require('../lib/handoff-path').readHandoffView(pocketDir, {
+      full: !!options.full, force: !!options.force,
+    });
+    if (options.json) emitJson({ ok: view.ok, view: view }, view.ok ? 0 : 1);
+    if (!view.ok) {
+      console.log('\n  ⚠️  ' + view.message + '\n');
+      process.exitCode = 1;
+      return;
+    }
+    console.log('\n' + view.lines.join('\n'));
+    if (view.questions.length > 0) {
+      console.log('\n  ❓ Confirm with the user before acting:');
+      for (const q of view.questions) console.log('     - ' + q);
+    }
+    console.log('');
+    return;
+  }
 
   const result = generateHandoff(pocketDir);
 

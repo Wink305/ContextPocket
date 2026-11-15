@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10-lite] - 2026-11-15
+
+### ContextPocket Lite 2.10 — 读侧接手视图 + 定位收口
+
+> Lite 独立版本线发 `2.10`（对外展示 `2.10-lite`，稳定通道）；主包版本线同日发 `2.10`。
+> 两条版本线仍是独立的，只是数字对齐。细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+- **读侧闭环**：`handoff --read` 输出 `0 · Start here` 接手视图，比对 `generated-at` 与 log 最新 T，过期即拒绝并退出非 0；`--force` / `--full` / `--json` 可选。不新增命令或 MCP 工具。
+- **定位**：明确为「辅助上下文记忆 + 跨对话、跨 Agent 记忆」，交接只是其中一种用法；仓库描述、topics、双语 README 首屏与独立章节同步。
+- **剧本与格式规范**：`docs/handoff-scenario.md`（四幕，明确不含 benchmark 指标）、`docs/format-spec.md` + 金样本 + `scripts/verify-format.js`。
+- **升级动作**：无（数据格式仍 v2）。**破坏性**：无。
+
+## [2.10] - 2026-11-15
+
+### ContextPocket 2.10 — 读侧接手视图 + 跨 Agent 剧本 + T-block 格式规范
+
+- **读侧闭环**：新增 `handoff --read`（`lib/handoff-path.js` 的 `readHandoffView()`，两包逐字同源）：默认只给带 STOP CONDITION 的 `0 · Start here`，`generated-at` 落后于 log 最新 T 时拒绝输出并退出 1，`--force` 放行、`--full` 全文、`--json` 结构化，并列出 ❓ 待确认清单。**命令面与 MCP 工具面不变**。
+- **参数解析修正**：`read` / `force` / `full` 补进两包 `parseArgs` 的布尔选项集合，否则 `--read --force` 会把 `--force` 吞成前者的值、开关永远不生效。
+- **定位收口**：按「辅助上下文记忆 + 跨对话、跨 Agent 记忆」改写双语 README 首屏定位句，新增独立章节串联 T-block 时间线、约束文件、带来源关联图与 handoff 视图；原有记忆主线保留（双轨）。仓库描述与 8 个 topics 同步。
+- **交接剧本**：`docs/handoff-scenario.md` 四幕可复现流程（换 Agent 接手 → 并发撞号 repair → `--as-of` 历史切片 → import 外部历史），开头声明不是 benchmark；`tests/pocket.js` 新增端到端回归。
+- **开放格式第一步**：`docs/format-spec.md`（format v2 描述性规范：编号只增、只追加、冲突可见、边带来源、session 重建）+ 金样本 + `scripts/verify-format.js`（零依赖、独立实现、16 条校验、支持 `--dir`）。
+- **回归与基线**：两包 `readHandoffView` 逐字一致（compat 新锁）、Lite CLI 读侧用例、metrics 追平 29 / 67 文件与 127.3 / 436.0 kB；四门禁全绿。
+- **升级动作**：无。**破坏性**：无（数据格式仍 v2，命令 / 工具面不变）。
+
 ## [2.8-lite] - 2026-11-15
 
 ### ContextPocket Lite 2.8 — 三段式交接 + 带来源的节点链

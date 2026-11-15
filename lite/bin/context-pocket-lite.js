@@ -45,7 +45,8 @@ const VALUE_OPTIONS = new Set([
 
 // 纯开关型选项：绝不吞掉后面的裸词
 const BOOL_OPTIONS = new Set([
-  'brief', 'full', 'help', 'h', 'json', 'quiet', 'verify', 'version', 'v', 'with-context',
+  'brief', 'force', 'full', 'help', 'h', 'json', 'quiet', 'read', 'verify',
+  'version', 'v', 'with-context',
 ]);
 
 // 真实存在的两段式命令
@@ -1118,6 +1119,27 @@ function cmdLogAmend(options, positional) {
 
 function cmdHandoff(options) {
   const pocketDir = ensurePocket(options);
+
+  // 读侧：不写文件，只给下一个会话 / Agent 的开工前视图。
+  if (options.read) {
+    const view = require('../lib/handoff-path').readHandoffView(pocketDir, {
+      full: !!options.full, force: !!options.force,
+    });
+    if (options.json) emitJson({ ok: view.ok, view: view }, view.ok ? 0 : 1);
+    if (!view.ok) {
+      console.log('\n  ⚠️  ' + view.message + '\n');
+      process.exitCode = 1;
+      return;
+    }
+    console.log('\n' + view.lines.join('\n'));
+    if (view.questions.length > 0) {
+      console.log('\n  ❓ Confirm with the user before acting:');
+      for (const q of view.questions) console.log('     - ' + q);
+    }
+    console.log('');
+    return;
+  }
+
   const result = generateHandoff(pocketDir);
 
   if (options.json) emitJson({ ok: true, ...result });

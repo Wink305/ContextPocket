@@ -135,14 +135,13 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
     ['CLI commands', liteCommands, mainCommands, 11, 28],
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
-    ['package files', litePack.files, mainPack.files, 29, 64],
+    ['package files', litePack.files, mainPack.files, 29, 67],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    // 125.6 / 424.4：2.8-lite / 2.6 定版实测。
-    // 两包各新增 lib/handoff-path.js（各 +1 文件）；主包另把 SECURITY.md 加进
-    // files 白名单（+1），故 28→29 / 62→64；两包 help 文案同步三段式交接结构。
-    // 旧版施工记录仍逐字留在 docs/dev-notes/changelog-archive.md，随 docs/ 发布。
+    // 127.3 / 436.0：2.10-lite / 2.10 之后「定位收口 + 交接剧本 + 格式规范」实测。
+    // 主包 docs/ 新增 handoff-scenario.md / format-spec.md（+2）、scripts/ 新增
+    // verify-format.js（+1），故 64→67；Lite 白名单不含 docs/ 与 scripts/，仍 29。
     // 按「基线随每次定版更新」追平。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 125.6, 424.4],
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 127.3, 436.0],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

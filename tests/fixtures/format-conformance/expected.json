@@ -1,0 +1,13 @@
+{
+  "format": "v2",
+  "sessions": ["2026-11-15", "2026-11-16"],
+  "blocks": [
+    { "id": 1, "gist": "选纯 Markdown 做存储", "tags": ["arch", "storage"], "session": "2026-11-15", "when": "2026-11-15 09:00" },
+    { "id": 2, "gist": "实现 T-block 追加", "tags": ["core"], "session": "2026-11-16", "when": "2026-11-16 10:30" },
+    { "id": 3, "gist": "补回归测试", "tags": ["test"], "session": "2026-11-16", "when": "2026-11-16 11:00" }
+  ],
+  "fixBlocks": [
+    { "id": "T2-fix", "targetId": 2, "session": "2026-11-16" }
+  ],
+  "latestT": 3
+}

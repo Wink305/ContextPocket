@@ -272,3 +272,19 @@ test('handoff.md is byte-identical across both packages on the same pocket', () 
   assert.match(mainText, /## 0 · Start here/);
   assert.match(mainText, /### Node chains/);
 });
+
+test('handoff --read view is identical across both packages', () => {
+  const made = makeLitePocket('compat-handoff-read');
+  liteWriter.appendLogBlock(made.pocketDir, {
+    gist: 'shared read view',
+    tags: ['compat'],
+    user: ['Compat user'],
+    action: ['Modified src/shared.js'],
+  });
+  liteWriter.generateHandoff(made.pocketDir);
+  const liteView = require(path.join(ROOT, 'lib', 'handoff-path')).readHandoffView(made.pocketDir);
+  const mainView = require(path.join(MAIN_ROOT, 'lib', 'handoff-path')).readHandoffView(made.pocketDir);
+  assert.deepStrictEqual(mainView, liteView);
+  assert.strictEqual(liteView.ok, true);
+  assert.match(liteView.lines.join('\n'), /STOP CONDITION/);
+});

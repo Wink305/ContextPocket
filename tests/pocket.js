@@ -587,6 +587,47 @@ test('handoff v2: per-section caps report truncation honestly', () => {
   assert.match(content, /earlier turns \(see log\.md\)/);
 });
 
+test('cross-agent handoff scenario: read view, stale guard, forced read', () => {
+  const { pocketDir } = makePocket('handoff-scenario');
+  const handoffPath = require(path.join(ROOT, 'lib', 'handoff-path'));
+  const cli = (extra) => spawnSync(process.execPath,
+    [path.join(ROOT, 'bin', 'context-pocket.js'), 'handoff', '--read', '--dir', path.dirname(pocketDir)].concat(extra || []),
+    { encoding: 'utf8' });
+
+  record(pocketDir, 'A records the decision', { author: ['claude-code'] });
+  record(pocketDir, 'B continues the work', { author: ['codex'] });
+  writer.generateHandoff(pocketDir);
+
+  const fresh = handoffPath.readHandoffView(pocketDir);
+  assert.strictEqual(fresh.ok, true);
+  assert.strictEqual(fresh.stale, false);
+  assert.match(fresh.lines.join('\n'), /## 0 · Start here/);
+  assert.match(fresh.lines.join('\n'), /STOP CONDITION/);
+  assert.doesNotMatch(fresh.lines.join('\n'), /### Recent/);
+
+  const freshCli = cli();
+  assert.strictEqual(freshCli.status, 0, freshCli.stderr);
+  assert.match(freshCli.stdout, /## 0 · Start here/);
+
+  record(pocketDir, 'C joins after the handoff', { author: ['cursor'] });
+  const stale = handoffPath.readHandoffView(pocketDir);
+  assert.strictEqual(stale.ok, false);
+  assert.strictEqual(stale.reason, 'stale');
+  assert.deepStrictEqual(stale.lines, []);
+  assert.match(stale.message, /STALE/);
+
+  const staleCli = cli();
+  assert.strictEqual(staleCli.status, 1);
+  assert.match(staleCli.stdout, /STALE/);
+
+  const forced = handoffPath.readHandoffView(pocketDir, { force: true, full: true });
+  assert.strictEqual(forced.ok, true);
+  assert.match(forced.lines.join('\n'), /## 2 · Pointers/);
+  assert.match(forced.lines.join('\n'), /A records the decision/);
+  const forcedCli = cli(['--force']);
+  assert.strictEqual(forcedCli.status, 0);
+});
+
 test('lite mode creates fewer files and writers still fill what is missing', () => {
   const { pocketDir } = makePocket('lite', { mode: 'lite' });
   const files = fs.readdirSync(pocketDir);

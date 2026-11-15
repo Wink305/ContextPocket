@@ -426,10 +426,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.8-lite/);
+  assert.match(version.stdout, /2\.10-lite/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.8');
-  assert.strictEqual(versionJson.display, '2.8-lite');
+  assert.strictEqual(versionJson.version, '2.10');
+  assert.strictEqual(versionJson.display, '2.10-lite');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);
@@ -465,4 +465,22 @@ test('handoff uses the three-tier layout with a stop condition and node chains',
   assert.match(text, /## 2 · Pointers/);
   assert.match(text, /### Node chains/);
   assert.match(text, /generated-at: T2/);
+});
+
+test('handoff --read prints section 0 and refuses a stale view', () => {
+  const { projectDir, pocketDir } = makeLitePocket('handoff-read');
+  append(pocketDir, 'one');
+  generateHandoff(pocketDir);
+  const fresh = runCli(['handoff', '--read'], projectDir);
+  assert.strictEqual(fresh.status, 0);
+  assert.match(fresh.stdout, /## 0 · Start here/);
+  assert.match(fresh.stdout, /STOP CONDITION/);
+
+  append(pocketDir, 'two');
+  const stale = runCli(['handoff', '--read'], projectDir);
+  assert.strictEqual(stale.status, 1);
+  assert.match(stale.stdout, /STALE/);
+
+  const forced = runCli(['handoff', '--read', '--force'], projectDir);
+  assert.strictEqual(forced.status, 0);
 });
