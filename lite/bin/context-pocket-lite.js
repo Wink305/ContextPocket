@@ -29,7 +29,7 @@ const { recall, recallWindow, searchAny, why, diff } = require('../lib/query');
 const { deriveLinks, buildContext, formatContextLines } = require('../lib/links');
 const { turnFields, textOption, sectionFields, hasAnySection } = require('../lib/fields');
 const { describeWhen, describeWhenLine } = require('../lib/when');
-const { colorize, formatVerifyResult, formatStatus } = require('../lib/formatter');
+const { colorize, formatVerifyResult, formatStatus, briefRecallLines } = require('../lib/formatter');
 const { pkgVersion } = require('../lib/version');
 
 // ============================================================
@@ -45,7 +45,7 @@ const VALUE_OPTIONS = new Set([
 
 // 纯开关型选项：绝不吞掉后面的裸词
 const BOOL_OPTIONS = new Set([
-  'help', 'h', 'json', 'quiet', 'verify', 'version', 'v', 'with-context',
+  'brief', 'full', 'help', 'h', 'json', 'quiet', 'verify', 'version', 'v', 'with-context',
 ]);
 
 // 真实存在的两段式命令
@@ -502,6 +502,7 @@ function cmdRecall(options, positional) {
   const pocketDir = ensurePocket(options);
   const tIdStr = positional[0] || tIdOption(options);
   const withContext = !!options['with-context'];
+  const brief = !!options.brief;
 
   // 与 search 同一组窗口旗标：intOption / textOption 统一收，垃圾值回落成 null
   const sinceT = intOption(options.since, 0) > 0 ? intOption(options.since, 0) : null;
@@ -532,6 +533,14 @@ function cmdRecall(options, positional) {
     failJson(options, 'recall: --with-context applies to a single T-id, not to a window listing.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --with-context needs a single T-id.');
     console.error('     Use `context-pocket-lite recall <T-id> --with-context`, or drop the flag for a window.\n');
+    process.exit(1);
+  }
+
+  // --brief 同理：它精简的是某一轮的全文，窗口模式没有"全文"可精简
+  if (!tIdStr && brief) {
+    failJson(options, 'recall: --brief applies to a single T-id, not to a window listing.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --brief needs a single T-id.');
+    console.error('     Use `context-pocket-lite recall <T-id> --brief`, or drop the flag for a window.\n');
     process.exit(1);
   }
 
@@ -575,7 +584,13 @@ function cmdRecall(options, positional) {
   }
   console.log('  ' + colorize('─'.repeat(40), 'dim'));
 
-  if (result.rawText) {
+  if (brief) {
+    // 省 token 分级：关键事实（请求/动作/决策/坑点/冲突）+ 省略指针。
+    // 完整原文去掉 --brief 即恢复；--json 始终给全量 rawText。
+    for (const line of briefRecallLines(result)) {
+      console.log('  ' + line);
+    }
+  } else if (result.rawText) {
     // 输出原始内容，去掉第一行标题
     const lines = result.rawText.split('\n');
     for (let i = 1; i < lines.length; i++) {
@@ -626,6 +641,8 @@ function cmdSearch(options, positional) {
   // Lite 没有索引：永远现场扫描（与主包 `search --no-index` 同一份实现、同一份排序）
   // --expand：从命中出发走 n 跳现场派生的关联图，扩展轮次追加在分页之后
   const expand = intOption(options.expand, 0);
+  // 输出分级：默认紧凑（一行一命中），--full 展开命中片段预览
+  const full = options.full === true;
   const { results, total, hasMore, offset, limit, expandedCount, expansionTruncated } = searchAny(pocketDir, keyword, {
     limit: options.limit,
     offset: options.offset,
@@ -678,6 +695,9 @@ function cmdSearch(options, positional) {
   } else {
     for (const r of direct) {
       const printHighlights = (r) => {
+        // 省 token 分级：默认紧凑，只给一行命中（id/gist/标签/证据）。
+        // --full 才展开命中片段预览；--json 始终给全量 highlights。
+        if (!full) return;
         if (r.highlights && r.highlights.length > 0) {
           for (const h of r.highlights.slice(0, 3)) {
             const snippet = h.text.length > 60 ? h.text.slice(0, 60) + '...' : h.text;
@@ -753,6 +773,8 @@ function cmdWhy(options, positional) {
 
   const limit = Math.max(1, intOption(options.limit, 10));
   const expand = intOption(options.expand, 0);
+  // 输出分级：默认紧凑（证据徽章 + gist），--full 展开引用片段
+  const full = options.full === true;
   const results = why(pocketDir, filePath, { limit, expand });
 
   // linked = 通过图上的关系连过来的轮次（它没碰过这个文件）；分开显示，
@@ -792,9 +814,12 @@ function cmdWhy(options, positional) {
         ? colorize('[changed]', 'green')
         : colorize('[mentioned only]', 'yellow');
       console.log(`  ${colorize('T' + r.id, 'bold')} ${badge}${tagsStr} · ${r.gist}`);
-      for (const ref of r.references.slice(0, 3)) {
-        const snippet = ref.text.length > 60 ? ref.text.slice(0, 60) + '...' : ref.text;
-        console.log(colorize(`     ↳ [${ref.section}] ${snippet}`, 'dim'));
+      // 省 token 分级：默认只给证据徽章 + gist；--full 才展开引用片段
+      if (full) {
+        for (const ref of r.references.slice(0, 3)) {
+          const snippet = ref.text.length > 60 ? ref.text.slice(0, 60) + '...' : ref.text;
+          console.log(colorize(`     ↳ [${ref.section}] ${snippet}`, 'dim'));
+        }
       }
     }
     if (changedN === 0) {

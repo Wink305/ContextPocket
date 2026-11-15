@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6-Lite-preview3] - 2026-11-14
+
+### ContextPocket Lite 2.6-Lite-preview3 — 精确 T-id 块定位捷径 + 省 token 输出分级
+
+> Lite 独立版本线发 `2.6-Lite-preview3`（preview 通道）；主包版本线同日发 `2.4-preview3`。
+> 两包共享精确 T-id 块定位捷径（性能）；Lite 另加省 token 输出分级——默认渲染精简，
+> 数据一个字节不减，所有原文经 `--full` / 不加 `--brief` / `--json` 可达。能力面不变。
+> 细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+## [2.4-preview3] - 2026-11-14
+
+### 精确 T-id 块定位捷径（两包同源）
+
+- **性能（两包）**：精确 T-id（如 `T300`）搜索新增块定位快路径——先按 plausible
+  header 定位到目标块、只解析那一块，并从最近的前置 SESSION 行重建 session，
+  不再逐文件全量解析。`log.md` 优先；畸形 id（>1e7）回退逐文件全量解析。
+  无索引 1000 轮夹具实测：完整包 31.6→6.3ms（~5.0×）、Lite 38.1→6.9ms（~5.5×）。
+  索引路径、关键词搜索、recall 与命中形状均不变。
+- **回归锁**：新增「精确 T-id 块定位快路径与索引全量解析逐字一致」测试，覆盖
+  session 重建 / 归档优先 / 补零 / 畸形回退 / 缺失；两包快路径逐字同源，
+  命中一致性仍由 compat 套件钉死。
+
 ## [2.6-Lite-preview2] - 2026-11-13
 
 ### ContextPocket Lite 2.6-Lite-preview2 — 精确 T-id 扫描两包同序

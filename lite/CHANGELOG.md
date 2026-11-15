@@ -2,6 +2,34 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.6-Lite-preview3] - 2026-11-14
+
+### 精确 T-id 块定位捷径 + 省 token 输出分级
+
+- **精确 T-id 块定位捷径（两包同源）**：精确 T-id 搜索先按 plausible header 定位目标块、
+  只解析那一块，并从最近前置 SESSION 行重建 session，不再逐文件全量解析；`log.md`
+  优先，畸形 id（>1e7）回退全量解析。无索引 1000 轮夹具实测 Lite 38.1→6.9ms（~5.5×）、
+  完整包 31.6→6.3ms（~5.0×）。索引/关键词/recall 与命中形状不变。新增「快路径与索引
+  全量解析逐字一致」回归锁（session/归档优先/补零/畸形/缺失），两包快路径逐字同源。
+- **省 token 输出分级（Lite，只动渲染不动数据）**：
+  - `search` / `why` 默认每命中一行（id/gist/tags/证据），砍掉冗余 snippet 预览；
+    `--full` / `full:true` 恢复预览。
+  - `recall` 默认仍完整（精度工具不该默认省）；`--brief` / `brief:true` 只看关键事实
+    （User / Action / Decisions & Constraints / **Pitfalls / Conflicts** 保留），其余
+    折叠成一行 `… N more sections omitted (…) — omit brief for the full turn.` 指针。
+    brief 误用于窗口列表会报错。
+  - `--json` 永远完整（highlights / rawText 都在）。CLI 与 MCP 双侧同源接线，
+    help / 工具描述 / SERVER_INSTRUCTIONS 写明分级与「数据永远完整」。
+  - **compat 不放宽**：分级只在 CLI/MCP presentation 层，library 返回值原样不变，
+    `lite/tests/compat.js` 的整图/命中 `deepStrictEqual` 8/8 仍严格绿。
+- **回归锁**：`lite/tests/core.js` 新增 token 分级锁——紧凑输出不含 snippet 标记、
+  `--full` 含且 `compact.length < full.length`；recall brief 保留关键事实 + 指针、
+  藏起 attachment/preference/uncertain 原文且 `brief.length < full.length`；
+  `--json` 跨档 `deepStrictEqual` 完全一致。
+- **metrics（定版追平）**：体积基线随本次定版复测追平；冷启动锁由严格 `<` 改为
+  `1.15×` 噪声带宽（best-of-5 的 ~100ms Node 启动，两包差值与调度噪声同量级，
+  严格 `<` 会亚毫秒随机变红），结构性「Lite 更轻」仍由模块数硬锁 17<25 保证。
+
 ## [2.6-Lite-preview2] - 2026-11-13
 
 ### 精确 T-id 扫描两包同序（性能 + 回归锁）

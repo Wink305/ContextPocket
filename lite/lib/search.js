@@ -15,8 +15,9 @@
  */
 
 const path = require('path');
-const { parseLogAll, parseLogText, parseDecisions, parseRequirements, parsePreferences } = require('./parser');
+const { parseLogAll, parseLogText, parseDecisions, parseRequirements, parsePreferences, toPlausibleId, MAX_PLAUSIBLE_ID } = require('./parser');
 const { readFileSafe } = require('./core');
+const { SESSION_LINE_RE } = require('./constants');
 
 const MAX_DOC_TEXT = 4000; // 非 T 文档存进索引的最大字符数（用于命中后校验/高亮）
 const CJK_RUN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]+/g;
@@ -234,10 +235,42 @@ function idShortcutHit(pocketDir, kw) {
   const m = kw.match(/^T(\d+)$/i);
   if (!m) return null;
   const tId = parseInt(m[1], 10); // T007 归一到 T7，与文档 key 的写法一致
-  const block = parseLogAll(pocketDir).blocks.find((item) => item.id === tId);
-  if (!block) return [];
-  const doc = blockToDoc(block);
-  return [formatDocHit(doc, [{ field: 'gist', text: doc.gist || '' }], 1)];
+  // 只解析命中那一块：按行首定位可信编号===tId 的块头，切到下一个块头，单独解析。
+  // session 取决于块前最近的 SESSION 行，回填即可；畸形占位号（超可信上限）按号定位
+  // 不可靠，回落逐文件全量解析。与主包 idShortcutHitFromLogs 逐字同源（log.md 优先）。
+  for (const file of ['log.md', 'log-archive.md']) {
+    const content = readFileSafe(path.join(pocketDir, file));
+    if (!content) continue;
+    const lines = content.split('\n');
+    let startLine = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const hm = lines[i].match(/^##\s+T(\d+)\s*·/);
+      if (hm && toPlausibleId(hm[1]) === tId) { startLine = i; break; }
+    }
+    let block;
+    if (startLine !== -1) {
+      let endLine = lines.length;
+      for (let i = startLine + 1; i < lines.length; i++) {
+        if (/^##\s+T\d/.test(lines[i])) { endLine = i; break; }
+      }
+      let session = null;
+      for (let i = startLine - 1; i >= 0; i--) {
+        const sm = lines[i].match(SESSION_LINE_RE);
+        if (sm) { session = sm[1]; break; }
+      }
+      block = parseLogText(lines.slice(startLine, endLine).join('\n')).blocks[0];
+      if (block) block.session = session;
+    } else if (tId >= 1 && tId <= MAX_PLAUSIBLE_ID) {
+      continue; // 可信编号必有同号块头；这份没扫到就看下一份，两份都没有即缺失
+    } else {
+      block = parseLogText(content).blocks.find((b) => b.id === tId); // 畸形占位号回落
+    }
+    if (!block) continue;
+    const doc = blockToDoc(block);
+    doc.archived = file === 'log-archive.md';
+    return [formatDocHit(doc, [{ field: 'gist', text: doc.gist || '' }], 1)];
+  }
+  return [];
 }
 
 /**

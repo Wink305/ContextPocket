@@ -22,6 +22,7 @@ const { appendLogBlock, amendLogBlock, generateHandoff } = require('./lib/writer
 const { deriveLinks, buildContext, formatContextLines } = require('./lib/links');
 const { turnFields, textOption, sectionFields, hasAnySection } = require('./lib/fields');
 const { describeWhen } = require('./lib/when');
+const { briefRecallLines } = require('./lib/formatter');
 const { TOOL_DESCRIPTIONS, SERVER_INSTRUCTIONS } = require('./lib/help');
 
 // ============================================================
@@ -215,6 +216,11 @@ const TOOLS = [
           description: 'Append the read-only inbound context derived from log.md, decisions.md and code-map.md (single tId only).',
           default: false,
         },
+        brief: {
+          type: 'boolean',
+          description: 'Token-lean tier (single tId only): show key facts (User / Action / Decisions / Pitfalls / Conflicts) and fold the remaining sections into a one-line pointer. Omit for the verbatim full turn. The library result is always complete.',
+          default: false,
+        },
         sinceT: { type: 'integer', description: 'T-id window lower bound (closed)' },
         untilT: { type: 'integer', description: 'T-id window upper bound (closed)' },
         fromDate: { type: 'string', description: 'Date window lower bound, yyyy-mm-dd (closed)' },
@@ -245,6 +251,11 @@ const TOOLS = [
           description: 'Walk the derived link graph N hops from each hit and append the turns it reaches (1-3; 0 = off). CLI equivalent: --expand',
           default: 0,
         },
+        full: {
+          type: 'boolean',
+          description: 'Verbose tier: expand the per-hit match-snippet previews. Default false = compact (one line per hit: id / gist / tags / evidence) to save tokens. CLI equivalent: --full',
+          default: false,
+        },
       },
       required: ['keyword'],
     },
@@ -268,6 +279,11 @@ const TOOLS = [
           type: 'integer',
           description: 'Walk the derived link graph N hops from the direct hits and append the turns it reaches (1-3; 0 = off). CLI equivalent: --expand',
           default: 0,
+        },
+        full: {
+          type: 'boolean',
+          description: 'Verbose tier: expand the per-hit reference-snippet previews. Default false = compact (evidence badge + gist per hit) to save tokens. CLI equivalent: --full',
+          default: false,
         },
       },
       required: ['filePath'],
@@ -632,6 +648,7 @@ function toolRecall(args) {
   // 与 CLI 同一份归一：裸 parseInt 会把 "abc" 变成 NaN 再当合法编号传给 recall
   const tId = toTId(args.tId);
   const withContext = args.withContext === true;
+  const brief = args.brief === true;
 
   // 四个窗口参数与 context_pocket_search 同名同义，判据最终都落到 query.filterByTime。
   const sinceT = typeof args.sinceT === 'number' && args.sinceT > 0 ? args.sinceT : null;
@@ -658,6 +675,14 @@ function toolRecall(args) {
   if (withContext && Number.isNaN(tId) && hasWindow) {
     return {
       content: [{ type: 'text', text: '❌ Error: withContext applies to a single tId, not to a window listing. Pass tId with withContext, or omit withContext for a window.' }],
+      isError: true,
+    };
+  }
+
+  // brief 同理：它精简的是某一轮的全文，窗口模式没有"全文"可精简
+  if (brief && Number.isNaN(tId)) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: brief applies to a single tId, not to a window listing. Pass tId with brief, or omit brief for a window.' }],
       isError: true,
     };
   }
@@ -714,7 +739,11 @@ function toolRecall(args) {
   }
   lines.push('');
 
-  if (result.rawText) {
+  if (brief) {
+    // 省 token 分级：关键事实（请求/动作/决策/坑点/冲突）+ 省略指针。
+    // 完整原文去掉 brief 即恢复；库层 recall() 始终返回全量 rawText。
+    lines.push(...briefRecallLines(result));
+  } else if (result.rawText) {
     const rawLines = result.rawText.split('\n');
     for (let i = 1; i < rawLines.length; i++) {
       lines.push(rawLines[i]);
@@ -763,6 +792,8 @@ function toolSearch(args) {
   // 扩展出来的轮次单独一组：不是关键词命中，是通过图上的关系连过来的
   const direct = results.filter((r) => !r.expanded);
   const linked = results.filter((r) => r.expanded);
+  // 输出分级：默认紧凑（一行一命中），full:true 展开命中片段预览
+  const full = args.full === true;
 
   const lines = [];
   const shown = limit !== null && direct.length < total
@@ -777,6 +808,8 @@ function toolSearch(args) {
   } else {
     for (const r of direct) {
       const printHighlights = (r) => {
+        // 省 token 分级：默认紧凑（一行一命中）；full:true 才展开片段预览
+        if (!full) return;
         if (!r.highlights || r.highlights.length === 0) return;
         for (const h of r.highlights.slice(0, 3)) {
           const snippet = h.text.length > 80 ? h.text.slice(0, 80) + '...' : h.text;
@@ -848,6 +881,8 @@ function toolWhy(args) {
   // 与 CLI 的 why 同一条归一：limit=0 不该被当成"没给"而变回默认值
   const limit = Math.max(1, intOption(args.limit, 10));
   const results = why(pocketDir, filePath, { limit, expand: intOption(args.expand, 0) });
+  // 输出分级：默认紧凑（证据徽章 + gist），full:true 展开引用片段
+  const full = args.full === true;
 
   // linked = 通过图上的关系连过来的轮次（它没碰过这个文件）
   const direct = results.filter(r => r.evidence !== 'linked');
@@ -868,9 +903,12 @@ function toolWhy(args) {
         : '';
       const badge = r.evidence === 'changed' ? '**[changed]**' : '**[mentioned only]**';
       lines.push(`- **T${r.id}** ${badge}${tagsStr}: ${r.gist}${r.archived ? ' *(archived)*' : ''}`);
-      for (const ref of r.references.slice(0, 3)) {
-        const snippet = ref.text.length > 80 ? ref.text.slice(0, 80) + '...' : ref.text;
-        lines.push(`  - *[${ref.section}]* ${snippet}`);
+      // 省 token 分级：默认只给证据徽章 + gist；full:true 才展开引用片段
+      if (full) {
+        for (const ref of r.references.slice(0, 3)) {
+          const snippet = ref.text.length > 80 ? ref.text.slice(0, 80) + '...' : ref.text;
+          lines.push(`  - *[${ref.section}]* ${snippet}`);
+        }
       }
     }
     if (changedN === 0) {

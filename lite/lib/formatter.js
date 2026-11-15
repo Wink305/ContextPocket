@@ -5,7 +5,7 @@
  * 彩色输出、表格、进度条等
  */
 
-const { SEVERITY } = require('./constants');
+const { SEVERITY, TBLOCK_SECTIONS } = require('./constants');
 const { stripPlaceholders } = require('./core');
 
 // ANSI 颜色
@@ -200,8 +200,40 @@ function formatStatus(data, config) {
   return lines.join('\n');
 }
 
+// recall 的「关键事实」分级（--brief / brief:true）。保留请求 / 动作 / 决策 /
+// 坑点 / 冲突 —— 安全相关的 Pitfalls、Conflicts 绝不藏；把 Author / Commits /
+// Preferences / Attachments / Uncertain 折叠成一行指针。完整原文永远在：
+// 去掉 brief 即恢复逐字全文，--json 也始终给全量。这是 Lite 的省 token 分级，
+// 不是删功能。CLI 与 MCP 共用这一份，避免两边各挑一套小节。
+const BRIEF_KEY_SECTIONS = ['User', 'Action', 'Decisions & Constraints', 'Pitfalls', 'Conflicts'];
+
+/**
+ * @param {object} result recall() 的返回值（用它的 sections，不碰 rawText）
+ * @returns {string[]} 关键小节 + 省略指针的纯文本行（CLI 自行缩进，MCP 直接用）
+ */
+function briefRecallLines(result) {
+  const sections = result.sections || {};
+  const lines = [];
+  for (const name of BRIEF_KEY_SECTIONS) {
+    const items = sections[name] || [];
+    if (items.length === 0) continue;
+    lines.push(`### ${name}`);
+    for (const item of items) lines.push(`- ${item}`);
+    lines.push('');
+  }
+  const omitted = TBLOCK_SECTIONS.filter(
+    (name) => !BRIEF_KEY_SECTIONS.includes(name) && (sections[name] || []).length > 0
+  );
+  if (omitted.length > 0) {
+    lines.push(`… ${omitted.length} more section${omitted.length === 1 ? '' : 's'} omitted (${omitted.join(', ')}) — omit brief for the full turn.`);
+  }
+  return lines;
+}
+
 module.exports = {
   colorize,
   formatVerifyResult,
   formatStatus,
+  BRIEF_KEY_SECTIONS,
+  briefRecallLines,
 };

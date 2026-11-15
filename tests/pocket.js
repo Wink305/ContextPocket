@@ -1903,6 +1903,57 @@ test('search: 精确 T-id 现场扫描只读轮次日志，不解析无关元数
   assert.ok(out.kwMetaCount > 0, '负对照失效：非 T-id 关键词扫描应当读取元数据');
 });
 
+test('search: 精确 T-id 块定位快路径与索引全量解析逐字一致（session/归档优先/补零/畸形/缺失）', () => {
+  const { pocketDir } = makePocket('exact-id-block-locate');
+  writePocketFile(pocketDir, 'log.md', [
+    '# ContextPocket · LOG', '',
+    '--- SESSION: 2026-11-01 ---', '',
+    '## T1 · live-one · [alpha]',
+    '--- WHEN: 2026-11-01 09:00 ---', '',
+    '### User', '- u1',
+    '### Action', '- did one', '',
+    '## T2 · live-two · [beta]', '',
+    '### Action', '- did two', '',
+    '--- SESSION: 2026-11-02 ---', '',
+    '## T7 · live-seven · [gamma]',
+    '--- WHEN: 2026-11-02 10:00 → 11:00 ---', '',
+    '### Action', '- did seven', '',
+    '## T99999999999999999999 · malformed-block · [delta]', '',
+    '### Action', '- bad id', '',
+  ].join('\n'));
+  writePocketFile(pocketDir, 'log-archive.md', [
+    '# ContextPocket · LOG (archive)', '',
+    '--- SESSION: 2026-10-01 ---', '',
+    '## T4 · archived-four · [eps]',
+    '--- WHEN: 2026-10-01 08:00 ---', '',
+    '### Action', '- archived', '',
+    '## T1 · archived-one-duplicate · [zeta]', '',
+    '### Action', '- should lose to live T1', '',
+  ].join('\n'));
+  resetIndexMemo();
+  buildIndex(pocketDir, { rebuild: true });
+
+  // 索引路径走 collectDocs 全量解析 + idShortcutHit；扫描路径走块定位快路径。
+  // 两者必须逐字一致——快路径若丢了 when/归档标记/畸形回落，这里当场红。
+  for (const kw of ['T1', 'T2', 'T007', 'T4', 'T999', 'T10000001', 'T99999999999999999999']) {
+    const indexed = query.searchAny(pocketDir, kw, { useIndex: true, limit: 0 });
+    const scanned = query.searchAny(pocketDir, kw, { useIndex: false, limit: 0 });
+    assert.strictEqual(indexed.total, scanned.total, kw + ' total');
+    assert.deepStrictEqual(indexed.results, scanned.results, kw + ' results');
+  }
+
+  const hit = (kw) => query.searchAny(pocketDir, kw, { useIndex: false, limit: 0 }).results[0];
+  assert.strictEqual(hit('T1').gist, 'live-one', 'log.md 优先于归档里的同号块');
+  assert.strictEqual(hit('T1').archived, false);
+  assert.strictEqual(hit('T1').when.date, '2026-11-01', '单块解析须保留 WHEN 行');
+  assert.strictEqual(hit('T2').when, null, '无 WHEN 行的块 when 为 null');
+  assert.strictEqual(hit('T007').id, 7, 'T007 归一到 T7');
+  assert.strictEqual(hit('T4').archived, true, '归档块标记 archived');
+  assert.strictEqual(hit('T4').gist, 'archived-four');
+  assert.strictEqual(hit('T10000001').gist, 'malformed-block', '畸形占位号回落全量解析仍命中');
+  assert.strictEqual(query.searchAny(pocketDir, 'T999', { useIndex: false }).total, 0, '缺失号返回空');
+});
+
 test('search: 时间窗口走索引与走扫描同结果（双路径同语义不变量不破坏）', () => {
   const { pocketDir } = makePocket('time-windows-dualpath');
   record(pocketDir, 'foo', { when: '2026-09-01 → 2026-09-03' });

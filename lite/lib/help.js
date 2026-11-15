@@ -127,13 +127,20 @@ const COMMAND_HELP = {
   turn, later changes to the files it modified, related ADRs. Derived on
   the fly, never cached, never written.
 
+  --brief (single T-id only) is the token-lean tier: it shows the key facts
+  (User / Action / Decisions & Constraints / Pitfalls / Conflicts) and folds
+  the remaining sections (Author / Commits / Preferences / Attachments /
+  Uncertain) into a one-line pointer. Omit --brief for the verbatim full turn.
+  --json always carries the complete rawText regardless of this flag.
+
   Options:
     --with-context        Append inbound links (single T-id form only)
+    --brief               Key-facts view, fold the rest (single T-id form only)
     --since <T> / --until <T>    T-id window bounds (closed)
     --from <date> / --to <date>  Date window bounds (yyyy-mm-dd, closed)
     --limit <N> / --offset <N>   Page the window listing (default limit 50; 0 = all)
     --dir <path>          Project directory
-    --json                One JSON line on stdout
+    --json                One JSON line on stdout (always complete)
 ` },
   "search": { argv: ["search"], text: `
   Usage: context-pocket-lite search <keyword> [options]
@@ -147,6 +154,11 @@ const COMMAND_HELP = {
 
   "T7" style queries jump straight to that turn.
 
+  Output is token-lean by default: one line per hit (id / gist / tags /
+  evidence). Pass --full to expand the per-hit match-snippet previews.
+  --json always carries the complete results (highlights included),
+  regardless of the human-output tier.
+
   --expand <n> (1-3) appends related turns reached by walking n hops of the
   runtime-derived link graph from the keyword hits. Expanded turns are added
   AFTER pagination (total/hasMore still count keyword hits only) and marked
@@ -157,8 +169,9 @@ const COMMAND_HELP = {
     --from <date> / --to <date>  Date window bounds (yyyy-mm-dd, closed)
     --limit <N> / --offset <N>   Page the results (default limit 50; 0 = all)
     --expand <n>          Append turns related by n graph hops (1-3; default 0)
+    --full                Expand match-snippet previews (default: compact)
     --dir <path>          Project directory
-    --json                One JSON line on stdout
+    --json                One JSON line on stdout (always complete)
 ` },
   "why": { argv: ["why"], text: `
   Usage: context-pocket-lite why <file-path> [options]
@@ -177,12 +190,17 @@ const COMMAND_HELP = {
   evidence is "linked" (with distance/via), kept separate from changed /
   mentioned. Default 0 = no expansion.
 
+  Output is token-lean by default: each hit shows its evidence badge + gist.
+  Pass --full to expand the per-hit reference-snippet previews. --json always
+  carries the complete results (references included).
+
   Options:
     --file-path <p> / --file <p> / -f <p>   Same as passing the path positionally
     --limit <N>           Max direct hits (default: 10)
     --expand <n>          Append turns related by n graph hops (1-3; default 0)
+    --full                Expand reference-snippet previews (default: compact)
     --dir <path>          Project directory
-    --json                One JSON line on stdout
+    --json                One JSON line on stdout (always complete)
 ` },
   "diff": { argv: ["diff"], text: `
   Usage: context-pocket-lite diff <T-a> <T-b> [options]
@@ -313,15 +331,15 @@ function commandHelp(key) {
   return entry.text;
 }
 
-const SERVER_INSTRUCTIONS = "ContextPocket Lite project memory. Start with context_pocket_status to see what the pocket holds, context_pocket_recall with a tId to fetch a specific T-block (add withContext for read-only inbound links; or use sinceT/untilT/fromDate/toDate to list a window of turns), and context_pocket_log_append to record a turn. Use context_pocket_diff to compare two turns, context_pocket_handoff to generate a one-page session summary, and context_pocket_log_amend to fill missing sections of an existing turn (never overwrites history). context_pocket_search / context_pocket_why accept expand (1-3) to append graph-related turns. Never hand-edit the markdown files.";
+const SERVER_INSTRUCTIONS = "ContextPocket Lite project memory. Start with context_pocket_status to see what the pocket holds, context_pocket_recall with a tId to fetch a specific T-block (add withContext for read-only inbound links; or use sinceT/untilT/fromDate/toDate to list a window of turns), and context_pocket_log_append to record a turn. Use context_pocket_diff to compare two turns, context_pocket_handoff to generate a one-page session summary, and context_pocket_log_amend to fill missing sections of an existing turn (never overwrites history). context_pocket_search / context_pocket_why accept expand (1-3) to append graph-related turns. Lite is token-lean by default: search/why render one line per hit (pass full:true to expand snippet previews), and recall accepts brief:true for a key-facts view that folds the bulky sections into a pointer; omit brief or pass full for verbatim detail. The data behind every tool is always complete — nothing is dropped, only the default rendering is lean. Never hand-edit the markdown files.";
 
 const TOOL_DESCRIPTIONS = {
   context_pocket_bootstrap: `Initialize ContextPocket/ with 5 core template files (index/log/state/code-map/readme). Auto-detects project type. Idempotent: if ContextPocket/ already exists nothing is overwritten — it reports that and recording continues. Lite creates no config.md and no assets/ directory: a fresh pocket is exactly 5 plain Markdown files, zero derived caches.`,
   context_pocket_status: `Get current ContextPocket status summary (latest T, T-block count, log size vs archive threshold, next steps).`,
   context_pocket_verify: `Run the Lite health check on ContextPocket/: file existence (the 5 core files), T-id continuity, implausible ids, T-block section format (User/Action required), header T agreement, log size vs archive_at, and the credential/PII scan. The scan grades by what a leak costs: vendor-shaped keys (sk-ant-, AKIA-, ghp_, private-key blocks, JWT) are errors; personal data (ID numbers, card numbers, phone numbers, \`password: xxxx\`) is warning-only and never blocks. Findings are masked — never quote a value you find here into the next T-block. Set "- secret_scan: false" in config.md to disable.`,
-  context_pocket_recall: `Show full details of a specific T-block (gist, tags, all sections). Archived turns (log-archive.md) are included and marked *(archived)*. Omit tId and pass a time window instead (sinceT/untilT by T-id, fromDate/toDate by WHEN date) to list the turns in that window in T-id order; page with limit/offset. Window semantics are identical to context_pocket_search: a date window excludes turns with no WHEN line, a T-id window does not. tId and a window cannot be combined. Set withContext on a single-turn recall to append read-only inbound context derived from log.md, decisions.md and code-map.md (referencing turns, later changes to the same files, related ADRs); withContext cannot be combined with a window.`,
-  context_pocket_search: `Keyword search over the whole history: T-blocks (gist + every section, archived turns included), ADRs, requirements and preferences. Lite scans the markdown sources on the fly (no index cache) with the same matching and ranking as the full package's no-index path; page with limit/offset. Pass expand (1-3) to append related turns reached by walking that many hops of the runtime-derived link graph; expanded turns come after pagination (total/hasMore still count keyword hits only) and carry expanded:true plus distance/via.`,
-  context_pocket_why: `Reverse lookup: which T-blocks mentioned this file path? Searches every section of every turn, archived turns included. Each hit carries evidence: "changed" when the path is in that turn's Action section, "mentioned" when it only appears elsewhere (Uncertain / Attachments / Conflicts / Pitfalls) — which is NOT a record of changing the file. "changed" hits come first, then "mentioned", newest first inside each group. Pass expand (1-3) to append turns related by that many graph hops; those never touched the file, so their evidence is "linked" (with distance/via).`,
+  context_pocket_recall: `Show full details of a specific T-block (gist, tags, all sections). Archived turns (log-archive.md) are included and marked *(archived)*. Omit tId and pass a time window instead (sinceT/untilT by T-id, fromDate/toDate by WHEN date) to list the turns in that window in T-id order; page with limit/offset. Window semantics are identical to context_pocket_search: a date window excludes turns with no WHEN line, a T-id window does not. tId and a window cannot be combined. Set withContext on a single-turn recall to append read-only inbound context derived from log.md, decisions.md and code-map.md (referencing turns, later changes to the same files, related ADRs); withContext cannot be combined with a window. Set brief:true on a single-turn recall for the token-lean tier — key facts (User / Action / Decisions / Pitfalls / Conflicts) with the remaining sections folded into a one-line pointer; omit brief for the verbatim full turn. brief cannot be combined with a window. The library result always carries the complete rawText.`,
+  context_pocket_search: `Keyword search over the whole history: T-blocks (gist + every section, archived turns included), ADRs, requirements and preferences. Lite scans the markdown sources on the fly (no index cache) with the same matching and ranking as the full package's no-index path; page with limit/offset. Pass expand (1-3) to append related turns reached by walking that many hops of the runtime-derived link graph; expanded turns come after pagination (total/hasMore still count keyword hits only) and carry expanded:true plus distance/via. Output is token-lean by default (one line per hit: id/gist/tags/evidence); pass full:true to expand the per-hit match-snippet previews. The underlying results are always complete — recall a turn for its full text.`,
+  context_pocket_why: `Reverse lookup: which T-blocks mentioned this file path? Searches every section of every turn, archived turns included. Each hit carries evidence: "changed" when the path is in that turn's Action section, "mentioned" when it only appears elsewhere (Uncertain / Attachments / Conflicts / Pitfalls) — which is NOT a record of changing the file. "changed" hits come first, then "mentioned", newest first inside each group. Pass expand (1-3) to append turns related by that many graph hops; those never touched the file, so their evidence is "linked" (with distance/via). Output is token-lean by default (evidence badge + gist per hit); pass full:true to expand the per-hit reference-snippet previews. The underlying results are always complete.`,
   context_pocket_graph: `Inspect the link graph derived from log.md, log-archive.md, decisions.md, requirements.md and code-map.md: turns, files, ADRs, requirements and tags as nodes; tagged / modifies / mentions / references / decided-in / supersedes / last-changed / opened-in / completed-in / implements as edges, each citing its source file and T-id, with weak evidence marked. Use it to answer "what is connected to what" beyond a single turn (recall withContext gives one turn's inbound slice; this shows the whole picture, filterable with type). Lite derives the graph at runtime on every call — no cache file, nothing is ever written; there is no rebuild/verify action here (those manage the full package's assets/graph.jsonl cache).`,
   context_pocket_log_append: `Append a new T-block to log.md. Auto-assigns T-ID, updates index. Always use this instead of manually editing log.md. Lite has no write-time conflict gate (that engine lives in the full package); pass conflicts manually if you know of one. If a section was missed, use context_pocket_log_amend to fill it in later.`,
   context_pocket_log_amend: `Fill missing sections of an existing T-block (e.g. add the User / Action that verify flags as an ERROR). Only fills sections that are absent; NEVER overwrites existing content — history is preserved verbatim. New sections are inserted in canonical order. when only fills or upgrades the WHEN line (never overwrites a precise recorded instant/range; start a T<n>-fix block to correct history).`,

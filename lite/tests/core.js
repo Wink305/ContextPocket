@@ -308,6 +308,112 @@ test('recall raw text is byte-identical through the block-hint fast path', () =>
   assert.strictEqual(fromCli.json.t.rawText, second.rawText);
 });
 
+test('Lite token-lean output tier: search/why compact by default, --full restores, recall --brief, --json always complete', () => {
+  const { projectDir, pocketDir } = makeLitePocket('token-tier');
+  // 三轮同关键词命中，每轮都有 User/Action → search 必有 highlights 片段
+  append(pocketDir, 'tier-needle alpha', { action: ['Modified src/tier.js'] });
+  append(pocketDir, 'tier-needle beta', { action: ['Modified src/tier.js'] });
+  append(pocketDir, 'tier-needle gamma', { action: ['Modified src/tier.js'], uncertain: ['Check src/tier.js later'] });
+
+  // ---- search：默认紧凑（无片段预览），--full 展开；命中行仍在 ----
+  const searchCompact = runCli(['search', 'tier-needle'], projectDir);
+  const searchFull = runCli(['search', 'tier-needle', '--full'], projectDir);
+  assert.strictEqual(searchCompact.status, 0);
+  assert.ok(searchCompact.stdout.includes('T1') && searchCompact.stdout.includes('tier-needle alpha'), searchCompact.stdout);
+  assert.ok(!searchCompact.stdout.includes('↳ ['), '默认紧凑不该有命中片段预览:\n' + searchCompact.stdout);
+  assert.ok(searchFull.stdout.includes('↳ ['), '--full 应展开命中片段预览:\n' + searchFull.stdout);
+  assert.ok(searchCompact.stdout.length < searchFull.stdout.length, '紧凑输出必须比 --full 省 token');
+
+  // --json 与分级无关：始终给全量 highlights，两种旗标下逐字一致
+  const searchJsonCompact = runCliJson(['search', 'tier-needle', '--json'], projectDir).json;
+  const searchJsonFull = runCliJson(['search', 'tier-needle', '--full', '--json'], projectDir).json;
+  assert.deepStrictEqual(searchJsonCompact, searchJsonFull);
+  assert.ok(searchJsonCompact.results.every((r) => Array.isArray(r.highlights) && r.highlights.length > 0), '--json 必须保留全量 highlights');
+
+  // MCP 同一套分级
+  const mcpSearch = runMcp(projectDir, [
+    { name: 'context_pocket_search', arguments: { keyword: 'tier-needle' } },
+    { name: 'context_pocket_search', arguments: { keyword: 'tier-needle', full: true } },
+  ]);
+  assert.ok(!mcpSearch.calls[0].isError && !mcpSearch.calls[1].isError);
+  assert.ok(!mcpSearch.calls[0].content[0].text.includes('- *['), 'MCP 默认紧凑不该有片段:\n' + mcpSearch.calls[0].content[0].text);
+  assert.ok(mcpSearch.calls[1].content[0].text.includes('- *['), 'MCP full:true 应展开片段');
+  assert.ok(mcpSearch.calls[0].content[0].text.length < mcpSearch.calls[1].content[0].text.length, 'MCP 紧凑必须更省 token');
+
+  // ---- why：默认紧凑（证据徽章 + gist），--full 展开引用片段 ----
+  const whyCompact = runCli(['why', 'src/tier.js'], projectDir);
+  const whyFull = runCli(['why', 'src/tier.js', '--full'], projectDir);
+  assert.ok(whyCompact.stdout.includes('[changed]'), whyCompact.stdout);
+  assert.ok(!whyCompact.stdout.includes('↳ ['), 'why 默认紧凑不该有引用片段:\n' + whyCompact.stdout);
+  assert.ok(whyFull.stdout.includes('↳ ['), 'why --full 应展开引用片段');
+  assert.ok(whyCompact.stdout.length < whyFull.stdout.length, 'why 紧凑必须更省 token');
+  const whyJsonCompact = runCliJson(['why', 'src/tier.js', '--json'], projectDir).json;
+  const whyJsonFull = runCliJson(['why', 'src/tier.js', '--full', '--json'], projectDir).json;
+  assert.deepStrictEqual(whyJsonCompact, whyJsonFull);
+  assert.ok(whyJsonCompact.results.some((r) => r.references.length > 0), '--json 必须保留全量 references');
+
+  const mcpWhy = runMcp(projectDir, [
+    { name: 'context_pocket_why', arguments: { filePath: 'src/tier.js' } },
+    { name: 'context_pocket_why', arguments: { filePath: 'src/tier.js', full: true } },
+  ]);
+  assert.ok(!mcpWhy.calls[0].content[0].text.includes('- *['), 'MCP why 默认紧凑');
+  assert.ok(mcpWhy.calls[1].content[0].text.includes('- *['), 'MCP why full:true 展开');
+
+  // ---- recall：默认全文逐字；--brief 关键事实 + 省略指针；--json 始终全量 ----
+  const rich = makeLitePocket('token-tier-recall');
+  appendLogBlock(rich.pocketDir, {
+    gist: 'rich turn',
+    user: ['USER-REQUEST-CONTENT'],
+    action: ['Modified src/brief.js'],
+    decisions: ['DECISION-CONTENT'],
+    pitfalls: ['PITFALL-CONTENT'],
+    conflicts: ['CONFLICT-CONTENT'],
+    preferences: ['PREF-CONTENT-ABC'],
+    attachments: ['SECRET-ATTACHMENT-XYZ screenshot.png'],
+    uncertain: ['UNCERTAIN-CONTENT-DEF'],
+    when: '2026-11-01',
+  });
+
+  const recallFull = runCli(['recall', '1'], rich.projectDir);
+  const recallBrief = runCli(['recall', '1', '--brief'], rich.projectDir);
+  assert.ok(recallFull.stdout.includes('SECRET-ATTACHMENT-XYZ'), '默认 recall 必须给逐字全文');
+  // 关键事实（含安全相关的 Pitfalls/Conflicts）保留
+  for (const key of ['USER-REQUEST-CONTENT', 'Modified src/brief.js', 'DECISION-CONTENT', 'PITFALL-CONTENT', 'CONFLICT-CONTENT']) {
+    assert.ok(recallBrief.stdout.includes(key), '--brief 应保留关键事实 ' + key + ':\n' + recallBrief.stdout);
+  }
+  // 冗余小节折叠成指针，内容不出现
+  assert.ok(recallBrief.stdout.includes('omitted') && recallBrief.stdout.includes('Attachments'), '--brief 应有省略指针');
+  for (const hidden of ['SECRET-ATTACHMENT-XYZ', 'PREF-CONTENT-ABC', 'UNCERTAIN-CONTENT-DEF']) {
+    assert.ok(!recallBrief.stdout.includes(hidden), '--brief 不该展开冗余小节内容 ' + hidden);
+  }
+  assert.ok(recallBrief.stdout.length < recallFull.stdout.length, '--brief 必须比全文省 token');
+
+  // --json 与 brief 无关：rawText 始终全量，两种旗标逐字一致
+  const recallJsonFull = runCliJson(['recall', '1', '--json'], rich.projectDir).json;
+  const recallJsonBrief = runCliJson(['recall', '1', '--brief', '--json'], rich.projectDir).json;
+  assert.deepStrictEqual(recallJsonBrief, recallJsonFull);
+  assert.ok(recallJsonBrief.t.rawText.includes('SECRET-ATTACHMENT-XYZ'), '--json 必须保留全量 rawText');
+
+  const mcpRecall = runMcp(rich.projectDir, [
+    { name: 'context_pocket_recall', arguments: { tId: 1 } },
+    { name: 'context_pocket_recall', arguments: { tId: 1, brief: true } },
+  ]);
+  assert.ok(mcpRecall.calls[0].content[0].text.includes('SECRET-ATTACHMENT-XYZ'), 'MCP 默认全文');
+  assert.ok(mcpRecall.calls[1].content[0].text.includes('omitted'), 'MCP brief 有省略指针');
+  assert.ok(!mcpRecall.calls[1].content[0].text.includes('SECRET-ATTACHMENT-XYZ'), 'MCP brief 折叠冗余小节');
+  assert.ok(mcpRecall.calls[1].content[0].text.length < mcpRecall.calls[0].content[0].text.length, 'MCP brief 更省 token');
+
+  // ---- brief 与窗口互斥（与 --with-context 同一份守卫）----
+  const briefWindowCli = runCli(['recall', '--since', '1', '--brief', '--json'], rich.projectDir);
+  assert.strictEqual(briefWindowCli.status, 1);
+  assert.match(JSON.parse(briefWindowCli.stdout).error, /brief/i);
+  const briefWindowMcp = runMcp(rich.projectDir, [
+    { name: 'context_pocket_recall', arguments: { sinceT: 1, brief: true } },
+  ]);
+  assert.strictEqual(briefWindowMcp.calls[0].isError, true);
+  assert.match(briefWindowMcp.calls[0].content[0].text, /brief/i);
+});
+
 test('CLI help, MCP tool list, version, unknown commands, and command-specific help stay in contract', () => {
   const { projectDir } = makeLitePocket('surface');
   const help = runCliJson(['help', '--json'], projectDir).json;
@@ -320,10 +426,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.6-Lite-preview2/);
+  assert.match(version.stdout, /2\.6-Lite-preview3/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.6-Lite-preview2');
-  assert.strictEqual(versionJson.display, '2.6-Lite-preview2');
+  assert.strictEqual(versionJson.version, '2.6-Lite-preview3');
+  assert.strictEqual(versionJson.display, '2.6-Lite-preview3');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);
