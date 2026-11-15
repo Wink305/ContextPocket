@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.4-preview3](https://img.shields.io/badge/version-2.4--preview3-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.5](https://img.shields.io/badge/version-2.5-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -22,18 +22,27 @@
 - Keeps requirements, code changes, decisions, pitfalls, and preferences in plain Markdown.
 - Connects turns, files, and decisions, so `recall --with-context` can show *what happened around a turn* — not just *what it said*.
 
-## ContextPocket 2.3 and ContextPocket Lite 2.5
+## ContextPocket 2.5 and ContextPocket Lite 2.7
 
-**ContextPocket 2.3** adds sourced multi-hop graph context and historical validity filtering: `search <kw> --expand 2` and `why <file> --expand 2` trace related turns, files and decisions up to three hops, while `--as-of <T>` filters the graph context to facts valid at that turn. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
+**ContextPocket 2.5** keeps sourced multi-hop graph context and historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), and now derives a byte-identical link graph to Lite (6 node types / 10 edge types) with faster exact `T<n>` lookup. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories.
 
-**ContextPocket Lite 2.5** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. Exact `T<n>` searches avoid parsing unrelated metadata. New in 2.5: `log amend`, `diff`, `handoff`, and `--expand` multi-hop context on `search` / `why`.
+**ContextPocket Lite 2.7** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. New in 2.7: token-saving output tiers (`--brief` / `--full`, `--json` always complete) on top of `log amend`, `diff`, `handoff` and `--expand` multi-hop context.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
-| **2.3** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
-| **2.5 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
+| **2.5** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
+| **2.7 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
 
-Download the GitHub Release archives: [ContextPocket 2.3](https://github.com/Wink305/ContextPocket/releases/download/2.3/ContextPocket-2.3.zip) · [ContextPocket Lite 2.5](https://github.com/Wink305/ContextPocket/releases/download/2.5-lite/ContextPocket-2.5-Lite.zip) — current tags `2.3` / `2.5-lite`. Each archive includes its `package.json`, README and license; no npm registry release is involved.
+### Which version should I download?
+
+Download the latest **stable** Release — it is what the `main` branch and the version badge above track (`package.json` = `2.5`).
+
+| Edition | Stable version | Download |
+|---|---|---|
+| **Full** | `2.5` | [ContextPocket-2.5.zip](https://github.com/Wink305/ContextPocket/releases/download/2.5/ContextPocket-2.5.zip) |
+| **Lite** | `2.7-lite` | [ContextPocket-2.7-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.7-lite/ContextPocket-2.7-Lite.zip) |
+
+Each archive includes its `package.json`, README and license; no npm registry release is involved. Between stable releases, development lands on `main` under preview version tags — clone the repo (see [Quick Start](#1-install)) to try it early.
 
 🚀 **Getting started**
 

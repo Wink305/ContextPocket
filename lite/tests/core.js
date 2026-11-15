@@ -426,10 +426,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.6-Lite-preview3/);
+  assert.match(version.stdout, /2\.7-lite/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.6-Lite-preview3');
-  assert.strictEqual(versionJson.display, '2.6-Lite-preview3');
+  assert.strictEqual(versionJson.version, '2.7');
+  assert.strictEqual(versionJson.display, '2.7-lite');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);

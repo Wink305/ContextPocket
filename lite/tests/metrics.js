@@ -135,12 +135,13 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
     ['CLI commands', liteCommands, mainCommands, 11, 28],
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
-    ['package files', litePack.files, mainPack.files, 28, 61],
+    ['package files', litePack.files, mainPack.files, 28, 62],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    // 121.7 / 413.3：2.6-Lite-preview3 / 2.4-preview3 定版实测（Phase 1 精确 T-id
-    // 块定位捷径 + Phase 2 Lite 省 token 输出分级 + preview3 版本抄本/CHANGELOG 落定
-    // 后的体积），按「基线随每次定版更新」追平。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 121.7, 413.3],
+    // 122.0 / 419.1：2.7-lite / 2.5 稳定版定版实测（preview 线冻结 + CHANGELOG 分层：
+    // 旧版施工记录逐字移入 docs/dev-notes/changelog-archive.md，随 docs/ 白名单发布，
+    // 完整包 62 文件；主 CHANGELOG 每版只留摘要+指针，双语 README 补稳定版下载表）。
+    // Lite 不含根 docs/，28 文件。按「基线随每次定版更新」追平。
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 122.0, 419.1],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

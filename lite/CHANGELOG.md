@@ -2,6 +2,18 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.7-lite] - 2026-11-15
+
+### ContextPocket Lite 2.7 — 省 token 输出分级 + 精确 T-id 捷径（稳定版）
+
+> 把 `2.6-Lite-preview` / `preview2` / `preview3` 三轮预览冻结为稳定 `2.7`（对外 `2.7-lite`）；
+> 主包同日发 `2.5`。能力面与 preview3 一致，零缓存、零依赖、11 命令 / 11 工具。
+
+- **省 token 输出分级（只动渲染不动数据）**：`search` / `why` 默认每命中一行（id/gist/tags/证据），`--full` 恢复 snippet 预览；`recall` 默认完整、`--brief` 只看关键事实（User / Action / Decisions & Constraints / Pitfalls / Conflicts），其余折叠成一行指针；`--json` 永远完整。CLI 与 MCP 双侧同源，help / 工具描述 / SERVER_INSTRUCTIONS 写明分级。
+- **精确 T-id 块定位捷径（两包同源）**：先按 plausible header 定位目标块、只解析那一块并重建 session，`log.md` 优先、畸形 id 回退全量；无索引 1000 轮夹具 ~5.5×。新增「快路径与索引全量解析逐字一致」回归锁。
+- **图扩展安全上限**：`--expand` 种子去重、只认真实节点、最多 100 个，截断如实提示（`expansionTruncated` / `expanded.truncated`）；两包整图逐字同源，compat `deepStrictEqual` 8/8 严格绿。
+- **升级动作**：无（数据格式仍 v2）。**破坏性**：无。
+
 ## [2.6-Lite-preview3] - 2026-11-14
 
 ### 精确 T-id 块定位捷径 + 省 token 输出分级
