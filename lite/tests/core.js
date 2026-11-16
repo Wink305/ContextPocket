@@ -426,10 +426,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.10-lite/);
+  assert.match(version.stdout, /2\.11-lite/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.10');
-  assert.strictEqual(versionJson.display, '2.10-lite');
+  assert.strictEqual(versionJson.version, '2.11');
+  assert.strictEqual(versionJson.display, '2.11-lite');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);
@@ -483,4 +483,70 @@ test('handoff --read prints section 0 and refuses a stale view', () => {
 
   const forced = runCli(['handoff', '--read', '--force'], projectDir);
   assert.strictEqual(forced.status, 0);
+});
+
+test('isolated runs refuse every pocket command and leak no history', () => {
+  const { projectDir, pocketDir } = makeLitePocket('isolate');
+  const isolate = require(path.join(ROOT, 'lib', 'isolate'));
+  const { spawnSync } = require('child_process');
+  const bin = path.join(ROOT, 'bin', 'context-pocket-lite.js');
+  const run = (argv, env) => spawnSync(process.execPath, [bin].concat(argv), {
+    cwd: projectDir, encoding: 'utf8', env: Object.assign({}, process.env, env || {}),
+  });
+  const gist = 'UNIQUE-LITE-GIST-7741';
+  append(pocketDir, gist);
+  const marker = path.join(projectDir, isolate.ISOLATE_MARKER);
+  fs.writeFileSync(marker, '');
+  for (const argv of [['recall', '1'], ['search', 'UNIQUE'], ['handoff', '--read'], ['status']]) {
+    const r = run(argv);
+    const out = (r.stdout || '') + (r.stderr || '');
+    assert.ok(!out.includes(gist), 'leak: ' + out.slice(0, 160));
+    assert.match(out, /ISOLATED/);
+    assert.strictEqual(r.status, argv[0] === 'status' ? 0 : 1);
+  }
+  const viaDir = spawnSync(process.execPath, [bin, 'recall', '1', '--dir', projectDir, '--json'], {
+    cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env),
+  });
+  assert.strictEqual(viaDir.status, 1);
+  assert.ok(!viaDir.stdout.includes(gist), '--dir isolated leak: ' + viaDir.stdout.slice(0, 160));
+  assert.strictEqual(JSON.parse(viaDir.stdout.trim()).source, 'marker');
+  fs.unlinkSync(marker);
+  assert.strictEqual(run(['recall', '1']).status, 0);
+  const byEnv = run(['recall', '1', '--json'], { CONTEXTPOCKET_ISOLATED: '1' });
+  assert.strictEqual(JSON.parse(byEnv.stdout.trim()).source, 'env');
+});
+
+test('isolated Lite MCP refuses tools over the wire and status reports isolation only', () => {
+  const { projectDir, pocketDir } = makeLitePocket('mcp-isolate');
+  const isolate = require(path.join(ROOT, 'lib', 'isolate'));
+  const gist = 'UNIQUE-LITE-MCP-GIST-6612';
+  append(pocketDir, gist);
+  const marker = path.join(projectDir, isolate.ISOLATE_MARKER);
+  fs.writeFileSync(marker, '');
+  const textOf = (res) => res.content.map((c) => c.text).join('\n');
+
+  const mcp = runMcp(projectDir, [
+    { name: 'context_pocket_recall', arguments: { tId: 1 } },
+    { name: 'context_pocket_log_append', arguments: { gist: 'pollution', user: 'u', action: 'a' } },
+    { name: 'context_pocket_status' },
+  ]);
+  const recall = mcp.calls[0];
+  assert.strictEqual(recall.isError, true, '隔离态 recall 必须是 isError');
+  assert.strictEqual(JSON.parse(textOf(recall)).error, 'isolated');
+  assert.strictEqual(JSON.parse(textOf(recall)).source, 'marker');
+  assert.ok(!JSON.stringify(recall).includes(gist), '隔离态 Lite MCP 漏了历史');
+  const appendRes = mcp.calls[1];
+  assert.strictEqual(appendRes.isError, true, '隔离态写入必须被拒');
+  assert.strictEqual(JSON.parse(textOf(appendRes)).error, 'isolated');
+  const status = mcp.calls[2];
+  assert.ok(!status.isError, 'status 是唯一安全例外');
+  const sp = JSON.parse(textOf(status));
+  assert.strictEqual(sp.ok, true);
+  assert.strictEqual(sp.isolated, true);
+  assert.ok(!JSON.stringify(status).includes(gist), 'status 不该带任何历史');
+
+  fs.unlinkSync(marker);
+  const lifted = runMcp(projectDir, [{ name: 'context_pocket_recall', arguments: { tId: 1 } }]);
+  assert.ok(!lifted.calls[0].isError);
+  assert.match(textOf(lifted.calls[0]), /UNIQUE-LITE-MCP-GIST-6612/, '解除隔离后 recall 经 wire 恢复');
 });

@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.11-lite] - 2026-11-16
+
+### ContextPocket Lite 2.11 — 隔离开关（稳定版）
+
+> Lite 独立版本线发 `2.11`（对外展示 `2.11-lite`，稳定通道）；主包版本线同日发 `2.11`。
+> 仍然零缓存、零依赖、11 命令 / 11 工具。细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+- **隔离开关**：测试文件夹里的项目 / 跑一次性实验 / CI 评测时，本轮完全不读旧上下文、也不把测试轮次写回真实历史。三层按强度递增：环境变量 `CONTEXTPOCKET_ISOLATED`、项目根标记 `.contextpocket-isolate`、物理改名 `ContextPocket.isolated/`。CLI `main()` 与 MCP `tools/call` 各一处统一拦下所有读写，`status` 是唯一例外（只回 `{ok,isolated,source}`，不碰历史）。
+- **两包同源**：`lib/isolate.js` 与主包逐字一致，`detectIsolation` 结果由 compat `deepStrictEqual` 锁死。
+- **诚实边界**：口袋是纯 Markdown，挡不住主动翻目录的 Agent；要物理级保证用第三层。SKILL.md 加 HARD RULE 要求 Agent 隔离态不发起读取。
+- **升级动作**：无（数据格式仍 v2）。**破坏性**：无（命令 / 工具面不变）。
+
+## [2.11] - 2026-11-16
+
+### ContextPocket 2.11 — 隔离开关：测试运行完全不读旧上下文
+
+- **隔离开关（新模块 `lib/isolate.js`，两包逐字同源）**：面向「测试文件夹里的项目 / 一次性实验 / CI 评测」——本轮既不能读到之前的上下文，也不能把测试轮次写回真实历史。三层开关按强度递增：① 环境变量 `CONTEXTPOCKET_ISOLATED=1`（一条命令 / 这次 CI，不落盘）；② 项目根标记文件 `.contextpocket-isolate`（touch 即开、删掉即关，向上最多找 5 层）；③ 物理隔离 `ContextPocket/` → `ContextPocket.isolated/`（常规路径下历史不在原位，工具检测到该目录同样进入隔离态）。
+- **一处拦住两个入口**：CLI `main()` 在碰任何口袋文件之前统一拦截（`bin/context-pocket.js`），MCP `handleToolsCall` 在工具分发之前统一拦截（`mcp-server.js`）；读、写都不放行。`status` 是唯一例外，只报隔离态本身 `{ok:true,isolated:true,source,reason}`，一个字节的历史都不读；`--version` / `help` 照常。`--json` 出口给机器可读的 `{ok:false,error:'isolated',source,reason,command,message}`，CLI 退 1、MCP `isError:true`。
+- **跟着 `--dir` 走**：CLI 隔离检测的目标与命令一致——`getProjectDir(options)` + `findPocketDir`，`recall --dir <被隔离项目>` 从别处 cwd 也拦得住，不会绕过门读到历史。MCP 工具全程以进程 cwd 定位项目（无 per-tool `dir`），故按 cwd 检测。
+- **诚实边界**：口袋是纯 Markdown，Agent 有文件系统访问权时没有任何开关能阻止它主动翻目录；要物理级保证用第三层（或把目录移出项目）。SKILL.md / lite SKILL.md 加 HARD RULE，要求 Agent 隔离态把项目当全新、不发起任何读取。
+- **回归与基线**：两包 CLI 隔离用例（标记 / env / 物理三层 + `--dir` 绕过回归 + 解除后恢复）、两包 MCP 经 wire 拒绝用例（`isError` + 不漏 gist + `status` 只报隔离）、compat「两包 `detectIsolation` 逐字一致」；metrics 追平 30 / 68 文件与 130.2 / 440.6 kB（新增 `lib/isolate.js` 各 +1，惰性 require 冷启动模块数仍 17）；四门禁全绿。
+- **升级动作**：无。**破坏性**：无（数据格式仍 v2，命令 / 工具面不变）。
+
 ## [2.10-lite] - 2026-11-15
 
 ### ContextPocket Lite 2.10 — 读侧接手视图 + 定位收口

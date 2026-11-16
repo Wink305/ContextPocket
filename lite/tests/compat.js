@@ -288,3 +288,16 @@ test('handoff --read view is identical across both packages', () => {
   assert.strictEqual(liteView.ok, true);
   assert.match(liteView.lines.join('\n'), /STOP CONDITION/);
 });
+
+test('isolation detection is identical across both packages', () => {
+  const fsx = require('fs');
+  const made = makeLitePocket('compat-isolate');
+  const marker = path.join(made.projectDir, '.contextpocket-isolate');
+  fsx.writeFileSync(marker, '');
+  const liteState = require(path.join(ROOT, 'lib', 'isolate')).detectIsolation({ cwd: made.projectDir });
+  const mainState = require(path.join(MAIN_ROOT, 'lib', 'isolate')).detectIsolation({ cwd: made.projectDir });
+  assert.deepStrictEqual(mainState, liteState);
+  assert.strictEqual(liteState.isolated, true);
+  assert.strictEqual(liteState.source, 'marker');
+  fsx.unlinkSync(marker);
+});

@@ -408,6 +408,23 @@ function handleToolsList(id) {
 function handleToolsCall(id, params) {
   const { name, arguments: args } = params;
 
+  // 隔离开关：统一在工具分发之前拦下，任何工具都拿不到历史内容。
+  const isolate = require('./lib/isolate');
+  const isoState = isolate.detectIsolation({ cwd: process.cwd() });
+  if (isoState.isolated) {
+    if (name === 'context_pocket_status') {
+      sendResponse(id, {
+        content: [{ type: 'text', text: JSON.stringify(isolate.isolatedStatusPayload(isoState)) }],
+      });
+      return;
+    }
+    sendResponse(id, {
+      content: [{ type: 'text', text: JSON.stringify(isolate.isolatedPayload(isoState, name)) }],
+      isError: true,
+    });
+    return;
+  }
+
   try {
     let result;
     switch (name) {

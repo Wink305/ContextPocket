@@ -6,7 +6,7 @@ description: >
   and everyday conversation memory: 11 commands / 11 MCP tools, zero caches, zero dependencies.
   Same pocket format as the full package — a Lite pocket can be handed to the full
   package at any time for archive / migrate / repair / index / hub.
-version: 2.10
+version: 2.11
 format: v2
 tags: [dev-tools, context, memory, productivity, agent-handoff, lite]
 ---
@@ -22,6 +22,8 @@ Persist per-turn dev context into `<project-root>/ContextPocket/` so any AI agen
 ## Usage boundary
 
 ContextPocket does NOT store secrets, credentials, or production data — it stores **dev context** (what was done, why, what's locked in).
+
+- **Isolated runs (HARD RULE).** When the user is testing a project in a folder, running a one-off experiment, or evaluating in CI, the previous context must not reach you. If `CONTEXTPOCKET_ISOLATED` is set, a `.contextpocket-isolate` marker exists in the project root, or a `ContextPocket.isolated/` directory exists: treat the project as **brand new**. Do NOT open any `ContextPocket/` file, do NOT call `recall` / `search` / `why` / `graph` / `diff` / `handoff` / `verify`, do NOT read `handoff.md`, and do NOT record any turn. The CLI and MCP tools will refuse anyway — the point is to not even try. `status --json` is safe: it returns only `{ ok, isolated: true, source }` and no history. To lift it, remove the marker / unset the env var and rename the quarantined directory back to `ContextPocket/`.
 
 - **What to record:** every substantive turn (new requirement, code change, decision, preference, pitfall).
 - **What NOT to record:** tokens, secrets, production data, build artifacts.

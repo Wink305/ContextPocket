@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.10
+version: 2.11
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -25,6 +25,8 @@ Persist **complete** per-turn dev context into `<project-root>/ContextPocket/` s
 ## Usage boundary
 
 ContextPocket does NOT store secrets, credentials, or production data — it stores **dev context** (what was done, why, what's locked in). Use it as a project-local memory layer, not as a database.
+
+- **Isolated runs (HARD RULE).** When the user is testing a project in a folder, running a one-off experiment, or evaluating in CI, the previous context must not reach you. If `CONTEXTPOCKET_ISOLATED` is set, a `.contextpocket-isolate` marker exists in the project root, or a `ContextPocket.isolated/` directory exists: treat the project as **brand new**. Do NOT open any `ContextPocket/` file, do NOT call `recall` / `search` / `why` / `graph` / `diff` / `handoff` / `verify`, do NOT read `handoff.md`, and do NOT record any turn. The CLI and MCP tools will refuse anyway — the point is to not even try. `status --json` is safe: it returns only `{ ok, isolated: true, source }` and no history. To lift it, remove the marker / unset the env var and rename the quarantined directory back to `ContextPocket/`.
 
 - **What to record:** every substantive turn (new requirement, code change, conflict, decision, preference, pitfall, attachment).
 - **What NOT to record:** tokens, secrets, production data, build artifacts, transient logs.

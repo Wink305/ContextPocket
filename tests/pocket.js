@@ -628,6 +628,63 @@ test('cross-agent handoff scenario: read view, stale guard, forced read', () => 
   assert.strictEqual(forcedCli.status, 0);
 });
 
+test('isolated runs block every pocket read and write, and lift cleanly', () => {
+  const { projectDir, pocketDir } = makePocket('isolate');
+  const isolate = require(path.join(ROOT, 'lib', 'isolate'));
+  const bin = path.join(ROOT, 'bin', 'context-pocket.js');
+  const run = (argv, env) => spawnSync(process.execPath, [bin].concat(argv), {
+    cwd: projectDir, encoding: 'utf8', env: Object.assign({}, process.env, env || {}),
+  });
+  const gist = 'UNIQUE-HISTORY-GIST-9317';
+  record(pocketDir, gist);
+  writer.generateHandoff(pocketDir);
+
+  const marker = path.join(projectDir, isolate.ISOLATE_MARKER);
+  fs.writeFileSync(marker, '');
+  for (const argv of [['recall', '1'], ['search', 'UNIQUE'], ['handoff', '--read'], ['log', 'append', '--gist', 'pollution'], ['verify'], ['status']]) {
+    const r = run(argv);
+    const out = (r.stdout || '') + (r.stderr || '');
+    assert.ok(!out.includes(gist), 'isolated ' + argv.join(' ') + ' leaked history: ' + out.slice(0, 200));
+    assert.match(out, /ISOLATED/);
+    assert.strictEqual(r.status, argv[0] === 'status' ? 0 : 1, argv.join(' ') + ' refusal');
+  }
+
+  const json = run(['recall', '1', '--json']);
+  assert.strictEqual(json.status, 1);
+  const payload = JSON.parse(json.stdout.trim().split('\n')[0]);
+  assert.strictEqual(payload.error, 'isolated');
+  assert.strictEqual(payload.source, 'marker');
+  const statusJson = run(['status', '--json']);
+  assert.strictEqual(statusJson.status, 0);
+  assert.strictEqual(JSON.parse(statusJson.stdout.trim()).isolated, true);
+
+  // --dir 指向被隔离项目、进程 cwd 在别处：门跟着 --dir 走，同样拦下、不漏历史。
+  const viaDir = spawnSync(process.execPath, [bin, 'recall', '1', '--dir', projectDir, '--json'], {
+    cwd: ROOT, encoding: 'utf8', env: Object.assign({}, process.env),
+  });
+  assert.strictEqual(viaDir.status, 1);
+  assert.ok(!viaDir.stdout.includes(gist), '--dir isolated leak: ' + viaDir.stdout.slice(0, 200));
+  assert.strictEqual(JSON.parse(viaDir.stdout.trim().split('\n')[0]).error, 'isolated');
+
+  fs.unlinkSync(marker);
+  const restored = run(['recall', '1']);
+  assert.strictEqual(restored.status, 0);
+  assert.match(restored.stdout, /UNIQUE-HISTORY-GIST-9317/);
+
+  const byEnv = run(['recall', '1'], { CONTEXTPOCKET_ISOLATED: '1' });
+  assert.strictEqual(byEnv.status, 1);
+  assert.ok(!byEnv.stdout.includes(gist));
+  const envJson = run(['recall', '1', '--json'], { CONTEXTPOCKET_ISOLATED: '1' });
+  assert.strictEqual(JSON.parse(envJson.stdout.trim()).source, 'env');
+
+  const quarantined = path.join(projectDir, isolate.QUARANTINE_DIR);
+  fs.renameSync(pocketDir, quarantined);
+  const byQuarantine = run(['recall', '1', '--json']);
+  assert.strictEqual(byQuarantine.status, 1);
+  assert.strictEqual(JSON.parse(byQuarantine.stdout.trim()).source, 'quarantine');
+  fs.renameSync(quarantined, pocketDir);
+});
+
 test('lite mode creates fewer files and writers still fill what is missing', () => {
   const { pocketDir } = makePocket('lite', { mode: 'lite' });
   const files = fs.readdirSync(pocketDir);

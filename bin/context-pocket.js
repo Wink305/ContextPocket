@@ -2551,6 +2551,25 @@ function main() {
     return;
   }
 
+  // 隔离开关：在碰任何口袋文件之前统一拦下，读写都不放行。
+  // status 是唯一例外，但它只报隔离状态本身，一个字节的历史都不读。
+  // 检测目标与命令一致：--dir 指向哪个项目就查哪个，而不是只看进程 cwd，
+  // 否则 `recall --dir <被隔离的项目>` 会从别处 cwd 绕过这道门读到历史。
+  const isolate = require('../lib/isolate');
+  const isoProjectDir = getProjectDir(args.options);
+  const isoState = isolate.detectIsolation({ cwd: isoProjectDir, pocketDir: findPocketDir(isoProjectDir) });
+  if (isoState.isolated) {
+    if (cmd === 'status') {
+      if (args.options.json) emitJson(isolate.isolatedStatusPayload(isoState));
+      console.log('\n  ⛔ ISOLATED (' + isoState.source + ') — ' + isoState.reason + '\n');
+      return;
+    }
+    if (args.options.json) emitJson(isolate.isolatedPayload(isoState, cmd), 1);
+    console.log('\n  ⛔ ' + isolate.isolationMessage(isoState, cmd) + '\n');
+    process.exitCode = 1;
+    return;
+  }
+
   // bootstrap
   if (cmd === 'bootstrap') {
     if (args.options.help || args.options.h) {

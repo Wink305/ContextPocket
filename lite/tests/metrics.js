@@ -135,13 +135,12 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
     ['CLI commands', liteCommands, mainCommands, 11, 28],
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
-    ['package files', litePack.files, mainPack.files, 29, 67],
+    ['package files', litePack.files, mainPack.files, 30, 68],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    // 127.3 / 436.0：2.10-lite / 2.10 之后「定位收口 + 交接剧本 + 格式规范」实测。
-    // 主包 docs/ 新增 handoff-scenario.md / format-spec.md（+2）、scripts/ 新增
-    // verify-format.js（+1），故 64→67；Lite 白名单不含 docs/ 与 scripts/，仍 29。
-    // 按「基线随每次定版更新」追平。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 127.3, 436.0],
+    // 130.7 / 442.4：2.11 定版实测（新增隔离开关 lib/isolate.js，两包各 +1 文件，
+    // 29→30 / 67→68），CLI main() 与 MCP tools/call 各接一道门。isolate.js 是
+    // 函数内惰性 require，冷启动不加载，模块数仍 17。按「基线随每次定版更新」追平。
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 130.7, 442.4],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

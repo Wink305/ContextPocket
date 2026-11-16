@@ -1040,3 +1040,39 @@ test('mcp: tools/list advertises context_pocket_graph with action/type/limit', a
   assert.strictEqual(listed.inputSchema.properties.limit.default, 100);
   assert.strictEqual(listed.description.length > 100, true, '描述要讲清缓存语义与三个 action');
 });
+
+test('mcp: isolated project refuses every tool over the wire, status reports isolation only', () => {
+  const { projectDir } = makePocket('mcp-isolate');
+  const isolate = require(path.join(ROOT, 'lib', 'isolate'));
+  const gist = 'UNIQUE-MCP-GIST-5523';
+  const marker = path.join(projectDir, isolate.ISOLATE_MARKER);
+  const textOf = (res) => res.content.map((c) => c.text).join('\n');
+
+  // 先在正常态经 MCP 种下一轮历史，再置标记进入隔离。
+  return mcpCall(projectDir, 'context_pocket_log_append', { gist, user: 'u', action: 'a', author: 'agent' }, 2).then(() => {
+    fs.writeFileSync(marker, '');
+    return mcpCallRaw(projectDir, 'context_pocket_recall', { tId: 1 });
+  }).then((recall) => {
+    assert.strictEqual(recall.isError, true, '隔离态 recall 必须是 isError');
+    const payload = JSON.parse(textOf(recall));
+    assert.strictEqual(payload.error, 'isolated');
+    assert.strictEqual(payload.source, 'marker');
+    assert.ok(!JSON.stringify(recall).includes(gist), '隔离态 MCP 漏了历史: ' + textOf(recall).slice(0, 200));
+    return mcpCallRaw(projectDir, 'context_pocket_log_append', { gist: 'pollution', user: 'u', action: 'a' });
+  }).then((append) => {
+    assert.strictEqual(append.isError, true, '隔离态写入必须被拒');
+    assert.strictEqual(JSON.parse(textOf(append)).error, 'isolated');
+    return mcpCallRaw(projectDir, 'context_pocket_status', {});
+  }).then((status) => {
+    assert.ok(!status.isError, 'status 是唯一安全例外');
+    const payload = JSON.parse(textOf(status));
+    assert.strictEqual(payload.ok, true);
+    assert.strictEqual(payload.isolated, true);
+    assert.strictEqual(payload.source, 'marker');
+    assert.ok(!JSON.stringify(status).includes(gist), 'status 不该带任何历史');
+    fs.unlinkSync(marker);
+    return mcpCall(projectDir, 'context_pocket_recall', { tId: 1 }, 2);
+  }).then((text) => {
+    assert.match(text, /UNIQUE-MCP-GIST-5523/, '解除隔离后 recall 经 wire 恢复');
+  });
+});

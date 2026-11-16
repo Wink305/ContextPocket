@@ -2,6 +2,19 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.11-lite] - 2026-11-16
+
+### ContextPocket Lite 2.11 — 隔离开关（稳定版）
+
+> Lite 独立版本线发 `2.11`（对外 `2.11-lite`）；主包同日发 `2.11`。
+> 仍然零缓存、零依赖、11 命令 / 11 工具。
+
+- **隔离开关（`lib/isolate.js`，与主包逐字同源）**：测试项目 / 一次性实验 / CI 评测时，本轮不读旧上下文、也不写回真实历史。三层：环境变量 `CONTEXTPOCKET_ISOLATED`、项目根标记 `.contextpocket-isolate`、物理改名 `ContextPocket.isolated/`。CLI `main()` 与 MCP `tools/call` 各一处拦下所有读写，`status` 唯一例外（只回 `{ok,isolated,source}`）。
+- **跟着 `--dir` 走**：CLI 检测目标与命令一致，`recall --dir <被隔离项目>` 从别处 cwd 也拦得住。
+- **诚实边界**：纯 Markdown 挡不住主动翻目录的 Agent，物理级保证用第三层；SKILL.md 加 HARD RULE。
+- **回归锁**：CLI 三层 + `--dir` 绕过 + 解除恢复用例、MCP 经 wire 拒绝用例、compat 两包 `detectIsolation` 逐字一致；四门禁全绿。
+- **升级动作**：无。**破坏性**：无（数据格式仍 v2）。
+
 ## [2.10-lite] - 2026-11-15
 
 ### ContextPocket Lite 2.10 — 读侧接手视图（稳定版）
