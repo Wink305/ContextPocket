@@ -2727,6 +2727,107 @@ test('links: searchNodeIds maps R rows to requirement graph seeds', () => {
   );
 });
 
+// 一张可控的合成图：T1 同时改一个「专一文件」和一个「枢纽文件」。
+// 专一文件只再连 T2；枢纽文件连 T3..T10 八个轮次。用来锁住 PageRank 的
+// 枢纽摊薄效应 —— 经专一文件到达的 T2 必须比经枢纽到达的 T3 更相关。
+function hubGraph() {
+  const node = (id, type) => ({ id, type, label: id, archived: false, recordedAt: null, validFrom: null, validTo: null });
+  const edge = (from, to, type, evidence) => ({ from, to, type, evidence: evidence || 'strong', source: 'log.md', tId: 1, recordedAt: null, validFrom: null, validTo: null, via: null });
+  const nodes = [node('T1', 'turn'), node('T2', 'turn'), node('file:specific', 'file'), node('file:hub', 'file')];
+  const edges = [edge('T1', 'file:specific', 'modifies'), edge('T1', 'file:hub', 'modifies'), edge('file:specific', 'T2', 'modifies')];
+  for (let i = 3; i <= 10; i++) {
+    nodes.push(node('T' + i, 'turn'));
+    edges.push(edge('file:hub', 'T' + i, 'modifies'));
+  }
+  return { nodes, edges, stats: { nodes: nodes.length, edges: edges.length } };
+}
+
+test('links: rankNeighbors is deterministic, mass-conserving, personalization-anchored, and hub-damped', () => {
+  const graph = hubGraph();
+  const scores = links.rankNeighbors(graph, ['T1']);
+  // 确定性：同一张图两次跑逐字一致（固定迭代、排序遍历、无浮点提前收敛）
+  assert.deepStrictEqual(scores, links.rankNeighbors(graph, ['T1']));
+  // 质量守恒：personalization 总和为 1，dangling 回流后每轮仍守恒
+  let sum = 0;
+  for (const v of scores.values()) sum += v;
+  assert.ok(Math.abs(sum - 1) < 1e-9, `rank 总和应守恒为 1，实际 ${sum}`);
+  // 种子锚定：personalization 真的影响分布 —— 以 T1 为种子时 T1 的分值，
+  // 必须高于以远端 T3 为种子时 T1 的分值（否则种子向量等于没起作用）。
+  const seededElsewhere = links.rankNeighbors(graph, ['T3']);
+  assert.ok(scores.get('T1') > seededElsewhere.get('T1'),
+    'personalization 种子应当抬高自身相关度');
+  // 枢纽摊薄：经专一文件到达的 T2 比经八叉枢纽到达的 T3 更相关
+  assert.ok(scores.get('T2') > scores.get('T3'),
+    `专一邻居 T2 (${scores.get('T2')}) 应高于枢纽邻居 T3 (${scores.get('T3')})`);
+  // 弱证据不参与：把 T1—file:specific 改成 mentions，T2 的相关度应跌到枢纽邻居之下
+  const weakGraph = hubGraph();
+  weakGraph.edges.find((e) => e.from === 'T1' && e.to === 'file:specific').evidence = 'weak';
+  const weakScores = links.rankNeighbors(weakGraph, ['T1']);
+  assert.ok(weakScores.get('T2') < scores.get('T2'), '弱证据边不应再给 T2 输送相关度');
+});
+
+test('links: rankNeighbors honors asOf and falls back to uniform personalization without seeds', () => {
+  const graph = hubGraph();
+  // 没有种子：personalization 均匀铺到所有节点，仍守恒为 1
+  const uniform = links.rankNeighbors(graph, []);
+  let sum = 0;
+  for (const v of uniform.values()) sum += v;
+  assert.ok(Math.abs(sum - 1) < 1e-9);
+  // asOf 过滤：给 T2 的入边一个未来的 validFrom，asOf=1 时 T2 不该被激活
+  const timed = hubGraph();
+  timed.nodes.find((n) => n.id === 'T2').validFrom = 5;
+  const at1 = links.rankNeighbors(timed, ['T1'], { asOf: 1 });
+  assert.ok(!at1.has('T2'), 'asOf 之前的未来节点不参与排名');
+  const at5 = links.rankNeighbors(timed, ['T1'], { asOf: 5 });
+  assert.ok(at5.has('T2'), 'asOf 到达 validFrom 后节点重新参与');
+});
+
+test('links: expandGraph --rank reorders by relevance and keeps the rank-off path byte-identical', () => {
+  const { pocketDir } = makeLinkedPocket('links-rank-expand');
+  const graph = links.deriveLinks(pocketDir);
+  const plain = links.expandGraph(graph, ['T1'], 3);
+  // rank-off：节点不带 rank 字段，顺序仍是 distance → id（旧行为逐字不变）
+  assert.ok(plain.results.every((n) => !('rank' in n)), '默认路径不得长出 rank 字段');
+  const plainOrder = plain.results.map((n) => n.id);
+  assert.deepStrictEqual(plainOrder, [...plainOrder].sort((a, b) => {
+    const da = plain.results.find((n) => n.id === a).distance;
+    const db = plain.results.find((n) => n.id === b).distance;
+    return da - db || a.localeCompare(b);
+  }), '默认顺序必须是 distance → id');
+
+  const ranked = links.expandGraph(graph, ['T1'], 3, { rank: true });
+  // 同一组节点（rank 只改顺序，不改成员），每个都带分值，按分值降序
+  assert.deepStrictEqual(
+    ranked.results.map((n) => n.id).sort(),
+    plain.results.map((n) => n.id).sort(),
+    'rank 不增删节点，只重排'
+  );
+  assert.ok(ranked.results.every((n) => typeof n.rank === 'number'));
+  for (let i = 1; i < ranked.results.length; i++) {
+    assert.ok(ranked.results[i - 1].rank >= ranked.results[i].rank, 'rank 结果必须按分值降序');
+  }
+  // 确定性：重跑逐字一致
+  assert.deepStrictEqual(ranked, links.expandGraph(graph, ['T1'], 3, { rank: true }));
+});
+
+test('links: buildContext --rank reorders buckets by relevance, rank-off stays verbatim', () => {
+  const { pocketDir } = makeLinkedPocket('links-rank-context');
+  const plain = links.buildContext(pocketDir, 1);
+  // rank-off 与旧判据逐字一致（这条锁住「关掉 rank 输出不变」）
+  assert.deepStrictEqual(plain.referencedBy.map((r) => r.ref), ['T2']);
+  assert.deepStrictEqual(plain.laterChanges.map((c) => c.tId), [2, 3]);
+  assert.deepStrictEqual(plain.decisions.map((d) => d.adr), ['ADR-1']);
+
+  const ranked = links.buildContext(pocketDir, 1, { rank: true });
+  // 成员不变，只是顺序可能按相关度重排
+  assert.deepStrictEqual(ranked.referencedBy.map((r) => r.ref).sort(), plain.referencedBy.map((r) => r.ref).sort());
+  assert.deepStrictEqual(ranked.laterChanges.map((c) => c.tId).sort(), plain.laterChanges.map((c) => c.tId).sort());
+  assert.deepStrictEqual(ranked.decisions.map((d) => d.adr).sort(), plain.decisions.map((d) => d.adr).sort());
+  assert.deepStrictEqual(ranked.relatedFiles.map((f) => f.file).sort(), plain.relatedFiles.map((f) => f.file).sort());
+  assert.deepStrictEqual(ranked.counts, plain.counts, 'rank 不改计数');
+  assert.deepStrictEqual(ranked, links.buildContext(pocketDir, 1, { rank: true }), 'rank 上下文确定性');
+});
+
 
 // ============================================================
 // Phase 1：assets/graph.jsonl 缓存

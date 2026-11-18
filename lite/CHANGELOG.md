@@ -2,6 +2,19 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.12-lite] - 2026-11-18
+
+### ContextPocket Lite 2.12 — 个性化相关度排名（稳定版）
+
+> Lite 独立版本线发 `2.12`（对外 `2.12-lite`）；主包同日发 `2.12`。
+> 仍然零缓存、零依赖、11 命令 / 11 工具。
+
+- **新旗标 `--rank`**：图上下文按「跟当前查询有多相关」排序，而非「离得多近 / 字典序」。`lib/links.js` 新增 `rankNeighbors`（Personalized PageRank，借 Aider `repomap.py`）：以命中节点为种子，在无向强证据边上跑 α=0.85、固定 40 轮的幂迭代，dangling 回流种子；边权分层（引用/决策/取代 3 > 改动/代码地图/需求 2 > 标签 1），弱证据不参与，枢纽相关度按出边归一天然摊薄。与主包逐字同源。
+- **作用面**：`recall --with-context --rank`、`search --expand <n> --rank`、`why --expand <n> --rank`；MCP `rank` 布尔参数同一套语义。仍然零缓存（图走现场 `deriveLinks`）、零依赖、11 命令 / 11 工具。
+- **默认逐字不变**：不给 `--rank` 不走打分路径，输出与旧版一致；缺前提旗标当场报错，不静默丢旗标。
+- **回归锁**：core 新增打分器确定性 / 质量守恒 / rank 重排与 rank-off 不变 / CLI·MCP 守卫用例；compat 新增「两包 ranked 扩展与 ranked 上下文逐字一致」；metrics 体积基线追平 133.0 kB（文件数仍 30、冷启动模块数仍 17）；四门禁全绿。
+- **升级动作**：无。**破坏性**：无（数据格式仍 v2，`--rank` 纯可选）。
+
 ## [2.11-lite] - 2026-11-16
 
 ### ContextPocket Lite 2.11 — 隔离开关（稳定版）

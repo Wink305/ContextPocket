@@ -111,7 +111,7 @@ const VALUE_OPTIONS = new Set([
 // "rebuild" 当成 quiet 的值，导致开关失效）
 const BOOL_OPTIONS = new Set([
   'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'force', 'full', 'help', 'h', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
-  'quiet', 'read', 'rebuild', 'verify', 'version', 'v', 'with-context',
+  'quiet', 'read', 'rebuild', 'rank', 'verify', 'version', 'v', 'with-context',
 ]);
 
 // 真实存在的两段式命令。只有落在这些组合里的第二个词才当子命令，
@@ -804,6 +804,15 @@ function cmdRecall(options, positional) {
     process.exit(1);
   }
 
+  // --rank 只是入向上下文的排序方式；没有 --with-context 就没有可排的东西，
+  // 明确报错而不是静默丢旗标（同 --with-context 与窗口的互斥处理）。
+  if (options.rank && !withContext) {
+    failJson(options, 'recall: --rank orders --with-context output; pass --with-context too.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --with-context.');
+    console.error('     Use `context-pocket recall <T-id> --with-context --rank`.\n');
+    process.exit(1);
+  }
+
   if (!tIdStr) {
     printRecallWindow(options, pocketDir, { sinceT, untilT, fromDate, toDate });
     return;
@@ -824,7 +833,7 @@ function cmdRecall(options, positional) {
   }
 
   // 图是只读派生的：不给旗标时输出逐字不变（回归锁盯着这一点）
-  const context = withContext ? buildContext(pocketDir, tId) : null;
+  const context = withContext ? buildContext(pocketDir, tId, { rank: !!options.rank }) : null;
   if (options.json) emitJson(context ? { ok: true, t: result, context } : { ok: true, t: result });
 
   console.log('');
@@ -985,6 +994,12 @@ function cmdSearch(options, positional) {
     console.error(colorize('\n  ❌ Error:', 'red') + ' ' + graphOptions.error);
     process.exit(1);
   }
+  if (options.rank && graphOptions.depth === 0) {
+    failJson(options, 'search: --rank orders --expand graph context; pass --expand too.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
+    console.error('     Use `context-pocket search <kw> --expand <n> --rank`.\n');
+    process.exit(1);
+  }
 
   // 4 个过滤旗标：两两等价（T 号窗口 / 日期窗口）。值选项由 intOption/textOption 统一收，
   // 垃圾值（非数字 / 空字符串）一律回落成 null，让 filterByTime 按"没给过滤条件"处理。
@@ -1012,7 +1027,7 @@ function cmdSearch(options, positional) {
       readGraph(pocketDir).graph,
       searchNodeIds(results),
       graphOptions.depth,
-      { asOf: graphOptions.asOf, exclude: searchNodeIds(results) }
+      { asOf: graphOptions.asOf, exclude: searchNodeIds(results), rank: !!options.rank }
     )
     : null;
 
@@ -1124,6 +1139,12 @@ function cmdWhy(options, positional) {
   }
 
   const limit = Math.max(1, intOption(options.limit, 10));
+  if (options.rank && graphOptions.depth === 0) {
+    failJson(options, 'why: --rank orders --expand graph context; pass --expand too.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
+    console.error('     Use `context-pocket why <file> --expand <n> --rank`.\n');
+    process.exit(1);
+  }
   const results = why(pocketDir, filePath, { limit });
   let graphContext = null;
   if (graphOptions.depth > 0) {
@@ -1135,6 +1156,7 @@ function cmdWhy(options, positional) {
     graphContext = expandGraph(graph, seeds, graphOptions.depth, {
       asOf: graphOptions.asOf,
       exclude: results.map((result) => 'T' + result.id),
+      rank: !!options.rank,
     });
   }
 

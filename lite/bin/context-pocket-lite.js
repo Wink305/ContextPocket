@@ -45,7 +45,7 @@ const VALUE_OPTIONS = new Set([
 
 // 纯开关型选项：绝不吞掉后面的裸词
 const BOOL_OPTIONS = new Set([
-  'brief', 'force', 'full', 'help', 'h', 'json', 'quiet', 'read', 'verify',
+  'brief', 'force', 'full', 'help', 'h', 'json', 'quiet', 'rank', 'read', 'verify',
   'version', 'v', 'with-context',
 ]);
 
@@ -545,6 +545,14 @@ function cmdRecall(options, positional) {
     process.exit(1);
   }
 
+  // --rank 只是入向上下文的排序方式；没有 --with-context 就没有可排的东西
+  if (options.rank && !withContext) {
+    failJson(options, 'recall: --rank orders --with-context output; pass --with-context too.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --with-context.');
+    console.error('     Use `context-pocket-lite recall <T-id> --with-context --rank`.\n');
+    process.exit(1);
+  }
+
   if (!tIdStr) {
     printRecallWindow(options, pocketDir, { sinceT, untilT, fromDate, toDate });
     return;
@@ -565,7 +573,7 @@ function cmdRecall(options, positional) {
   }
 
   // 图是只读派生的：不给旗标时输出逐字不变（回归锁盯着这一点）
-  const context = withContext ? buildContext(pocketDir, tId) : null;
+  const context = withContext ? buildContext(pocketDir, tId, { rank: !!options.rank }) : null;
   if (options.json) emitJson(context ? { ok: true, t: result, context } : { ok: true, t: result });
 
   console.log('');
@@ -642,6 +650,12 @@ function cmdSearch(options, positional) {
   // Lite 没有索引：永远现场扫描（与主包 `search --no-index` 同一份实现、同一份排序）
   // --expand：从命中出发走 n 跳现场派生的关联图，扩展轮次追加在分页之后
   const expand = intOption(options.expand, 0);
+  if (options.rank && expand === 0) {
+    failJson(options, 'search: --rank orders --expand graph context; pass --expand too.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
+    console.error('     Use `context-pocket-lite search <kw> --expand <n> --rank`.\n');
+    process.exit(1);
+  }
   // 输出分级：默认紧凑（一行一命中），--full 展开命中片段预览
   const full = options.full === true;
   const { results, total, hasMore, offset, limit, expandedCount, expansionTruncated } = searchAny(pocketDir, keyword, {
@@ -652,6 +666,7 @@ function cmdSearch(options, positional) {
     fromDate,
     toDate,
     expand,
+    rank: !!options.rank,
   });
 
   if (options.json) {
@@ -774,9 +789,15 @@ function cmdWhy(options, positional) {
 
   const limit = Math.max(1, intOption(options.limit, 10));
   const expand = intOption(options.expand, 0);
+  if (options.rank && expand === 0) {
+    failJson(options, 'why: --rank orders --expand graph context; pass --expand too.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
+    console.error('     Use `context-pocket-lite why <file> --expand <n> --rank`.\n');
+    process.exit(1);
+  }
   // 输出分级：默认紧凑（证据徽章 + gist），--full 展开引用片段
   const full = options.full === true;
-  const results = why(pocketDir, filePath, { limit, expand });
+  const results = why(pocketDir, filePath, { limit, expand, rank: !!options.rank });
 
   // linked = 通过图上的关系连过来的轮次（它没碰过这个文件）；分开显示，
   // count 也只数真正提到过这个文件的那些。

@@ -216,6 +216,11 @@ const TOOLS = [
           description: 'Append the read-only inbound context derived from log.md, decisions.md and code-map.md (single tId only).',
           default: false,
         },
+        rank: {
+          type: 'boolean',
+          description: 'With withContext: order each inbound bucket by graph relevance (personalized PageRank from this turn) instead of the default type order. Requires withContext. CLI equivalent: --rank.',
+          default: false,
+        },
         brief: {
           type: 'boolean',
           description: 'Token-lean tier (single tId only): show key facts (User / Action / Decisions / Pitfalls / Conflicts) and fold the remaining sections into a one-line pointer. Omit for the verbatim full turn. The library result is always complete.',
@@ -251,6 +256,11 @@ const TOOLS = [
           description: 'Walk the derived link graph N hops from each hit and append the turns it reaches (1-3; 0 = off). CLI equivalent: --expand',
           default: 0,
         },
+        rank: {
+          type: 'boolean',
+          description: 'With expand: order the graph-linked turns by relevance (personalized PageRank from the hits) instead of hop distance. Requires expand. CLI equivalent: --rank.',
+          default: false,
+        },
         full: {
           type: 'boolean',
           description: 'Verbose tier: expand the per-hit match-snippet previews. Default false = compact (one line per hit: id / gist / tags / evidence) to save tokens. CLI equivalent: --full',
@@ -279,6 +289,11 @@ const TOOLS = [
           type: 'integer',
           description: 'Walk the derived link graph N hops from the direct hits and append the turns it reaches (1-3; 0 = off). CLI equivalent: --expand',
           default: 0,
+        },
+        rank: {
+          type: 'boolean',
+          description: 'With expand: order the graph-linked turns by relevance (personalized PageRank from the file hits) instead of hop distance. Requires expand. CLI equivalent: --rank.',
+          default: false,
         },
         full: {
           type: 'boolean',
@@ -703,6 +718,12 @@ function toolRecall(args) {
       isError: true,
     };
   }
+  if (args.rank === true && !withContext) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders withContext output; pass withContext too.' }],
+      isError: true,
+    };
+  }
 
   // 窗口模式：按坐标浏览时间线（关键词检索是 search 的职责）
   if (Number.isNaN(tId)) {
@@ -741,7 +762,7 @@ function toolRecall(args) {
     };
   }
 
-  const context = withContext ? buildContext(pocketDir, tId) : null;
+  const context = withContext ? buildContext(pocketDir, tId, { rank: args.rank === true }) : null;
 
   const lines = [];
   lines.push(`## T${result.id} · ${result.gist}${result.archived ? ' *(archived)*' : ''}`);
@@ -796,6 +817,13 @@ function toolSearch(args) {
   }
 
   // Lite 没有索引：永远现场扫描（noIndex 收下但已无意义，保留参数形状兼容）
+  const searchExpand = intOption(args.expand, 0);
+  if (args.rank === true && searchExpand === 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders expand graph context; pass expand too.' }],
+      isError: true,
+    };
+  }
   const { results, total, hasMore, offset, limit, expansionTruncated } = searchAny(pocketDir, keyword, {
     limit: args.limit,
     offset: args.offset,
@@ -803,7 +831,8 @@ function toolSearch(args) {
     untilT: typeof args.untilT === 'number' && args.untilT > 0 ? args.untilT : null,
     fromDate: typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null,
     toDate: typeof args.toDate === 'string' && args.toDate ? args.toDate : null,
-    expand: intOption(args.expand, 0),
+    expand: searchExpand,
+    rank: args.rank === true,
   });
 
   // 扩展出来的轮次单独一组：不是关键词命中，是通过图上的关系连过来的
@@ -897,7 +926,14 @@ function toolWhy(args) {
 
   // 与 CLI 的 why 同一条归一：limit=0 不该被当成"没给"而变回默认值
   const limit = Math.max(1, intOption(args.limit, 10));
-  const results = why(pocketDir, filePath, { limit, expand: intOption(args.expand, 0) });
+  const whyExpand = intOption(args.expand, 0);
+  if (args.rank === true && whyExpand === 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders expand graph context; pass expand too.' }],
+      isError: true,
+    };
+  }
+  const results = why(pocketDir, filePath, { limit, expand: whyExpand, rank: args.rank === true });
   // 输出分级：默认紧凑（证据徽章 + gist），full:true 展开引用片段
   const full = args.full === true;
 

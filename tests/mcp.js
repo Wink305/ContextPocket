@@ -1026,6 +1026,29 @@ test('mcp: search and why support sourced graph expansion with temporal slices',
   assert.match(invalid.content[0].text, /expand must be an integer from 1 to 3/);
 });
 
+test('mcp: rank requires its prerequisite flag on recall/search/why, and passes with it', async () => {
+  const { projectDir } = makeLinkedPocket('mcp-rank-guards');
+  const recallGuard = await mcpCallRaw(projectDir, 'context_pocket_recall', { tId: 1, rank: true });
+  assert.strictEqual(recallGuard.isError, true);
+  assert.match(recallGuard.content[0].text, /withContext/);
+
+  const searchGuard = await mcpCallRaw(projectDir, 'context_pocket_search', { keyword: '闭区间', rank: true });
+  assert.strictEqual(searchGuard.isError, true);
+  assert.match(searchGuard.content[0].text, /expand/);
+
+  const whyGuard = await mcpCallRaw(projectDir, 'context_pocket_why', { filePath: 'src/a.ts', rank: true });
+  assert.strictEqual(whyGuard.isError, true);
+  assert.match(whyGuard.content[0].text, /expand/);
+
+  // 带上前提旗标就放行（rank 只是排序方式，不该被拒）
+  const recallOk = await mcpCallRaw(projectDir, 'context_pocket_recall', { tId: 1, withContext: true, rank: true });
+  assert.ok(!recallOk.isError, recallOk.content[0].text);
+  const searchOk = await mcpCallRaw(projectDir, 'context_pocket_search', { keyword: '闭区间', expand: 2, rank: true });
+  assert.ok(!searchOk.isError, searchOk.content[0].text);
+  const whyOk = await mcpCallRaw(projectDir, 'context_pocket_why', { filePath: 'src/a.ts', expand: 2, rank: true });
+  assert.ok(!whyOk.isError, whyOk.content[0].text);
+});
+
 test('mcp: tools/list advertises context_pocket_graph with action/type/limit', async () => {
   const { projectDir } = makePocket('mcp-graph-schema');
   const srv = startServer(projectDir);

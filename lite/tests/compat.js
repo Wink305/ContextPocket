@@ -155,6 +155,36 @@ test('multi-hop expansion is identical on the same full derived graph', () => {
   assert.strictEqual(liteLinks.MAX_EXPAND_DEPTH, 3);
 });
 
+test('ranked expansion and ranked context are identical across both packages', () => {
+  const { pocketDir } = fixture('compat-rank');
+  const liteGraph = liteLinks.deriveLinks(pocketDir);
+  const mainGraph = mainLinks.deriveLinks(pocketDir);
+  assert.deepStrictEqual(liteGraph, mainGraph);
+
+  // 打分器逐字同源：同一张图、同一组种子，两包给出同一串相关度分值
+  assert.deepStrictEqual(
+    liteLinks.rankNeighbors(liteGraph, ['T1']),
+    mainLinks.rankNeighbors(mainGraph, ['T1'])
+  );
+
+  // rank 只改顺序：投影里带上 rank 分值，顺序与分值都必须逐字一致
+  const rankedNodes = (nodes) => nodes.map(({ id, type, label, archived, distance, rank }) => ({
+    id, type, label, archived, distance, rank,
+  }));
+  for (const depth of [1, 2, 3]) {
+    const liteExpansion = liteLinks.expandFrom(liteGraph, ['T1'], depth, { rank: true });
+    const mainExpansion = mainLinks.expandGraph(mainGraph, ['T1'], depth, { rank: true });
+    assert.deepStrictEqual(rankedNodes(liteExpansion.nodes), rankedNodes(mainExpansion.results));
+    assert.strictEqual(liteExpansion.hasMore, mainExpansion.hasMore);
+  }
+
+  // 入向上下文的 rank 排序也两包一致
+  assert.deepStrictEqual(
+    liteLinks.buildContext(pocketDir, 1, { graph: liteGraph, rank: true }),
+    mainLinks.buildContext(pocketDir, 1, { graph: mainGraph, rank: true })
+  );
+});
+
 test('expansion truncates at the same 100-node safety cap in both packages', () => {
   const { pocketDir } = makeLitePocket('compat-cap');
   const files = [];

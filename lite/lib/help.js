@@ -136,6 +136,8 @@ const COMMAND_HELP = {
   Options:
     --with-context        Append inbound links (single T-id form only)
     --brief               Key-facts view, fold the rest (single T-id form only)
+    --rank                With --with-context: order each inbound bucket by graph
+                          relevance (personalized PageRank) instead of type order
     --since <T> / --until <T>    T-id window bounds (closed)
     --from <date> / --to <date>  Date window bounds (yyyy-mm-dd, closed)
     --limit <N> / --offset <N>   Page the window listing (default limit 50; 0 = all)
@@ -169,6 +171,8 @@ const COMMAND_HELP = {
     --from <date> / --to <date>  Date window bounds (yyyy-mm-dd, closed)
     --limit <N> / --offset <N>   Page the results (default limit 50; 0 = all)
     --expand <n>          Append turns related by n graph hops (1-3; default 0)
+    --rank                With --expand: order linked turns by graph relevance
+                          (personalized PageRank) instead of hop distance
     --full                Expand match-snippet previews (default: compact)
     --dir <path>          Project directory
     --json                One JSON line on stdout (always complete)
@@ -198,6 +202,8 @@ const COMMAND_HELP = {
     --file-path <p> / --file <p> / -f <p>   Same as passing the path positionally
     --limit <N>           Max direct hits (default: 10)
     --expand <n>          Append turns related by n graph hops (1-3; default 0)
+    --rank                With --expand: order linked turns by graph relevance
+                          (personalized PageRank) instead of hop distance
     --full                Expand reference-snippet previews (default: compact)
     --dir <path>          Project directory
     --json                One JSON line on stdout (always complete)

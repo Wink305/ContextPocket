@@ -137,10 +137,11 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 28],
     ['package files', litePack.files, mainPack.files, 30, 68],
     ['cold-start module count', liteModules, mainModules, 17, null],
-    // 130.7 / 442.4：2.11 定版实测（新增隔离开关 lib/isolate.js，两包各 +1 文件，
-    // 29→30 / 67→68），CLI main() 与 MCP tools/call 各接一道门。isolate.js 是
-    // 函数内惰性 require，冷启动不加载，模块数仍 17。按「基线随每次定版更新」追平。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 130.7, 442.4],
+    // 133.0 / 444.9：个性化排名（--rank）实测。两包 links.js 各加一段逐字同源的
+    // rankNeighbors（Personalized PageRank）+ buildContext/expand 的 rank 分支，
+    // CLI/MCP/help 各接旗标；无新增文件（仍 30 / 68）、无新增冷启动模块（links.js
+    // 本就加载，仍 17）。按「基线随每次定版更新」追平。
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 133.0, 444.9],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

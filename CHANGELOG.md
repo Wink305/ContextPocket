@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12-lite] - 2026-11-18
+
+### ContextPocket Lite 2.12 — 个性化相关度排名（稳定版）
+
+> Lite 独立版本线发 `2.12`（对外展示 `2.12-lite`，稳定通道）；主包版本线同日发 `2.12`。
+> 仍然零缓存、零依赖、11 命令 / 11 工具。细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+- **个性化相关度排名（`--rank`，opt-in）**：`recall --with-context --rank` / `search --expand <n> --rank` / `why --expand <n> --rank` 按个性化 PageRank 相关度排序图上下文，而非跳数距离；`rankNeighbors` 与主包逐字同源，图仍走现场 `deriveLinks`（零缓存）。
+- **默认逐字不变**：不给 `--rank` 输出与旧版一致；缺前提旗标（`--with-context` / `--expand`）当场报错，不静默丢旗标。
+- **两包同源**：compat 新增「两包 ranked 扩展与 ranked 上下文逐字一致」锁；metrics 体积基线追平 133.0 kB（文件数仍 30、冷启动模块数仍 17）。
+- **升级动作**：无（数据格式仍 v2）。**破坏性**：无（命令 / 工具面不变，`--rank` 纯可选）。
+
+## [2.12] - 2026-11-18
+
+### 个性化相关度排名（`--rank`，opt-in）
+
+- **新旗标 `--rank`**：给图上下文换一种排序——按「跟当前查询有多相关」而非「离得多近 / 字典序」。借 Aider `repomap.py` 的 Personalized PageRank：以本轮 / 本次命中的节点为 personalization 种子，在无向强证据边上跑带阻尼（α=0.85）的固定 40 轮幂迭代，dangling 质量回流种子。边权按关系分层（引用 / 决策 / 取代 3 > 改动 / 代码地图 / 需求生命周期 2 > 贴标签 1），弱证据 `mentions` 不参与；出边按权重归一，枢纽节点的相关度天然被摊薄。
+- **作用面**：`recall --with-context --rank` 重排入向上下文四个桶；`search --expand <n> --rank` 与 `why --expand <n> --rank` 重排扩展出来的图节点。CLI 与 MCP（`rank` 布尔参数）同一套语义。
+- **默认逐字不变**：不给 `--rank` 时完全不走打分路径，输出与旧版逐字一致（回归锁盯着这一点）。`--rank` 缺前提旗标（recall 的 `--with-context`、search/why 的 `--expand`）当场报错，不静默丢旗标。
+- **确定性**：节点与邻居按 id 排序遍历、固定迭代轮数、不做浮点提前收敛，两包对同一张图逐字得到同一串分数。
+- **回归与基线**：两包新增打分器确定性 / 质量守恒 / 枢纽摊薄 / asOf 过滤用例、`--rank` 重排与 rank-off 逐字不变用例、CLI/MCP 守卫用例；compat 新增「两包 ranked 扩展与 ranked 上下文逐字一致」锁。无新增文件、无新增冷启动模块（`rankNeighbors` 住在已加载的 `links.js`）；metrics 体积基线追平 133.0 / 444.9 kB（文件数仍 30 / 68、模块数仍 17）；四门禁全绿。
+- **升级动作**：无。**破坏性**：无（数据格式仍 v2，命令 / 工具面不变，`--rank` 纯可选）。
+
 ## [2.11-lite] - 2026-11-16
 
 ### ContextPocket Lite 2.11 — 隔离开关（稳定版）

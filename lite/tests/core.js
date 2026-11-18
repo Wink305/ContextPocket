@@ -202,6 +202,77 @@ test('graph expansion ignores weak mention edges', () => {
   assert.deepStrictEqual(expanded.results.filter((result) => result.expanded), []);
 });
 
+test('rank reorders graph expansion by relevance, keeps the default path verbatim, and guards its prerequisite', () => {
+  const { projectDir, pocketDir } = makeLitePocket('rank');
+  const links = require(path.join(ROOT, 'lib', 'links'));
+  append(pocketDir, 'alpha shared', { action: ['Modified src/shared.js'] });
+  append(pocketDir, 'beta shared', { action: ['Modified src/shared.js'] });
+  append(pocketDir, 'gamma noise', { action: ['Modified src/noise.js'] });
+  append(pocketDir, 'delta mentions target', {
+    action: ['Modified src/shared.js'],
+    uncertain: ['Check src/target.js later'],
+  });
+  const graph = links.deriveLinks(pocketDir);
+
+  // 打分器：确定性 + 质量守恒（与主包逐字同源的 rankNeighbors）
+  const scores = links.rankNeighbors(graph, ['T1']);
+  assert.deepStrictEqual(scores, links.rankNeighbors(graph, ['T1']));
+  let sum = 0;
+  for (const v of scores.values()) sum += v;
+  assert.ok(Math.abs(sum - 1) < 1e-9, `rank 总和应守恒为 1，实际 ${sum}`);
+
+  // expandFrom：rank-off 不带 rank 字段；rank-on 同成员、按分值降序
+  const plain = links.expandFrom(graph, ['T1'], 2);
+  const ranked = links.expandFrom(graph, ['T1'], 2, { rank: true });
+  assert.ok(plain.nodes.every((n) => !('rank' in n)), '默认路径不得长出 rank 字段');
+  assert.deepStrictEqual(ranked.nodes.map((n) => n.id).sort(), plain.nodes.map((n) => n.id).sort(), 'rank 只重排不增删');
+  assert.ok(ranked.nodes.every((n) => typeof n.rank === 'number'));
+  for (let i = 1; i < ranked.nodes.length; i++) {
+    assert.ok(ranked.nodes[i - 1].rank >= ranked.nodes[i].rank, 'rank 结果按分值降序');
+  }
+
+  // searchAny / why 收下 rank：扩展成员不变（顺序可能按相关度重排）
+  const sPlain = searchAny(pocketDir, 'alpha', { expand: 2 });
+  const sRank = searchAny(pocketDir, 'alpha', { expand: 2, rank: true });
+  assert.deepStrictEqual(
+    sRank.results.filter((r) => r.expanded).map((r) => r.id).sort(),
+    sPlain.results.filter((r) => r.expanded).map((r) => r.id).sort()
+  );
+  const wPlain = why(pocketDir, 'src/target.js', { expand: 2 });
+  const wRank = why(pocketDir, 'src/target.js', { expand: 2, rank: true });
+  assert.deepStrictEqual(
+    wRank.filter((r) => r.evidence === 'linked').map((r) => r.id).sort(),
+    wPlain.filter((r) => r.evidence === 'linked').map((r) => r.id).sort()
+  );
+
+  // CLI 守卫：--rank 缺前提旗标必须报错，不静默丢旗标
+  const searchGuard = runCliJson(['search', 'alpha', '--rank', '--json'], projectDir);
+  assert.strictEqual(searchGuard.json.ok, false);
+  assert.ok(/--expand/.test(searchGuard.json.error), searchGuard.json.error);
+  const whyGuard = runCliJson(['why', 'src/target.js', '--rank', '--json'], projectDir);
+  assert.strictEqual(whyGuard.json.ok, false);
+  assert.ok(/--expand/.test(whyGuard.json.error), whyGuard.json.error);
+  const recallGuard = runCliJson(['recall', '1', '--rank', '--json'], projectDir);
+  assert.strictEqual(recallGuard.json.ok, false);
+  assert.ok(/--with-context/.test(recallGuard.json.error), recallGuard.json.error);
+  // 带上前提旗标就放行
+  assert.strictEqual(runCliJson(['search', 'alpha', '--expand', '2', '--rank', '--json'], projectDir).json.ok, true);
+
+  // MCP 守卫：同一套互斥
+  const mcp = runMcp(projectDir, [
+    { name: 'context_pocket_search', arguments: { keyword: 'alpha', rank: true } },
+    { name: 'context_pocket_why', arguments: { filePath: 'src/target.js', rank: true } },
+    { name: 'context_pocket_recall', arguments: { tId: 1, rank: true } },
+    { name: 'context_pocket_search', arguments: { keyword: 'alpha', expand: 2, rank: true } },
+  ]);
+  assert.strictEqual(mcp.calls[0].isError, true);
+  assert.match(mcp.calls[0].content[0].text, /expand/);
+  assert.strictEqual(mcp.calls[1].isError, true);
+  assert.strictEqual(mcp.calls[2].isError, true);
+  assert.match(mcp.calls[2].content[0].text, /withContext/);
+  assert.ok(!mcp.calls[3].isError, JSON.stringify(mcp.calls[3]));
+});
+
 test('expansion truncates at 100 nodes and the flag reaches library, CLI, and MCP', () => {
   const { projectDir, pocketDir } = makeLitePocket('expand-cap');
   const files = [];
@@ -426,10 +497,10 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.11-lite/);
+  assert.match(version.stdout, /2\.12-lite/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.11');
-  assert.strictEqual(versionJson.display, '2.11-lite');
+  assert.strictEqual(versionJson.version, '2.12');
+  assert.strictEqual(versionJson.display, '2.12-lite');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);

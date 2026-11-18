@@ -313,6 +313,11 @@ const TOOLS = [
           description: 'Single-turn mode only — append read-only inbound context derived from links (who referenced this turn, later changes to the same files, related ADRs). CLI equivalent: --with-context. Cannot be combined with a window.',
           default: false,
         },
+        rank: {
+          type: 'boolean',
+          description: 'With withContext: order each inbound bucket by graph relevance (personalized PageRank from this turn) instead of the default type order. Requires withContext. CLI equivalent: --rank.',
+          default: false,
+        },
       },
     },
   },
@@ -387,6 +392,11 @@ const TOOLS = [
           minimum: 0,
           description: 'Filter graph context to facts valid at this T-id; requires expand (CLI equivalent: --as-of)',
         },
+        rank: {
+          type: 'boolean',
+          description: 'With expand: order graph context by relevance (personalized PageRank from the matches) instead of hop distance; requires expand (CLI equivalent: --rank)',
+          default: false,
+        },
       },
     },
   },
@@ -416,6 +426,11 @@ const TOOLS = [
           type: 'integer',
           minimum: 0,
           description: 'Filter graph context to facts valid at this T-id; requires expand (CLI equivalent: --as-of)',
+        },
+        rank: {
+          type: 'boolean',
+          description: 'With expand: order graph context by relevance (personalized PageRank from the file hits) instead of hop distance; requires expand (CLI equivalent: --rank)',
+          default: false,
         },
       },
     },
@@ -1377,6 +1392,12 @@ function toolRecall(args) {
       isError: true,
     };
   }
+  if (args.rank === true && !withContext) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders withContext output; pass withContext too.' }],
+      isError: true,
+    };
+  }
 
   // 窗口模式：按坐标浏览时间线（关键词检索是 search 的职责，这里不碰索引）
   if (Number.isNaN(tId)) {
@@ -1415,7 +1436,7 @@ function toolRecall(args) {
     };
   }
 
-  const context = withContext ? buildContext(pocketDir, tId) : null;
+  const context = withContext ? buildContext(pocketDir, tId, { rank: args.rank === true }) : null;
 
   const lines = [];
   lines.push(`## T${result.id} · ${result.gist}${result.archived ? ' *(archived)*' : ''}`);
@@ -1543,6 +1564,12 @@ function toolSearch(args) {
       isError: true,
     };
   }
+  if (args.rank === true && graphOptions.depth === 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders expand graph context; pass expand too.' }],
+      isError: true,
+    };
+  }
 
   // 优先倒排索引（覆盖 T-block + ADR + R + prefs，历史增长后依然即时）；
   // 缓存缺失 / 坏 JSON / INDEX_VERSION 对不上 / 签名过期都是当场重建然后继续走索引，
@@ -1563,6 +1590,7 @@ function toolSearch(args) {
     ? expandGraph(readGraph(pocketDir).graph, resultNodeIds, graphOptions.depth, {
       asOf: graphOptions.asOf,
       exclude: resultNodeIds,
+      rank: args.rank === true,
     })
     : null;
 
@@ -1647,6 +1675,12 @@ function toolWhy(args) {
 
   // 与 CLI 的 why 同一条归一：limit=0 不该被当成"没给"而变回默认值
   const limit = Math.max(1, intOption(args.limit, 10));
+  if (args.rank === true && graphOptions.depth === 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders expand graph context; pass expand too.' }],
+      isError: true,
+    };
+  }
   const results = why(pocketDir, filePath, { limit });
   let graphContext = null;
   if (graphOptions.depth > 0) {
@@ -1658,6 +1692,7 @@ function toolWhy(args) {
     graphContext = expandGraph(graph, seeds, graphOptions.depth, {
       asOf: graphOptions.asOf,
       exclude: results.map((result) => 'T' + result.id),
+      rank: args.rank === true,
     });
   }
 

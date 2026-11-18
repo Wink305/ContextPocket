@@ -315,10 +315,10 @@ function diff(pocketDir, tA, tB) {
  * @param {number} depth 跳数（1-3）
  * @returns {{turns: Array<{id:number, gist:string, tags:string[], archived:boolean, distance:number, via:string}>, hasMore: boolean}}
  */
-function expandTurns(pocketDir, seedIds, depth) {
+function expandTurns(pocketDir, seedIds, depth, opts) {
   if (!seedIds || seedIds.length === 0) return { turns: [], hasMore: false };
   const graph = deriveLinks(pocketDir);
-  const res = expandFrom(graph, seedIds, depth);
+  const res = expandFrom(graph, seedIds, depth, opts);
   const out = [];
   for (const n of res.nodes) {
     if (n.type !== 'turn') continue;
@@ -482,7 +482,7 @@ function searchAny(pocketDir, keyword, opts = {}) {
   if (depth > 0 && results.length > 0) {
     const seeds = results.map(rowToNodeId).filter(Boolean);
     const seen = new Set(results.filter((r) => r.type === 'T').map((r) => 'T' + r.id));
-    const expansion = expandTurns(pocketDir, seeds, depth);
+    const expansion = expandTurns(pocketDir, seeds, depth, { rank: !!opts.rank });
     expansionTruncated = expansion.hasMore;
     expanded = expansion.turns
       .filter((t) => !seen.has('T' + t.id))
@@ -592,7 +592,7 @@ function why(pocketDir, filePath, opts = {}) {
   const depth = intOption(opts.expand, 0);
   if (depth > 0 && direct.length > 0) {
     const seen = new Set(direct.map((r) => 'T' + r.id));
-    const expansion = expandTurns(pocketDir, [...seen], depth);
+    const expansion = expandTurns(pocketDir, [...seen], depth, { rank: !!opts.rank });
     const extra = expansion.turns
       .filter((t) => !seen.has('T' + t.id))
       .map((t) => ({

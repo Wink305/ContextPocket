@@ -1075,6 +1075,52 @@ test('cli: recall --with-context rejects window mode instead of silently droppin
   assert.ok(human.stderr.includes('--with-context'), human.stderr);
 });
 
+test('cli: recall --rank requires --with-context and reorders inbound context by relevance', () => {
+  const { pocketDir } = makeLinkedPocket('cli-rank-recall');
+  // 没有 --with-context：--rank 无处可排，必须报错而不是悄悄丢掉旗标
+  const guard = parseJsonLine(runCli(['recall', '1', '--rank', '--json'], pocketDir));
+  assert.strictEqual(guard.ok, false);
+  assert.ok(/--with-context/.test(guard.error), guard.error);
+  const guardHuman = runCli(['recall', '1', '--rank'], pocketDir);
+  assert.strictEqual(guardHuman.code, 1);
+  assert.ok(guardHuman.stderr.includes('--rank'), guardHuman.stderr);
+
+  const plain = parseJsonLine(runCli(['recall', '1', '--with-context', '--json'], pocketDir));
+  const ranked = parseJsonLine(runCli(['recall', '1', '--with-context', '--rank', '--json'], pocketDir));
+  assert.strictEqual(ranked.ok, true);
+  // 成员不变，rank 只重排
+  assert.deepStrictEqual(ranked.context.referencedBy.map((r) => r.ref).sort(), plain.context.referencedBy.map((r) => r.ref).sort());
+  assert.deepStrictEqual(ranked.context.laterChanges.map((c) => c.tId).sort(), plain.context.laterChanges.map((c) => c.tId).sort());
+  assert.deepStrictEqual(ranked.context.counts, plain.context.counts);
+});
+
+test('cli: search --rank requires --expand and ranks the expanded graph context', () => {
+  const { pocketDir } = makeLinkedPocket('cli-rank-search');
+  const guard = parseJsonLine(runCli(['search', '闭区间', '--rank', '--json'], pocketDir));
+  assert.strictEqual(guard.ok, false);
+  assert.ok(/--expand/.test(guard.error), guard.error);
+
+  const ranked = parseJsonLine(runCli(['search', '闭区间', '--expand', '2', '--rank', '--json'], pocketDir));
+  assert.strictEqual(ranked.ok, true);
+  assert.ok(ranked.graphContext, 'expand 要带回 graphContext');
+  assert.ok(ranked.graphContext.results.every((n) => typeof n.rank === 'number'), 'rank 节点都带分值');
+  for (let i = 1; i < ranked.graphContext.results.length; i++) {
+    assert.ok(ranked.graphContext.results[i - 1].rank >= ranked.graphContext.results[i].rank, 'graphContext 按分值降序');
+  }
+});
+
+test('cli: why --rank requires --expand and ranks the expanded graph context', () => {
+  const { pocketDir } = makeLinkedPocket('cli-rank-why');
+  const guard = parseJsonLine(runCli(['why', 'src/a.ts', '--rank', '--json'], pocketDir));
+  assert.strictEqual(guard.ok, false);
+  assert.ok(/--expand/.test(guard.error), guard.error);
+
+  const ranked = parseJsonLine(runCli(['why', 'src/a.ts', '--expand', '2', '--rank', '--json'], pocketDir));
+  assert.strictEqual(ranked.ok, true);
+  assert.ok(ranked.graphContext, 'expand 要带回 graphContext');
+  assert.ok(ranked.graphContext.results.every((n) => typeof n.rank === 'number'));
+});
+
 
 // ------------------------------------------------------------
 // Phase 1：graph 命令（派生关联图 + assets/graph.jsonl 缓存）

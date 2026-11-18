@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.11](https://img.shields.io/badge/version-2.11-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.12](https://img.shields.io/badge/version-2.12-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -24,25 +24,25 @@
 
 > **Context memory for AI coding agents.** ContextPocket records the durable parts of each development turn as plain Markdown inside your project, so the next conversation — or a different Agent — reads back the same timeline. Cross-session and cross-agent by design; no server, no database, no vendor lock-in.
 
-## ContextPocket 2.11 and ContextPocket Lite 2.11
+## ContextPocket 2.12 and ContextPocket Lite 2.12
 
-**ContextPocket 2.11** keeps sourced multi-hop graph context and historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), and derives a byte-identical link graph to Lite (6 node types / 10 edge types) with faster exact `T<n>` lookup. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories. New in 2.11: an isolation switch for test runs — set `CONTEXTPOCKET_ISOLATED=1`, drop a `.contextpocket-isolate` marker, or rename the pocket to `ContextPocket.isolated/`, and every CLI command and MCP tool is refused before any history is read or written (`status` is the only safe exception). Also ships the three-tier handoff, sourced node chains, current-only decisions, the read-side `handoff --read` view and [SECURITY.md](SECURITY.md).
+**ContextPocket 2.12** keeps sourced multi-hop graph context and historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), and derives a byte-identical link graph to Lite (6 node types / 10 edge types) with faster exact `T<n>` lookup. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories. New in 2.12: opt-in relevance ranking — add `--rank` to `recall --with-context`, `search --expand` or `why --expand` to order graph context by personalized PageRank relevance to the current query instead of hop distance (default output stays byte-identical). Also ships the isolation switch for test runs, the three-tier handoff, sourced node chains, current-only decisions, the read-side `handoff --read` view and [SECURITY.md](SECURITY.md).
 
-**ContextPocket Lite 2.11** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. New in 2.11: the same isolation switch, with detection byte-identical to the full package. Also ships the three-tier handoff, sourced node chains, current-only decisions, the `handoff --read` view and token-saving output tiers (`--brief` / `--full`, `--json` always complete) on top of `log amend`, `diff`, `handoff` and `--expand` multi-hop context.
+**ContextPocket Lite 2.12** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. New in 2.12: the same opt-in `--rank` relevance ranking, byte-identical to the full package. Also ships the isolation switch (detection byte-identical to the full package), the three-tier handoff, sourced node chains, current-only decisions, the `handoff --read` view and token-saving output tiers (`--brief` / `--full`, `--json` always complete) on top of `log amend`, `diff`, `handoff` and `--expand` multi-hop context.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
-| **2.11** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
-| **2.11 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
+| **2.12** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
+| **2.12 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
 
 ### Which version should I download?
 
-Download the latest **stable** Release — it is what the `main` branch and the version badge above track (`package.json` = `2.11`).
+Download the latest **stable** Release — it is what the `main` branch and the version badge above track (`package.json` = `2.12`).
 
 | Edition | Stable version | Download |
 |---|---|---|
-| **Full** | `2.11` | [ContextPocket-2.11.zip](https://github.com/Wink305/ContextPocket/releases/download/2.11/ContextPocket-2.11.zip) |
-| **Lite** | `2.11-lite` | [ContextPocket-2.11-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.11-lite/ContextPocket-2.11-Lite.zip) |
+| **Full** | `2.12` | [ContextPocket-2.12.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12/ContextPocket-2.12.zip) |
+| **Lite** | `2.12-lite` | [ContextPocket-2.12-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12-lite/ContextPocket-2.12-Lite.zip) |
 
 Each archive includes its `package.json`, README and license; no npm registry release is involved. Between stable releases, development lands on `main` under preview version tags — clone the repo (see [Quick Start](#1-install)) to try it early.
 
@@ -464,7 +464,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket Lite 2.11 package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket Lite 2.12 package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 

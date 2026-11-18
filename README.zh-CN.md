@@ -3,7 +3,7 @@
 > **[English](README.md)** · [文档目录](docs/) · [更新日志](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.11](https://img.shields.io/badge/version-2.11-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.12](https://img.shields.io/badge/version-2.12-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -24,25 +24,25 @@
 
 > **辅助上下文记忆。** ContextPocket 把每一轮开发对话里值得留的部分写进项目本地的纯 Markdown：下一次对话、或换一个 Agent，都能读回同一份时间线。天然支持跨对话、跨 Agent——不依赖服务、不依赖数据库、不绑定厂商。
 
-## ContextPocket 2.11 与 ContextPocket Lite 2.11
+## ContextPocket 2.12 与 ContextPocket Lite 2.12
 
-**ContextPocket 2.11** 保留带来源的多跳图上下文与历史有效期筛选（`search <关键词> --expand 2`、`why <文件> --expand 2`、`--as-of <T>`），并与 Lite 派生逐字一致的关联图（6 类节点 / 10 类边）、精确 `T<n>` 查询更快。完整包保留 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。2.11 新增：面向测试运行的隔离开关——设 `CONTEXTPOCKET_ISOLATED=1`、放一个 `.contextpocket-isolate` 标记、或把口袋改名为 `ContextPocket.isolated/`，所有 CLI 命令与 MCP 工具都会在读写任何历史之前被拒绝（`status` 是唯一安全例外）；并沿用三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 [SECURITY.md](SECURITY.md) 安全政策。
+**ContextPocket 2.12** 保留带来源的多跳图上下文与历史有效期筛选（`search <关键词> --expand 2`、`why <文件> --expand 2`、`--as-of <T>`），并与 Lite 派生逐字一致的关联图（6 类节点 / 10 类边）、精确 `T<n>` 查询更快。完整包保留 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。2.12 新增：可选的相关度排名——给 `recall --with-context`、`search --expand` 或 `why --expand` 加 `--rank`，图上下文按「跟当前查询有多相关」（个性化 PageRank）排序，而非按跳数距离（默认输出逐字不变）；并沿用面向测试运行的隔离开关、三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 [SECURITY.md](SECURITY.md) 安全政策。
 
-**ContextPocket Lite 2.11** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径：5 个核心 Markdown 文件、11 条 CLI 命令 / MCP 工具，搜索始终现场扫描 Markdown，关联图运行时派生——不建搜索索引、不建图缓存。2.11 新增：与完整包逐字一致检测的同一道隔离开关；并沿用三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 2.7 的省 token 输出分级（`--brief` / `--full`，`--json` 永远完整），叠加在 `log amend`、`diff`、`handoff` 与 `--expand` 多跳关联之上。
+**ContextPocket Lite 2.12** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径：5 个核心 Markdown 文件、11 条 CLI 命令 / MCP 工具，搜索始终现场扫描 Markdown，关联图运行时派生——不建搜索索引、不建图缓存。2.12 新增：与完整包逐字同源的同一套可选 `--rank` 相关度排名；并沿用与完整包逐字一致检测的隔离开关、三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 2.7 的省 token 输出分级（`--brief` / `--full`，`--json` 永远完整），叠加在 `log amend`、`diff`、`handoff` 与 `--expand` 多跳关联之上。
 
 | 版本 | 适用场景 | 上下文关联图 | 规模 |
 |---|---|---|---|
-| **2.11** | 较大、长期维护的项目 | 带历史有效期筛选的多跳关联上下文 | 10 个核心文件 · 28 条命令 / 工具 |
-| **2.11 Lite** | 小型项目和日常对话记忆 | 运行时派生多跳关联，不建缓存 | 5 个核心文件 · 11 条命令 / 工具 |
+| **2.12** | 较大、长期维护的项目 | 带历史有效期筛选的多跳关联上下文 | 10 个核心文件 · 28 条命令 / 工具 |
+| **2.12 Lite** | 小型项目和日常对话记忆 | 运行时派生多跳关联，不建缓存 | 5 个核心文件 · 11 条命令 / 工具 |
 
 ### 我该下哪个版本？
 
-下载最新**稳定** Release——它就是 `main` 分支与顶部版本徽章所跟的版本（`package.json` = `2.11`）。
+下载最新**稳定** Release——它就是 `main` 分支与顶部版本徽章所跟的版本（`package.json` = `2.12`）。
 
 | 版本 | 稳定版号 | 下载 |
 |---|---|---|
-| **完整包** | `2.11` | [ContextPocket-2.11.zip](https://github.com/Wink305/ContextPocket/releases/download/2.11/ContextPocket-2.11.zip) |
-| **Lite** | `2.11-lite` | [ContextPocket-2.11-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.11-lite/ContextPocket-2.11-Lite.zip) |
+| **完整包** | `2.12` | [ContextPocket-2.12.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12/ContextPocket-2.12.zip) |
+| **Lite** | `2.12-lite` | [ContextPocket-2.12-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12-lite/ContextPocket-2.12-Lite.zip) |
 
 每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。两次稳定版之间，开发改动以 preview 版本号落在 `main` 上——clone 仓库（见[快速开始](#1-安装)）可抢先体验。
 
@@ -461,7 +461,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 - tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
 ```
 
-**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket Lite 2.11 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
+**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket Lite 2.12 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
 
 ---
 
