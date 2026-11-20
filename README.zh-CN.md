@@ -3,7 +3,7 @@
 > **[English](README.md)** · [文档目录](docs/) · [更新日志](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.12](https://img.shields.io/badge/version-2.12-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.13](https://img.shields.io/badge/version-2.13-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -24,25 +24,25 @@
 
 > **辅助上下文记忆。** ContextPocket 把每一轮开发对话里值得留的部分写进项目本地的纯 Markdown：下一次对话、或换一个 Agent，都能读回同一份时间线。天然支持跨对话、跨 Agent——不依赖服务、不依赖数据库、不绑定厂商。
 
-## ContextPocket 2.12 与 ContextPocket Lite 2.12
+## ContextPocket 2.13 与 ContextPocket Lite 2.13
 
-**ContextPocket 2.12** 保留带来源的多跳图上下文与历史有效期筛选（`search <关键词> --expand 2`、`why <文件> --expand 2`、`--as-of <T>`），并与 Lite 派生逐字一致的关联图（6 类节点 / 10 类边）、精确 `T<n>` 查询更快。完整包保留 28 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。2.12 新增：可选的相关度排名——给 `recall --with-context`、`search --expand` 或 `why --expand` 加 `--rank`，图上下文按「跟当前查询有多相关」（个性化 PageRank）排序，而非按跳数距离（默认输出逐字不变）；并沿用面向测试运行的隔离开关、三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 [SECURITY.md](SECURITY.md) 安全政策。
+**ContextPocket 2.13** 保留带来源的多跳图上下文与历史有效期筛选（`search <关键词> --expand 2`、`why <文件> --expand 2`、`--as-of <T>`），并与 Lite 派生逐字一致的关联图（6 类节点 / 10 类边）、精确 `T<n>` 查询更快。完整包现在提供 29 条 CLI / MCP 工具，适合规模较大、持续时间较长的项目记忆。2.13 新增：跨机器 / 多 Agent 合并口袋，以及只读跨项目检索。`merge --from <pocket>` 把源轮次重编号后并入目标，同时合入 ADR、需求、🔒 红线与非冲突偏好；state、code-map 与冲突项写入 `merge-<date>.md`，verify 变差会整份回滚。`hub search <关键词>` 扫描所有已注册项目，不建索引、不写 `hub.json`。此外继续提供可选的 `--rank` 相关度排名、隔离开关、三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 [SECURITY.md](SECURITY.md) 安全政策。
 
-**ContextPocket Lite 2.12** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径：5 个核心 Markdown 文件、11 条 CLI 命令 / MCP 工具，搜索始终现场扫描 Markdown，关联图运行时派生——不建搜索索引、不建图缓存。2.12 新增：与完整包逐字同源的同一套可选 `--rank` 相关度排名；并沿用与完整包逐字一致检测的隔离开关、三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与 2.7 的省 token 输出分级（`--brief` / `--full`，`--json` 永远完整），叠加在 `log amend`、`diff`、`handoff` 与 `--expand` 多跳关联之上。
+**ContextPocket Lite 2.13** 与完整包共用口袋格式和图时间字段，为小型项目和日常对话记忆简化读写路径：5 个核心 Markdown 文件、11 条 CLI 命令 / MCP 工具，搜索始终现场扫描 Markdown，关联图运行时派生——不建搜索索引、不建图缓存。2.13 是与主包对齐的版本发布，Lite 本身无功能变更；它仍读写标准 v2 口袋，包括完整包 `merge` 产出的口袋。并沿用与完整包逐字一致检测的隔离开关、三段式交接摘要、带来源的节点链、当前有效决策、`handoff --read` 读侧视图与省 token 输出分级（`--brief` / `--full`，`--json` 永远完整），叠加在 `log amend`、`diff`、`handoff` 与 `--expand` 多跳关联之上。
 
 | 版本 | 适用场景 | 上下文关联图 | 规模 |
 |---|---|---|---|
-| **2.12** | 较大、长期维护的项目 | 带历史有效期筛选的多跳关联上下文 | 10 个核心文件 · 28 条命令 / 工具 |
-| **2.12 Lite** | 小型项目和日常对话记忆 | 运行时派生多跳关联，不建缓存 | 5 个核心文件 · 11 条命令 / 工具 |
+| **2.13** | 较大、长期维护的项目 | 带历史有效期筛选的多跳关联上下文 | 10 个核心文件 · 29 条命令 / 工具 |
+| **2.13 Lite** | 小型项目和日常对话记忆 | 运行时派生多跳关联，不建缓存 | 5 个核心文件 · 11 条命令 / 工具 |
 
 ### 我该下哪个版本？
 
-下载最新**稳定** Release——它就是 `main` 分支与顶部版本徽章所跟的版本（`package.json` = `2.12`）。
+下载最新**稳定** Release——它就是 `main` 分支与顶部版本徽章所跟的版本（`package.json` = `2.13`）。
 
 | 版本 | 稳定版号 | 下载 |
 |---|---|---|
-| **完整包** | `2.12` | [ContextPocket-2.12.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12/ContextPocket-2.12.zip) |
-| **Lite** | `2.12-lite` | [ContextPocket-2.12-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12-lite/ContextPocket-2.12-Lite.zip) |
+| **完整包** | `2.13` | [ContextPocket-2.13.zip](https://github.com/Wink305/ContextPocket/releases/download/2.13/ContextPocket-2.13.zip) |
+| **Lite** | `2.13-lite` | [ContextPocket-2.13-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.13-lite/ContextPocket-2.13-Lite.zip) |
 
 每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。两次稳定版之间，开发改动以 preview 版本号落在 `main` 上——clone 仓库（见[快速开始](#1-安装)）可抢先体验。
 
@@ -306,7 +306,8 @@ Agent 会自动：
 | `context-pocket index --dir <root> [--rebuild]` | 构建 / 刷新检索索引（`assets/search-index.json`）。Markdown 文件始终是真相源，索引是派生缓存 |
 | `context-pocket distill --dir <root> [--dry-run]` | 蒸馏旧轮次：生成 `digest-<date>.md` 报告，列出值得回写到活文档的决策 / 坑点 / 偏好（借鉴 Basic Memory） |
 | `context-pocket import --dir <root> --file <session.jsonl> [--source auto\|claude-code\|codex]` | 导入历史会话为 `[imported]` T-block，让中途启用的项目不丢历史 |
-| `context-pocket hub [list\|pref\|remove] --dir <root>` | 用户级 hub：列出已注册项目 / 读写全局偏好 / 注销当前项目 |
+| `context-pocket merge --dir <root> --from <other>/ContextPocket [--dry-run] [--include-archive]` | 合并另一个口袋（另一台机器 / clone / Agent）：轮次重编号，并合入 ADR、需求、🔒 红线与非冲突偏好。state/code-map/冲突写入 `merge-<date>.md` |
+| `context-pocket hub [list\|search\|pref\|remove] --dir <root>` | 用户级 hub：列出已注册项目 / 只读跨项目检索 / 读写全局偏好 / 注销当前项目 |
 | `context-pocket help [--json]` | 显示全部命令。加 `--json` 时同一张表以一行 JSON 返回，Agent 不必解析带颜色的文本就能发现命令全集 |
 
 > 💡 在 MCP 模式下，每个 CLI 命令都有对应的 MCP 工具（如 `context_pocket_bootstrap`）。
@@ -461,7 +462,7 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 - tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
 ```
 
-**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket Lite 2.12 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
+**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **ContextPocket Lite 2.13 包**，建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
 
 ---
 
@@ -489,18 +490,34 @@ T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你
 
 ---
 
-## 🌐 用户级 Hub（跨项目注册表）
+## 🌐 用户级 Hub（跨项目注册表 + 检索）
 
 每个项目都有自己的 `ContextPocket/`，但你可能想在多机之间共享一份「我都在哪些项目里用过 ContextPocket」+ 一份跨项目生效的全局偏好。
 
 - **存储位置**：`~/.contextpocket/hub.json`（一份小 JSON，按项目路径索引）
 - **内容**：注册过的项目（路径 → 名称 / 类型 / 最新 T / 最近活跃时间）+ 用户级全局偏好
-- **设计原则**：hub 只是注册表，**项目数据永远在各项目的 `ContextPocket/` 里**；hub 故障（磁盘满、权限不够）不会影响正常记录
+- **设计原则**：hub 是**注册表 + 只读检索入口**。**项目数据永远在各项目的 `ContextPocket/` 里**；检索不复制、不合并、不写入。它强制走全文扫描（不建 / 不刷新索引），跳过隔离项目，缺失 pocket 只报告不中断。hub 故障（磁盘满、权限不够）不会影响正常记录
 - **跨设备共享两条路径**：
   1. **环境变量**：`export CONTEXTPOCKET_HOME=/path/to/synced/folder`（指向网盘 / Dropbox / iCloud / git bare repo），所有机器共用同一份 `hub.json`
   2. **Git 进仓**：在 `bootstrap` 时加 `--gitignore: false`（或 MCP `gitignore: false`），把整份 `ContextPocket/` 进 git，连项目里的偏好一起同步
-- **命令**：`context-pocket hub list`（看注册项目）· `context-pocket hub pref --key <k> --value <v>`（写全局偏好）· `context-pocket hub remove`（注销当前项目）
+- **命令**：`context-pocket hub list`（看注册项目）· `context-pocket hub search "token refresh"`（只读跨项目检索）· `context-pocket hub pref --key <k> --value <v>`（写全局偏好）· `context-pocket hub remove`（注销当前项目）
 - **不想进注册表**：`bootstrap --no-hub`（MCP `noHub: true`）只建 pocket，`CONTEXTPOCKET_HOME` 下一个字节都不写。适合一次性目录、脚本试跑、CI 里跑一遍——hub 里就只留你真正在用的项目。pocket 本身完整可用，只是 `hub list` 看不到它。之后想补登记，跑同一条命令去掉 `--no-hub` 即可（bootstrap 幂等，不会动已有记录）
+
+---
+
+## 🔀 合并两台机器 / 两个 Agent 的口袋
+
+同一个项目在两台机器、两个 clone 或两个 Agent 上各自记录后，把另一份口袋并进来：
+
+```bash
+context-pocket merge --from /path/to/other/ContextPocket --dry-run
+context-pocket merge --from /path/to/other/ContextPocket
+```
+
+- 单向合并，源口袋只读；轮次接在目标最新 T 之后重新编号。
+- 合入 ADR、需求、🔒 红线与非冲突偏好；`state.md`、`code-map.md` 和冲突项写入 `ContextPocket/merge-<date>.md` 供复核。
+- 默认跳过 `log-archive.md`，加 `--include-archive` 才把归档轮次合入 live log。
+- 重复合并是增量的：内容指纹忽略 T/ADR/R 编号，只追加真正的新轮次 / 新条目。
 
 ---
 

@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.13-lite] - 2026-11-20
+
+### ContextPocket Lite 2.13 — 版本对齐（稳定版）
+
+> Lite 独立版本线发 `2.13`（对外展示 `2.13-lite`）；主包版本线同日发 `2.13`。
+> Lite 本轮无功能变更，仍然零缓存、零依赖、11 命令 / 11 工具。细节见 [`lite/CHANGELOG.md`](lite/CHANGELOG.md)。
+
+- **版本对齐**：`lite/package.json` 与对外展示号升到 `2.13` / `2.13-lite`；数据格式仍 v2。
+- **兼容性**：主包 `merge` 产出的仍是标准 v2 口袋，Lite 可直接读写；Lite 不提供 `merge` / `hub search`（维护面留在主包）。
+- **升级动作**：无。**破坏性**：无。
+
+## [2.13] - 2026-11-20
+
+### 跨机器合并 + 跨项目检索（稳定版）
+
+> 完整包发 `2.13`；Lite 同日发 `2.13-lite`（版本对齐，无功能变更）。
+> 命令面 / 工具面 29，包内文件 69。
+
+### 跨机器 / 多 Agent 合并口袋（merge）
+
+- **新能力**：`context-pocket merge --from <other>/ContextPocket [--dry-run] [--include-archive]`；MCP 为 `context_pocket_merge`（`from` / `dryRun` / `includeArchive`）。命令面与工具面 28 → 29。
+- **合并范围**：`log.md` 轮次（源只读、目标重编号）、ADR、需求、🔒 红线、非冲突偏好；`state.md` / `code-map.md` / 冲突项只进 `ContextPocket/merge-<date>.md`。
+- **增量幂等**：内容指纹先做 T/ADR/R 编号归一，同一源重复合并只追加真正的新轮次/新条目；源被 renumber 也不会重复。
+- **安全边界**：源口袋隔离、verify 有 error、重复/畸形 T 号时拒绝；合并后 verify 变差整份回滚；附件随 T 号复制并改写。
+- **归档**：默认跳过源 `log-archive.md`；`--include-archive` 才重编号并入目标 live log。
+
+### 跨项目只读检索（hub search）
+
+- **新能力**：`context-pocket hub search <keyword> [--limit <n>]`；MCP 侧为 `context_pocket_hub` 的 `action: "search"`（参数 `keyword` / `limit`）。命令数与工具数不变。
+- **严格只读**：强制 `useIndex: false` 全文扫描，不建 / 不刷新任何项目的 `assets/search-index.json`，也不写 `hub.json`。
+- **安全边界**：跳过处于隔离状态的项目（环境变量 / 标记文件 / 物理隔离）；缺失或不可读的 pocket 只记入 `skipped`，不中断其余项目。
+- **结果形态**：按项目最近活跃倒序分组，组内保留检索命中顺序；用轮转选取保证多项目都能露头。`--json` 返回 `projects / searched / matched / total / count / skipped / results`。
+- **文档**：README 中英、FAQ、SKILL 同步说明 hub 从「纯注册表」升级为「注册表 + 只读检索入口」。
+- **回归与基线**：全量测试（含新增 merge 用例）、lint、format、smoke-live 全绿；包内文件 68 → 69，主包体积基线 466.3 kB。
+
 ## [2.12-lite] - 2026-11-18
 
 ### ContextPocket Lite 2.12 — 个性化相关度排名（稳定版）

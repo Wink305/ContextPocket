@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.12](https://img.shields.io/badge/version-2.12-blueviolet.svg)](CHANGELOG.md)
+[![Version: 2.13](https://img.shields.io/badge/version-2.13-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -24,25 +24,25 @@
 
 > **Context memory for AI coding agents.** ContextPocket records the durable parts of each development turn as plain Markdown inside your project, so the next conversation — or a different Agent — reads back the same timeline. Cross-session and cross-agent by design; no server, no database, no vendor lock-in.
 
-## ContextPocket 2.12 and ContextPocket Lite 2.12
+## ContextPocket 2.13 and ContextPocket Lite 2.13
 
-**ContextPocket 2.12** keeps sourced multi-hop graph context and historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), and derives a byte-identical link graph to Lite (6 node types / 10 edge types) with faster exact `T<n>` lookup. It keeps the full 28-command CLI / MCP toolset for larger, long-lived project memories. New in 2.12: opt-in relevance ranking — add `--rank` to `recall --with-context`, `search --expand` or `why --expand` to order graph context by personalized PageRank relevance to the current query instead of hop distance (default output stays byte-identical). Also ships the isolation switch for test runs, the three-tier handoff, sourced node chains, current-only decisions, the read-side `handoff --read` view and [SECURITY.md](SECURITY.md).
+**ContextPocket 2.13** keeps sourced multi-hop graph context and historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), and derives a byte-identical link graph to Lite (6 node types / 10 edge types) with faster exact `T<n>` lookup. It now ships a 29-command CLI / MCP toolset for larger, long-lived project memories. New in 2.13: cross-machine / multi-agent pocket merge and read-only cross-project search. `merge --from <pocket>` renumbers incoming turns, carries ADRs / requirements / 🔒 red lines / non-conflicting preferences, writes state, code-map and conflict notes to `merge-<date>.md`, and rolls back if verify gets worse. `hub search <kw>` scans every registered project without building indexes or writing `hub.json`. Also ships opt-in `--rank` relevance ranking, the isolation switch, the three-tier handoff, sourced node chains, current-only decisions, the read-side `handoff --read` view and [SECURITY.md](SECURITY.md).
 
-**ContextPocket Lite 2.12** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. New in 2.12: the same opt-in `--rank` relevance ranking, byte-identical to the full package. Also ships the isolation switch (detection byte-identical to the full package), the three-tier handoff, sourced node chains, current-only decisions, the `handoff --read` view and token-saving output tiers (`--brief` / `--full`, `--json` always complete) on top of `log amend`, `diff`, `handoff` and `--expand` multi-hop context.
+**ContextPocket Lite 2.13** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. 2.13 is a version-alignment release with no Lite functional changes; it still reads and writes standard v2 pockets, including pockets produced by the full package's `merge`. It also keeps the isolation switch (detection byte-identical to the full package), the three-tier handoff, sourced node chains, current-only decisions, the `handoff --read` view and token-saving output tiers (`--brief` / `--full`, `--json` always complete) on top of `log amend`, `diff`, `handoff` and `--expand` multi-hop context.
 
 | Edition | Best for | Context graph | Footprint |
 |---|---|---|---|
-| **2.12** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 28 commands / tools |
-| **2.12 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
+| **2.13** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 29 commands / tools |
+| **2.13 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
 
 ### Which version should I download?
 
-Download the latest **stable** Release — it is what the `main` branch and the version badge above track (`package.json` = `2.12`).
+Download the latest **stable** Release — it is what the `main` branch and the version badge above track (`package.json` = `2.13`).
 
 | Edition | Stable version | Download |
 |---|---|---|
-| **Full** | `2.12` | [ContextPocket-2.12.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12/ContextPocket-2.12.zip) |
-| **Lite** | `2.12-lite` | [ContextPocket-2.12-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.12-lite/ContextPocket-2.12-Lite.zip) |
+| **Full** | `2.13` | [ContextPocket-2.13.zip](https://github.com/Wink305/ContextPocket/releases/download/2.13/ContextPocket-2.13.zip) |
+| **Lite** | `2.13-lite` | [ContextPocket-2.13-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.13-lite/ContextPocket-2.13-Lite.zip) |
 
 Each archive includes its `package.json`, README and license; no npm registry release is involved. Between stable releases, development lands on `main` under preview version tags — clone the repo (see [Quick Start](#1-install)) to try it early.
 
@@ -306,7 +306,8 @@ All commands below work via CLI when Node.js 14+ is available. Type `context-poc
 | `context-pocket index --dir <root> [--rebuild]` | Build / refresh the search index (`assets/search-index.json`). Markdown files are always the source of truth; the index is a derived cache |
 | `context-pocket distill --dir <root> [--dry-run]` | Distill old turns: emit a `digest-<date>.md` report listing decisions / pitfalls / preferences worth merging back into the living docs (inspired by Basic Memory) |
 | `context-pocket import --dir <root> --file <session.jsonl> [--source auto\|claude-code\|codex]` | Import a past agent session as `[imported]` T-blocks so a mid-stream adoption doesn't lose history |
-| `context-pocket hub [list\|pref\|remove] --dir <root>` | User-level hub: list registered projects / read+write global prefs / unregister this project |
+| `context-pocket merge --dir <root> --from <other>/ContextPocket [--dry-run] [--include-archive]` | Merge another pocket (another machine / clone / agent): turns renumbered, plus ADRs, requirements, 🔒 red lines and non-conflicting preferences. state/code-map/conflicts go to `merge-<date>.md` |
+| `context-pocket hub [list\|search\|pref\|remove] --dir <root>` | User-level hub: list registered projects / read-only search across registered projects / read+write global prefs / unregister this project |
 | `context-pocket help [--json]` | Show all commands. With `--json` the same table comes back as one line of `{groups:[{group,commands:[{command,summary}]}]}`, so an agent can discover the command surface without parsing colored text |
 
 > 💡 In MCP mode, each CLI command has an equivalent MCP tool (e.g. `context_pocket_bootstrap`).
@@ -464,7 +465,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket Lite 2.12 package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket Lite 2.13 package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 
@@ -492,18 +493,34 @@ While isolated, **every** CLI command and MCP tool is refused before any pocket 
 
 ---
 
-## 🌐 User-level Hub (cross-project registry)
+## 🌐 User-level Hub (cross-project registry + search)
 
 Each project has its own `ContextPocket/`, but you probably want one place that knows about every project you've enabled ContextPocket on — plus a cross-project set of preferences that follow you.
 
 - **Location**: `~/.contextpocket/hub.json` (a small JSON, indexed by project path)
 - **Contents**: registered projects (path → name / type / latest T / last-active) + user-level global preferences
-- **Design**: the hub is **only a registry**. Project data always lives inside each project's `ContextPocket/`. A hub failure (full disk, permission denied) will not affect normal recording.
+- **Design**: the hub is a **registry plus a read-only search entry**. Project data always lives inside each project's `ContextPocket/`; search never copies, merges, or writes it. It forces a full-text scan (no index build/refresh), skips isolated projects, and reports missing pockets without stopping. A hub failure (full disk, permission denied) will not affect normal recording.
 - **Two ways to share across machines**:
   1. **Env var**: `export CONTEXTPOCKET_HOME=/path/to/synced/folder` (point it at a cloud drive / Dropbox / iCloud / git bare repo). All machines share one `hub.json`.
   2. **Git into the repo**: at `bootstrap` add `--gitignore: false` (or the MCP equivalent `gitignore: false`) to commit the entire `ContextPocket/` directory, including project-local preferences.
-- **Commands**: `context-pocket hub list` · `context-pocket hub pref --key <k> --value <v>` · `context-pocket hub remove`
+- **Commands**: `context-pocket hub list` · `context-pocket hub search "token refresh"` · `context-pocket hub pref --key <k> --value <v>` · `context-pocket hub remove`
 - **Opting out of the registry**: `bootstrap --no-hub` (MCP `noHub: true`) creates the pocket and writes nothing under `CONTEXTPOCKET_HOME`. Use it for throwaway projects, CI jobs and scripted one-shot bootstraps, so the hub keeps only the projects you actually work in. The pocket itself is complete and fully usable; `hub list` just won't show it. Register it later by running the same command without `--no-hub` (bootstrap is idempotent — it re-registers and leaves your recorded history untouched).
+
+---
+
+## 🔀 Merging two machines / agents
+
+When the same project was recorded on two machines, two clones, or by two agents, merge the other pocket into this one:
+
+```bash
+context-pocket merge --from /path/to/other/ContextPocket --dry-run
+context-pocket merge --from /path/to/other/ContextPocket
+```
+
+- One-way and read-only on the source; turns get new T ids after the target's latest.
+- ADRs, requirements, 🔒 red lines and non-conflicting preferences are merged; `state.md`, `code-map.md` and conflicts are written to `ContextPocket/merge-<date>.md` for review.
+- `log-archive.md` is skipped unless you add `--include-archive`.
+- Re-running the same source is incremental: content fingerprints ignore T/ADR/R numbers, so only genuinely new turns/docs are added.
 
 ---
 

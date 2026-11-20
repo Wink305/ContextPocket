@@ -527,3 +527,206 @@ test('repair: renumbering refreshes an existing graph cache; absent cache stays 
   assert.strictEqual(r2.graphCacheRebuilt, false);
   assert.ok(!fs.existsSync(links.graphPath(bare.pocketDir)), 'repair 不该顺手造缓存');
 });
+
+// ------------------------------------------------------------
+// merge — 跨机器 / 多 Agent 合并口袋
+// ------------------------------------------------------------
+
+const merge = require(path.join(ROOT, 'lib', 'merge'));
+
+function addTurn(pocketDir, gist, extra = {}) {
+  return writer.appendLogBlock(pocketDir, Object.assign({
+    gist,
+    tags: ['测试'],
+    user: ['用户原话：' + gist],
+    action: ['创建 test/' + gist.replace(/\s+/g, '-') + '.js'],
+    conflictCheck: false,
+  }, extra));
+}
+
+function fileHash(file) {
+  return crypto.createHash('sha1').update(fs.readFileSync(file)).digest('hex');
+}
+
+const crypto = require('crypto');
+
+test('merge: turns get new ids, references are rewritten, source stays untouched', () => {
+  const target = makePocket('merge-basic-target');
+  const source = makePocket('merge-basic-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'source first');
+  addTurn(source.pocketDir, 'source second', { user: ['用户原话：见 T1'] });
+  const sourceBefore = readPocketFile(source.pocketDir, 'log.md');
+
+  const r = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.turns.added, 2, JSON.stringify(r));
+  assert.deepStrictEqual(r.newTIds, [2, 3]);
+
+  const log = readPocketFile(target.pocketDir, 'log.md');
+  assert.ok(log.includes('## T2 · source first'), log);
+  assert.ok(log.includes('## T3 · source second'), log);
+  assert.ok(/见 T2/.test(log), '源块的 T1 引用要改写成 T2：\n' + log);
+  assert.ok(log.includes('[merged]'), log);
+  assert.strictEqual(readPocketFile(source.pocketDir, 'log.md'), sourceBefore, '源口袋必须只读');
+  assert.strictEqual(verify(target.pocketDir).errorCount, 0, '合并后 verify 必须干净');
+  assert.ok(fs.existsSync(r.reportPath), 'merge 报告要落盘');
+
+  const logAfter = readPocketFile(target.pocketDir, 'log.md');
+  const again = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(again.ok, true, JSON.stringify(again));
+  assert.strictEqual(again.alreadyMerged, true, JSON.stringify(again));
+  assert.strictEqual(readPocketFile(target.pocketDir, 'log.md'), logAfter, '重复合并不应写盘');
+
+  addTurn(source.pocketDir, 'source third');
+  const inc = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(inc.ok, true, JSON.stringify(inc));
+  assert.strictEqual(inc.turns.added, 1, JSON.stringify(inc));
+  const finalLog = readPocketFile(target.pocketDir, 'log.md');
+  assert.strictEqual((finalLog.match(/## T2 · source first/g) || []).length, 1, '旧轮次不能重复');
+});
+
+test('merge: ADRs, requirements, red lines and preferences are deduped; conflicts keep target', () => {
+  const target = makePocket('merge-docs-target');
+  const source = makePocket('merge-docs-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'source first');
+
+  writer.addDecision(target.pocketDir, { title: 'target decision', context: 'c', options: 'o', decision: 'd', consequences: 'x', createdAt: 1 });
+  writer.addDecision(source.pocketDir, { title: 'source decision', context: 'c2', options: 'o2', decision: 'd2', consequences: 'x2', createdAt: 1 });
+  writer.addRequirement(target.pocketDir, { text: 'shared requirement', status: 'Open', openedAt: 1 });
+  writer.addRequirement(source.pocketDir, { text: 'shared requirement', status: 'Done', openedAt: 1 });
+  writer.addRequirement(source.pocketDir, { text: 'source requirement', status: 'Open', openedAt: 1 });
+  writer.addAbsoluteEntry(target.pocketDir, { text: 'target red line', createdAt: 1 });
+  writer.addAbsoluteEntry(source.pocketDir, { text: 'source red line', gist: '源红线', createdAt: 1 });
+  writer.updatePreferences(target.pocketDir, { key: '语言', value: 'zh' });
+  writer.updatePreferences(source.pocketDir, { key: '语言', value: 'en' });
+  writer.updatePreferences(source.pocketDir, { key: '解释风格', value: '详细' });
+
+  const r = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.docs.adrsAdded, 1, JSON.stringify(r));
+  assert.strictEqual(r.docs.reqsAdded, 1, JSON.stringify(r));
+  assert.strictEqual(r.docs.reqStatusConflicts.length, 1, JSON.stringify(r));
+  assert.strictEqual(r.docs.absoluteAdded, 1, JSON.stringify(r));
+  assert.strictEqual(r.docs.prefsAdded, 1, JSON.stringify(r));
+  assert.strictEqual(r.docs.prefConflicts.length, 1, JSON.stringify(r));
+
+  const decisions = readPocketFile(target.pocketDir, 'decisions.md');
+  assert.ok(decisions.includes('source decision'), decisions);
+  assert.ok(readPocketFile(target.pocketDir, 'requirements.md').includes('source requirement'));
+  const abs = readPocketFile(target.pocketDir, 'absolute.md');
+  assert.ok(abs.includes('source red line'), abs);
+  assert.ok(/## 🔒 T2/.test(abs), '源 T1 的红线应挂到目标 T2：\n' + abs);
+  const prefs = readPocketFile(target.pocketDir, 'preferences.md');
+  assert.ok(prefs.includes('- 语言: zh'), prefs);
+  assert.ok(prefs.includes('- 解释风格: 详细'), prefs);
+  assert.ok(!prefs.includes('- 语言: en'), '冲突偏好必须保留目标值：\n' + prefs);
+  assert.strictEqual(verify(target.pocketDir).errorCount, 0, '合并后 verify 必须干净');
+});
+
+test('merge: archive is skipped by default and merged with --include-archive', () => {
+  const target = makePocket('merge-archive-target');
+  const source = makePocket('merge-archive-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'old one');
+  addTurn(source.pocketDir, 'old two');
+  addTurn(source.pocketDir, 'live one');
+  writer.archiveLog(source.pocketDir, { keepLast: 1, dryRun: false });
+
+  const def = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(def.ok, true, JSON.stringify(def));
+  assert.strictEqual(def.turns.added, 1, JSON.stringify(def));
+  assert.ok(def.turns.archivedSkipped >= 2, JSON.stringify(def));
+  assert.ok(!readPocketFile(target.pocketDir, 'log.md').includes('old one'));
+
+  const inc = merge.mergePocket(target.pocketDir, { from: source.pocketDir, includeArchive: true });
+  assert.strictEqual(inc.ok, true, JSON.stringify(inc));
+  assert.strictEqual(inc.turns.added, 2, JSON.stringify(inc));
+  const log = readPocketFile(target.pocketDir, 'log.md');
+  assert.ok(log.includes('old one') && log.includes('old two'), log);
+  assert.strictEqual(verify(target.pocketDir).errorCount, 0);
+});
+
+test('merge: --dry-run writes nothing', () => {
+  const target = makePocket('merge-dry-target');
+  const source = makePocket('merge-dry-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'source first');
+
+  const files = ['log.md', 'decisions.md', 'requirements.md', 'absolute.md', 'preferences.md',
+    'index.md', 'state.md', 'code-map.md', 'handoff.md'];
+  const before = {};
+  for (const file of files) {
+    const p = path.join(target.pocketDir, file);
+    before[file] = fs.existsSync(p) ? fileHash(p) : null;
+  }
+
+  const r = merge.mergePocket(target.pocketDir, { from: source.pocketDir, dryRun: true });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.dryRun, true);
+  assert.strictEqual(r.turns.added, 1, JSON.stringify(r));
+  assert.strictEqual(r.reportPath, null);
+  for (const file of files) {
+    const p = path.join(target.pocketDir, file);
+    const after = fs.existsSync(p) ? fileHash(p) : null;
+    assert.strictEqual(after, before[file], 'dry-run 改了 ' + file);
+  }
+  assert.strictEqual(fs.readdirSync(target.pocketDir).filter((n) => n.startsWith('merge-')).length, 0);
+});
+
+test('merge: refuses isolated / unhealthy sources and missing --from', () => {
+  const target = makePocket('merge-reject-target');
+  const source = makePocket('merge-reject-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'source first');
+
+  const missing = merge.mergePocket(target.pocketDir, {});
+  assert.strictEqual(missing.ok, false);
+  assert.match(missing.error, /--from/);
+
+  const marker = path.join(source.projectDir, '.contextpocket-isolate');
+  fs.writeFileSync(marker, 'isolate\n');
+  try {
+    const iso = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+    assert.strictEqual(iso.ok, false, JSON.stringify(iso));
+    assert.match(iso.error, /isolated/i);
+  } finally {
+    fs.rmSync(marker, { force: true });
+  }
+
+  fs.appendFileSync(path.join(source.pocketDir, 'log.md'),
+    '\n## T1 · duplicated\n\n### User\n- u\n\n### Action\n- a\n', 'utf-8');
+  const bad = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(bad.ok, false, JSON.stringify(bad));
+  assert.match(bad.error, /verify|duplicate|error/i);
+});
+
+test('merge: refuses an unmerged reference to an archived T', () => {
+  const target = makePocket('merge-unmapped-target');
+  const source = makePocket('merge-unmapped-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'archived turn');
+  addTurn(source.pocketDir, 'live turn', { user: ['用户原话：见 T1'] });
+  writer.archiveLog(source.pocketDir, { keepLast: 1, dryRun: false });
+
+  const r = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(r.ok, false, JSON.stringify(r));
+  assert.match(r.error, /--include-archive/);
+});
+
+test('merge: T-numbered attachments are copied and rewritten', () => {
+  const target = makePocket('merge-attach-target');
+  const source = makePocket('merge-attach-source');
+  addTurn(target.pocketDir, 'target base');
+  fs.mkdirSync(path.join(source.pocketDir, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(source.pocketDir, 'assets', 'T01-diagram.txt'), 'diagram', 'utf-8');
+  addTurn(source.pocketDir, 'turn with attachment', { attachments: ['assets/T01-diagram.txt'] });
+
+  const r = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.ok(fs.existsSync(path.join(target.pocketDir, 'assets', 'T02-diagram.txt')), JSON.stringify(r));
+  const log = readPocketFile(target.pocketDir, 'log.md');
+  assert.ok(log.includes('assets/T02-diagram.txt'), log);
+  assert.strictEqual(verify(target.pocketDir).errorCount, 0);
+});

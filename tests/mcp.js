@@ -1099,3 +1099,46 @@ test('mcp: isolated project refuses every tool over the wire, status reports iso
     assert.match(text, /UNIQUE-MCP-GIST-5523/, '解除隔离后 recall 经 wire 恢复');
   });
 });
+
+// ------------------------------------------------------------
+// merge（跨机器 / 多 Agent 合并口袋）
+// ------------------------------------------------------------
+
+test('mcp: context_pocket_merge dry-run reports and missing from is an error', async () => {
+  const target = makePocket('mcp-merge-target');
+  const source = makePocket('mcp-merge-source');
+  cliAppend(source.pocketDir, { gist: 'mcp merge turn', user: 'u', action: 'a' });
+
+  const text = await mcpCall(target.projectDir, 'context_pocket_merge', {
+    from: source.pocketDir,
+    dryRun: true,
+  }, 2);
+  assert.match(text, /Merge plan/);
+  assert.match(text, /Turns:/);
+
+  const raw = await mcpCallRaw(target.projectDir, 'context_pocket_merge', {});
+  assert.strictEqual(raw.isError, true, JSON.stringify(raw));
+  assert.match(raw.content.map((c) => c.text).join('\n'), /from is required/);
+});
+
+// ------------------------------------------------------------
+// hub search（跨项目只读检索）
+// ------------------------------------------------------------
+
+test('mcp: hub search spans registered projects and rejects a missing keyword', async () => {
+  const a = makePocket('mcp-hubsearch-a');
+  const b = makePocket('mcp-hubsearch-b');
+  const kw = 'mcphubsearch7741';
+  cliAppend(a.pocketDir, { gist: kw + ' alpha', user: 'u', action: 'a' });
+  cliAppend(b.pocketDir, { gist: kw + ' beta', user: 'u', action: 'a' });
+
+  const text = await mcpCall(a.projectDir, 'context_pocket_hub', { action: 'search', keyword: kw }, 2);
+  assert.match(text, /Hub search/);
+  assert.match(text, /match\(es\)/);
+  assert.ok(text.includes(kw + ' alpha'), text);
+  assert.ok(text.includes(kw + ' beta'), text);
+
+  const raw = await mcpCallRaw(a.projectDir, 'context_pocket_hub', { action: 'search' });
+  assert.strictEqual(raw.isError, true, JSON.stringify(raw));
+  assert.match(raw.content.map((c) => c.text).join('\n'), /keyword is required/);
+});

@@ -30,9 +30,9 @@ The MCP server exposes the same 11 operations as tools (`context_pocket_bootstra
 * **No write-time conflict gate.** `log append` reports `conflictCheckSkipped: true` honestly instead of pretending to have checked.
 * **No maintenance plane.** Archive, migrate, repair, sync, hub registration — those live in the full package. A pocket outgrown by Lite is a valid full-package pocket; run `context-pocket` against it whenever you want.
 * **`log amend` only fills gaps.** It adds sections that are missing; it never overwrites content already on the block (including a recorded timestamp).
-* **Version line is independent.** Lite is versioned separately from the full package (currently `2.12-lite`). Stable releases display two parts plus the product suffix (`2.12-lite`); hotfix prereleases display the full string — the suffix carries meaning.
+* **Version line is independent.** Lite is versioned separately from the full package (currently `2.13-lite`). Stable releases display two parts plus the product suffix (`2.13-lite`); hotfix prereleases display the full string — the suffix carries meaning.
 
-Download the [ContextPocket-2.12-Lite release archive](https://github.com/Wink305/ContextPocket/releases/download/2.12-lite/ContextPocket-2.12-Lite.zip). The ZIP contains the package files and does not involve an npm registry release.
+Download the [ContextPocket-2.13-Lite release archive](https://github.com/Wink305/ContextPocket/releases/download/2.13-lite/ContextPocket-2.13-Lite.zip). The ZIP contains the package files and does not involve an npm registry release.
 
 ## Install
 

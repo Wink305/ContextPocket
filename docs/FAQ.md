@@ -55,7 +55,7 @@ context-pocket migrate --dir <project-root> --to v2             # 真写：先�
 
 ### Q: 怎么确认我装的 context-pocket 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"2.12","display":"2.12","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位如 `2.3`；带预发布/hotfix 后缀时显示完整串，如 `2.0.1-hotfix1`）。
+**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"2.13","display":"2.13","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位如 `2.3`；带预发布/hotfix 后缀时显示完整串，如 `2.0.1-hotfix1`）。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余六处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、`CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 三处说明与示例里写着的那串号。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 
@@ -84,7 +84,7 @@ MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就�
 export CONTEXTPOCKET_HOME=/path/to/synced/folder   # 指向网盘/Dropbox/iCloud/git bare repo
 ```
 
-`~/.contextpocket/hub.json`（hub 注册表 + 全局偏好）会跟着这个文件夹走。新机器登录后，`context-pocket hub list` 就能看到已注册项目。
+`~/.contextpocket/hub.json`（hub 注册表 + 跨项目只读检索 + 全局偏好）会跟着这个文件夹走。新机器登录后，`context-pocket hub list` 就能看到已注册项目。
 
 **2) 把整份 `ContextPocket/` 进 git（项目级同步）**
 
@@ -418,15 +418,27 @@ cd path/to/context-pocket && npm link    # 得到 context-pocket / context-pocke
 - `index [--rebuild]` — 查看/重建搜索索引
 - `distill [--dry-run] [--recent-keep N]` — 从归档与旧轮次里提炼摘要报告
 - `import --file <session.jsonl>` — 导入历史会话
-- `hub list|pref|remove` — 已注册项目列表 / 全局偏好 / 移除注册（项目在 `bootstrap` 时自动登记，`bootstrap --no-hub` 跳过这一步）
+- `merge --from <other>/ContextPocket [--dry-run] [--include-archive]` — 合并另一个口袋：轮次重编号，并合入 ADR / 需求 / 🔒 红线 / 非冲突偏好；state、code-map 与冲突写入 merge 报告
+- `hub list|search|pref|remove` — 已注册项目列表 / 只读跨项目检索 / 全局偏好 / 移除注册（项目在 `bootstrap` 时自动登记，`bootstrap --no-hub` 跳过这一步）
 - `migrate` — 格式迁移（含备份 + 回滚）
 - `repair [--dry-run] [--apply-refs] [--author "…"]` — 把跨机器并行写出来的撞号 T 编号收回来：撞号那块及其后的块整体后移，派生值跟着对齐，正文旧引用默认只列不改（`--apply-refs` 才改写），改完体检更差整份回滚
 - `install-hook` / `uninstall-hook` — 安装/移除 Git pre-commit 钩子
 
-上面这份表由 `context-pocket help --json` 生成（同一张数据源），命令总数与 MCP 工具数都是 27，
+上面这份表由 `context-pocket help --json` 生成（同一张数据源），命令总数与 MCP 工具数都是 29，
 `tests/cli.js` 与 `tests/mcp.js` 会同时核对"帮助 ↔ README 表 ↔ MCP 工具名"三处，任何一处漏项测试就红。
 
 每个命令（含 `help` 本身）都接受 `--json`：stdout 只有一行 JSON，出错时 `{"ok":false,"error":"…"}` 且退出码非 0。
+
+### Q: 两台机器各有一个 ContextPocket，怎么合？
+
+在目标项目里跑：
+
+```bash
+context-pocket merge --from /path/to/other/ContextPocket --dry-run
+context-pocket merge --from /path/to/other/ContextPocket
+```
+
+源口袋只读，轮次会接在目标最新 T 之后重新编号；ADR、需求、🔒 红线与非冲突偏好一并合入。`state.md`、`code-map.md`、冲突偏好/需求不自动覆盖，写进 `ContextPocket/merge-<date>.md`。默认跳过源 `log-archive.md`，需要时加 `--include-archive`。重复合并是增量的，不会把旧轮次再加一遍。
 
 ### Q: 如何安装 Git pre-commit hook？
 

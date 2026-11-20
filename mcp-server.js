@@ -65,6 +65,7 @@ const {
   listProjects,
   setGlobalPref,
   getGlobalPref,
+  searchProjects,
 } = require('./lib/userhub');
 
 // ============================================================
@@ -973,6 +974,28 @@ const TOOLS = [
     },
   },
   {
+    name: 'context_pocket_merge',
+    description: TOOL_DESCRIPTIONS.context_pocket_merge,
+    inputSchema: {
+      type: 'object',
+      required: ['from'],
+      properties: {
+        from: {
+          type: 'string',
+          description: 'Path to the other ContextPocket/ (or its project root). Read-only source.',
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'Plan only; write nothing',
+        },
+        includeArchive: {
+          type: 'boolean',
+          description: 'Also merge source log-archive.md turns into the target live log',
+        },
+      },
+    },
+  },
+  {
     name: 'context_pocket_hub',
     description: TOOL_DESCRIPTIONS.context_pocket_hub,
     inputSchema: {
@@ -980,9 +1003,17 @@ const TOOLS = [
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'pref', 'remove'],
-          description: 'list = registered projects (default); pref = global preferences; remove = unregister this project',
+          enum: ['list', 'search', 'pref', 'remove'],
+          description: 'list = registered projects (default); search = read-only search across registered projects; pref = global preferences; remove = unregister this project',
           default: 'list',
+        },
+        keyword: {
+          type: 'string',
+          description: 'Search keyword (action=search). Read-only: never writes indexes or hub.json',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Max matches across projects (action=search; default 20, 0 = all)',
         },
         key: {
           type: 'string',
@@ -1121,6 +1152,9 @@ function handleToolsCall(id, params) {
         break;
       case 'context_pocket_import':
         result = toolImport(args || {});
+        break;
+      case 'context_pocket_merge':
+        result = toolMerge(args || {});
         break;
       case 'context_pocket_hub':
         result = toolHub(args || {});
@@ -2646,6 +2680,100 @@ function toolImport(args) {
   };
 }
 
+function toolMerge(args) {
+  const pocketDir = getPocketDir();
+  const from = textOption(args, 'from');
+  if (!from) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: from is required (path to the other ContextPocket/ or its project root)' }],
+      isError: true,
+    };
+  }
+
+  let result;
+  try {
+    const mergePocket = require('./lib/merge').mergePocket;
+    result = mergePocket(pocketDir, {
+      from,
+      dryRun: !!args.dryRun,
+      includeArchive: !!args.includeArchive,
+    });
+  } catch (e) {
+    return { content: [{ type: 'text', text: '❌ Error: ' + e.message }], isError: true };
+  }
+
+  if (!result.ok) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: ' + result.error + (result.rolledBack ? '\n(rolled back — target unchanged)' : '') }],
+      isError: true,
+    };
+  }
+
+  const lines = [];
+  if (result.alreadyMerged) {
+    lines.push('## ℹ️ Nothing new — this source is already merged');
+    if (result.turns.archivedSkipped > 0) {
+      lines.push(`- ${result.turns.archivedSkipped} archived turn(s) skipped (add includeArchive to merge them)`);
+    }
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+
+  lines.push(result.dryRun ? '## 📋 Merge plan (dry-run)' : '## ✅ Pocket merged');
+  lines.push('');
+  lines.push(`- Source: ${result.source.pocketDir} (${result.source.version}, latest T${result.source.latestT})`);
+  lines.push(`- Turns: ${result.turns.added} added · ${result.turns.duplicates} already present · ${result.turns.fixesAdded} fix block(s)`);
+  if (result.newTIds.length > 0) {
+    lines.push(`- New T: T${result.newTIds[0]}–T${result.newTIds[result.newTIds.length - 1]}`);
+  }
+  lines.push(`- Docs: ADR +${result.docs.adrsAdded} · R +${result.docs.reqsAdded} · 🔒 +${result.docs.absoluteAdded} · prefs +${result.docs.prefsAdded}`);
+  if (result.docs.reqStatusConflicts.length > 0 || result.docs.prefConflicts.length > 0) {
+    lines.push(`- Conflicts: ${result.docs.reqStatusConflicts.length} requirement(s), ${result.docs.prefConflicts.length} preference(s) — target kept`);
+  }
+  if (result.attachments.copied.length > 0) {
+    lines.push(`- Attachments: ${result.attachments.copied.length} copied`);
+  }
+  if (result.turns.archivedSkipped > 0) {
+    lines.push(`- Archive: ${result.turns.archivedSkipped} turn(s) skipped (add includeArchive to merge them)`);
+  }
+  if (result.dryRun) {
+    lines.push('');
+    lines.push('*(dry-run: nothing written)*');
+  } else {
+    lines.push(`- Report: ${result.reportPath}`);
+    lines.push(`- Verify: ${result.verifyAfter.errorCount} error(s), ${result.verifyAfter.warningCount} warning(s)`);
+  }
+
+  return { content: [{ type: 'text', text: lines.join('\n') }] };
+}
+
+/** 把一条检索结果渲染成 Markdown（MCP 侧，不带 ANSI 颜色） */
+function formatHubHitMarkdown(row) {
+  const highlights = (r) => {
+    if (!r.highlights || r.highlights.length === 0) return '';
+    return '\n' + r.highlights.slice(0, 3).map((h) => {
+      const snippet = h.text.length > 60 ? h.text.slice(0, 60) + '...' : h.text;
+      return `  - ↳ [${h.field}] ${snippet}`;
+    }).join('\n');
+  };
+
+  if (row.type === 'ADR') {
+    return `- **ADR-${row.adrId}** · ${row.title}` + highlights(row);
+  }
+  if (row.type === 'R') {
+    return `- **R${row.rId}** (${row.status})${row.uncertain ? ' ❓' : ''} · ${row.text}` + highlights(row);
+  }
+  if (row.type === 'pref') {
+    return `- **pref** · ${row.line}` + highlights(row);
+  }
+  if (row.type === 'FIX') {
+    return `- **${row.fixId}** · ${row.gist} → corrects T${row.targetId}` + highlights(row);
+  }
+  const tags = row.tags && row.tags.length > 0
+    ? ' ' + row.tags.map((t) => `[${t}]`).join('')
+    : '';
+  return `- **T${row.id}**${tags} · ${row.gist}${row.archived ? ' (archived)' : ''}` + highlights(row);
+}
+
 function toolHub(args) {
   const action = args.action || 'list';
   const lines = [];
@@ -2693,6 +2821,54 @@ function toolHub(args) {
     lines.push(`✅ **Global preference ${r.isNew ? 'added' : 'updated'}:**`);
     lines.push(`- ${key}: ${value}`);
     lines.push(`- Stored in: ${getHubFile()}`);
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+
+  if (action === 'search') {
+    const keyword = textOption(args, 'keyword');
+    if (!keyword) {
+      return {
+        content: [{ type: 'text', text: '❌ Error: keyword is required for action=search' }],
+        isError: true,
+      };
+    }
+
+    const data = searchProjects(keyword, { limit: args.limit });
+    lines.push(`## Hub search: "${data.keyword}"`);
+    lines.push('');
+    const shown = data.count < data.total ? ` · showing ${data.count}` : '';
+    lines.push(`${data.matched} of ${data.projects} project(s) matched · ${data.total} match(es)${shown}`);
+
+    if (data.projects === 0) {
+      lines.push('');
+      lines.push('*(no projects registered — run context_pocket_bootstrap in a project)*');
+    } else if (data.results.length === 0) {
+      lines.push('');
+      lines.push('*(no matches)*');
+    } else {
+      for (const g of data.results) {
+        const active = (g.lastActiveAt || '').slice(0, 10) || '?';
+        lines.push('');
+        lines.push(`### ${g.name} · T${g.latestT} · last active ${active} · ${g.count}/${g.total}`);
+        lines.push(`- ${g.key}`);
+        for (const r of g.rows) lines.push(formatHubHitMarkdown(r));
+        if (g.hasMore) {
+          lines.push(`- ↳ ${g.total - g.count} more — \`context-pocket search "${data.keyword}" --dir "${g.key}"\``);
+        }
+      }
+    }
+
+    if (data.skipped.length > 0) {
+      const parts = data.skipped.map((s) => {
+        const why = s.reason === 'missing-pocket' ? 'missing pocket'
+          : s.reason === 'isolated' ? 'isolated'
+          : 'unreadable';
+        return `${s.name} (${why})`;
+      });
+      lines.push('');
+      lines.push(`- Skipped: ${parts.join(', ')}`);
+    }
+
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 

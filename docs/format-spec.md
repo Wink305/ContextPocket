@@ -11,7 +11,7 @@
 
 | 名字 | 在哪 | 例 | 含义 |
 |---|---|---|---|
-| 包版本 | `package.json` 的 `version` | `2.12` | CLI / MCP 软件版本 |
+| 包版本 | `package.json` 的 `version` | `2.13` | CLI / MCP 软件版本 |
 | 数据格式版本 | 口袋 `readme.md` 的 `format:` | `v2` | 本规范描述的格式 |
 | SKILL 排版版本 | `SKILL.md` frontmatter 的 `format:` | `v1` | 那份文档的排版约定 |
 

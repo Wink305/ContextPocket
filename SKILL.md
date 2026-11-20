@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 2.12
+version: 2.13
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -33,7 +33,7 @@ ContextPocket does NOT store secrets, credentials, or production data — it sto
 - **Who reads it:** any AI agent in the project, including future model switches. Markdown is the only truth source so it's agent-agnostic.
 - **When a model switches** (e.g. Sonnet → Opus, or different vendor): the new model has zero conversation memory. It **MUST** re-read `ContextPocket/` before touching the project. This is the only way cross-model continuity works.
 - **Search auto-uses the index** (`ContextPocket/assets/search-index.json`). The index is a derivable cache — you can delete it at any time and `context-pocket index --rebuild` (CLI) or `context_pocket_index` (MCP) will rebuild it. A search with no index (missing, corrupt, stale, or written by an older index format) **rebuilds it on the spot and still answers from it**; it only falls back to a full scan when even that fails. `--no-index` (MCP `noIndex: true`) is the deliberate scan — same matches, same order. On `log append` / `log amend` the same flag means the other end of the cache: skip the *refresh* after that write — the next search rebuilds it and finds the turn anyway, so bulk re-logging loops can use it safely.
-- **User-level hub** (`~/.contextpocket/hub.json`, or `$CONTEXTPOCKET_HOME/hub.json` where `CONTEXTPOCKET_HOME` is the *directory* that holds it): a tiny cross-project registry that records which projects have ContextPocket + global preferences. **All hub operations are best-effort**: a hub failure (network, missing dir) must never block / break ContextPocket writes in the project itself. Each project's `ContextPocket/` is always self-sufficient. `bootstrap` is the only command that writes there; `noHub: true` (CLI `--no-hub`) skips that one write — use it for throwaway/temporary directories and CI runs, and leave it off for projects the user actually works in, since `hub list` and MCP project resolution rely on the entry.
+- **User-level hub** (`~/.contextpocket/hub.json`, or `$CONTEXTPOCKET_HOME/hub.json` where `CONTEXTPOCKET_HOME` is the *directory* that holds it): a tiny cross-project registry that records which projects have ContextPocket + global preferences, plus a **read-only cross-project search** (`hub search <kw>` / MCP `action=search`). Search forces a full-text scan (`useIndex` off), never builds or refreshes indexes, never writes `hub.json`, skips isolated projects, and reports missing pockets without stopping. **All hub operations are best-effort**: a hub failure (network, missing dir) must never block / break ContextPocket writes in the project itself. Each project's `ContextPocket/` is always self-sufficient. `bootstrap` is the only command that writes there; `noHub: true` (CLI `--no-hub`) skips that one write — use it for throwaway/temporary directories and CI runs, and leave it off for projects the user actually works in, since `hub list` and MCP project resolution rely on the entry.
 
 ---
 
@@ -44,13 +44,13 @@ The Skill auto-detects which mode is available and falls back gracefully. Always
 ### Mode 1: MCP mode (best reliability)
 - Configure your agent to load `mcp-server.js` from the Skill directory.
 - All writes go through MCP tools (`context_pocket_*`). Never manually edit markdown files.
-- Tools cover: `bootstrap`, `status`, `verify`, `sync`, `log_append`, `log_amend`, `absolute_add`, `recall`, `diff`, `search`, `why`, `graph`, `check_conflicts`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `migrate`, `repair`, `install_hook`, `uninstall_hook`, `index`, `distill`, `import`, `hub` (28 tools).
+- Tools cover: `bootstrap`, `status`, `verify`, `sync`, `log_append`, `log_amend`, `absolute_add`, `recall`, `diff`, `search`, `why`, `graph`, `check_conflicts`, `state_update`, `preferences_update`, `code_map_update`, `req_add`, `decision_add`, `handoff`, `archive`, `migrate`, `repair`, `install_hook`, `uninstall_hook`, `index`, `distill`, `import`, `merge`, `hub` (29 tools).
 - `search` takes a `noIndex` boolean — there is **no** separate `search_no_index` tool. `graph` views the derived link graph (turns ↔ files ↔ ADRs ↔ tags ↔ requirements) and takes `action` (view / rebuild / verify), `type`, `limit`.
 
 ### Mode 2: CLI mode (good reliability)
 - Script path: `<skill-dir>/bin/context-pocket.js`
 - Invoke: `node <skill-dir>/bin/context-pocket.js <command> --dir <project-root>`
-- All commands are subcommands (`log append`, `state update`, etc.). Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 28 the MCP server registers). Use `--no-index` on `search` to skip the index cache.
+- All commands are subcommands (`log append`, `state update`, etc.). Use `--json` for machine-readable output — including `help --json`, which returns the whole command table as `{groups:[{group,commands:[{command,summary}]}]}` (that list is the same 29 the MCP server registers). Use `--no-index` on `search` to skip the index cache.
 
 ### Mode 3: Pure skill mode (compatibility fallback)
 - Manually write the markdown files following the rules in **Per-turn rules** + **Pre-reply safety hook**.
@@ -78,6 +78,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Fill in a missing turn | `log amend` | `✅ T7 filled: User` |
 | Find who changed a file | `why <path>` (`--expand <1–3>` for graph context; `--as-of <T>` for a historical slice) | matching turns split by evidence, plus related graph nodes when requested |
 | Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`; `--expand <1–3>` for graph context) | matching T-blocks, window applied before paging; optional graph context never changes match order |
+| Find how another project solved X | `hub search <kw>` (MCP: `context_pocket_hub` with `action=search`) | matches grouped by project, read-only; skips isolated projects and never writes indexes |
 | Recall one turn | `recall T<n>` | the full T-block |
 | Recall one turn **with its surroundings** | `recall T<n> --with-context` (MCP: `withContext`) | the T-block plus its inbound context: who referenced it, later changes to the same files, related ADRs |
 | List turns inside a window | `recall --since T5 --until T9` / `recall --from <date> --to <date>` (MCP: `context_pocket_recall` **without `tId`**, with the four window params) | turns in the window, oldest first, archived ones marked; page with `--limit/--offset`. No keyword needed. A `tId` and a window cannot be combined |
@@ -88,6 +89,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Repair duplicated or stale T-numbers | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | "补了 N 个" |
 | Import an earlier session | `import` | "导入了 N 轮" |
+| Merge another machine/agent's pocket | `merge --from <other>/ContextPocket` (MCP: `context_pocket_merge`) | counts + report path; source is read-only, conflicts go to `merge-<date>.md` |
 | Distill older turns | `distill` | report written; **agent then judges + merges by hand** |
 | Export a snapshot for a teammate | agent writes the snapshot file itself (no tool) | the file path |
 | Archive and start over | `archive --keep-last N`, then rebuild | **confirm with the user first** |

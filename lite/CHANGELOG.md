@@ -2,6 +2,18 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [2.13-lite] - 2026-11-20
+
+### ContextPocket Lite 2.13 — 版本对齐（稳定版）
+
+> Lite 独立版本线发 `2.13`（对外 `2.13-lite`）；主包同日发 `2.13`。
+> 本轮无 Lite 功能变更，仍然零缓存、零依赖、11 命令 / 11 工具。
+
+- **版本对齐**：`lite/package.json`、`lib/version.js` 的兜底值与展示号同步到 `2.13` / `2.13-lite`；数据格式仍 v2。
+- **兼容性**：主包 `merge` 产出的是标准 v2 口袋，Lite 可直接读写；`merge` / `hub search` 维护面只在主包提供。
+- **回归**：Lite core / compat / metrics 全绿，文件数仍 30、体积基线仍 133.0 kB。
+- **升级动作**：无。**破坏性**：无。
+
 ## [2.12-lite] - 2026-11-18
 
 ### ContextPocket Lite 2.12 — 个性化相关度排名（稳定版）

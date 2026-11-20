@@ -175,10 +175,10 @@ context-pocket/
 ├── lib/                   # 全部实现；CLI 与 MCP 都只调这里，不在入口里写业务逻辑
 │   ├── bootstrap.js  constants.js  core.js  distill.js  fields.js
 │   ├── formatter.js  help.js   hooks.js      importer.js  indexer.js  io.js
-│   ├── lifecycle.js  migrate.js    parser.js    query.js    repair.js
+│   ├── lifecycle.js  merge.js      migrate.js   parser.js   query.js    repair.js
 │   ├── secrets.js    sync.js       userhub.js   validator.js writer.js
 │   └── when.js        # v2 时间行的唯一解析/渲染处：parseWhen / whenLine / describeWhen / formatSupportsWhen
-├── mcp-server.js          # MCP stdio 入口（换行分隔 JSON-RPC，27 个工具）
+├── mcp-server.js          # MCP stdio 入口（换行分隔 JSON-RPC，29 个工具）
 ├── mcp-smoke.js           # 真实 stdio 冒烟测试（npm run smoke）
 ├── tests/
 │   ├── run.js             # 零依赖跑批（可按文件前缀只跑一个）

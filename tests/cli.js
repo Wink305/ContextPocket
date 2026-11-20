@@ -34,6 +34,11 @@ function parseJsonLine(result) {
   return JSON.parse(lines[0]);
 }
 
+/** hub 里的项目 key 统一为绝对路径 + 正斜杠（Windows / macOS / Linux 同一份） */
+function hubKey(dir) {
+  return path.resolve(dir).replace(/\\/g, '/');
+}
+
 test('cli: status --json is one parseable line', () => {
   const { pocketDir } = makePocket('cli-status');
   const r = runCli(['status', '--json'], pocketDir);
@@ -486,7 +491,7 @@ test('cli: status --json reports the archive threshold it reads', () => {
 test('cli: help --json lists every command, and the docs list them too', () => {
   const json = parseJsonLine(runCli(['help', '--json']));
   const commands = json.groups.reduce((acc, g) => acc.concat(g.commands.map((c) => c.command)), []);
-  assert.strictEqual(commands.length, 28, 'help 与 main() 分发的命令数必须一致：\n' + commands.join(', '));
+  assert.strictEqual(commands.length, 29, 'help 与 main() 分发的命令数必须一致：\n' + commands.join(', '));
   assert.ok(!commands.some((c) => c === 'help'), 'help 自己不进清单');
 
   // 人类版与 JSON 版由同一张表渲染，两者不能漂移
@@ -1227,4 +1232,139 @@ test('cli: search and why append multi-hop graph context with as-of validity fil
   const asOfWithoutExpand = runCli(['search', '闭区间', '--as-of', '2', '--json'], pocketDir);
   assert.strictEqual(asOfWithoutExpand.code, 1);
   assert.match(parseJsonLine(asOfWithoutExpand).error, /requires expand/);
+});
+
+// ------------------------------------------------------------
+// hub search（跨项目只读检索）
+// ------------------------------------------------------------
+
+test('cli: hub search aggregates matches across registered projects', () => {
+  const a = makePocket('cli-hubsearch-a');
+  const b = makePocket('cli-hubsearch-b');
+  const kw = 'hubsearch7741';
+  runCli(['log', 'append', '--gist', kw + ' alpha', '--user', 'u', '--no-index', '--json'], a.pocketDir);
+  runCli(['log', 'append', '--gist', kw + ' beta', '--user', 'u', '--no-index', '--json'], b.pocketDir);
+
+  const data = parseJsonLine(runCli(['hub', 'search', kw, '--json'], a.pocketDir));
+  assert.strictEqual(data.ok, true, JSON.stringify(data));
+  assert.ok(data.projects >= 2, JSON.stringify(data));
+  assert.ok(data.matched >= 2, JSON.stringify(data));
+  assert.ok(data.total >= 2, JSON.stringify(data));
+  const keys = data.results.map((g) => g.key);
+  assert.ok(keys.includes(hubKey(a.projectDir)), JSON.stringify(keys));
+  assert.ok(keys.includes(hubKey(b.projectDir)), JSON.stringify(keys));
+  for (const g of data.results) {
+    assert.ok(Array.isArray(g.rows) && g.rows.length > 0, JSON.stringify(g));
+    assert.ok(g.count >= 1 && g.total >= g.count, JSON.stringify(g));
+  }
+
+  const human = runCli(['hub', 'search', kw], a.pocketDir);
+  assert.strictEqual(human.code, 0, human.stderr);
+  assert.match(human.stdout, /Hub search/);
+  assert.ok(human.stdout.includes(hubKey(a.projectDir)), '人类输出要能定位到项目：\n' + human.stdout);
+});
+
+test('cli: hub search never writes indexes or hub.json', () => {
+  const { pocketDir } = makePocket('cli-hubsearch-ro');
+  const kw = 'hubsearchro7741';
+  runCli(['log', 'append', '--gist', kw, '--user', 'u', '--no-index', '--json'], pocketDir);
+
+  const idx = path.join(pocketDir, 'assets', 'search-index.json');
+  const hubFile = path.join(process.env.CONTEXTPOCKET_HOME, 'hub.json');
+  const beforeIdx = fs.existsSync(idx) ? fs.readFileSync(idx, 'utf-8') : null;
+  const beforeHub = fs.readFileSync(hubFile, 'utf-8');
+
+  const r = runCli(['hub', 'search', kw, '--json'], pocketDir);
+  assert.strictEqual(r.code, 0, r.stderr);
+  const afterIdx = fs.existsSync(idx) ? fs.readFileSync(idx, 'utf-8') : null;
+  assert.strictEqual(afterIdx, beforeIdx, 'hub search 不能建/刷新索引');
+  assert.strictEqual(fs.readFileSync(hubFile, 'utf-8'), beforeHub, 'hub search 不能写 hub.json');
+});
+
+test('cli: hub search skips isolated projects without leaking content', () => {
+  const a = makePocket('cli-hubsearch-iso');
+  const b = makePocket('cli-hubsearch-iso-run');
+  const kw = 'hubsearchiso7741';
+  runCli(['log', 'append', '--gist', kw + ' secret', '--user', 'u', '--no-index', '--json'], a.pocketDir);
+
+  const marker = path.join(a.projectDir, '.contextpocket-isolate');
+  fs.writeFileSync(marker, 'isolate\n');
+  try {
+    const data = parseJsonLine(runCli(['hub', 'search', kw, '--json'], b.pocketDir));
+    assert.ok(!JSON.stringify(data.results).includes(kw + ' secret'), '隔离项目的内容不能出现');
+    const skipped = data.skipped.find((s) => s.key === hubKey(a.projectDir));
+    assert.ok(skipped, JSON.stringify(data.skipped));
+    assert.strictEqual(skipped.reason, 'isolated');
+  } finally {
+    fs.rmSync(marker, { force: true });
+  }
+});
+
+test('cli: hub search reports a missing pocket without failing', () => {
+  const a = makePocket('cli-hubsearch-missing');
+  const kw = 'hubsearchmissing7741';
+  runCli(['log', 'append', '--gist', kw, '--user', 'u', '--no-index', '--json'], a.pocketDir);
+  fs.rmSync(a.pocketDir, { recursive: true, force: true });
+
+  const r = runCli(['hub', 'search', kw, '--json'], a.projectDir);
+  assert.strictEqual(r.code, 0, r.stderr);
+  const data = parseJsonLine(r);
+  const skipped = data.skipped.find((s) => s.key === hubKey(a.projectDir));
+  assert.ok(skipped, JSON.stringify(data.skipped));
+  assert.strictEqual(skipped.reason, 'missing-pocket');
+});
+
+test('cli: hub search --limit interleaves projects instead of one project eating all', () => {
+  const a = makePocket('cli-hubsearch-limit-a');
+  const b = makePocket('cli-hubsearch-limit-b');
+  const kw = 'hubsearchlimit7741';
+  for (const g of ['one', 'two']) {
+    runCli(['log', 'append', '--gist', kw + ' ' + g, '--user', 'u', '--no-index', '--json'], a.pocketDir);
+  }
+  runCli(['log', 'append', '--gist', kw + ' three', '--user', 'u', '--no-index', '--json'], b.pocketDir);
+
+  const data = parseJsonLine(runCli(['hub', 'search', kw, '--limit', '1', '--json'], a.pocketDir));
+  assert.strictEqual(data.count, 1, JSON.stringify(data));
+  assert.ok(data.total >= 3, JSON.stringify(data));
+  assert.strictEqual(data.results.length, 1, JSON.stringify(data.results));
+  assert.strictEqual(data.results[0].count, 1);
+});
+
+test('cli: hub search without a keyword fails with usage', () => {
+  const { pocketDir } = makePocket('cli-hubsearch-noarg');
+  const r = runCli(['hub', 'search', '--json'], pocketDir);
+  assert.strictEqual(r.code, 1);
+  const data = parseJsonLine(r);
+  assert.strictEqual(data.ok, false);
+  assert.match(data.error, /keyword is required/);
+});
+
+test('cli: merge --json is one parseable line and dry-run writes nothing', () => {
+  const target = makePocket('cli-merge-target');
+  const source = makePocket('cli-merge-source');
+  runCli(['log', 'append', '--gist', 'merge cli turn', '--user', 'u', '--action', 'a', '--json'], source.pocketDir);
+  const before = fs.readFileSync(path.join(target.pocketDir, 'log.md'), 'utf-8');
+
+  const data = parseJsonLine(runCli([
+    'merge', '--from', source.pocketDir, '--dry-run', '--json',
+  ], target.pocketDir));
+  assert.strictEqual(data.ok, true, JSON.stringify(data));
+  assert.strictEqual(data.dryRun, true);
+  assert.ok(data.turns.added >= 1, JSON.stringify(data));
+  assert.strictEqual(fs.readFileSync(path.join(target.pocketDir, 'log.md'), 'utf-8'), before);
+});
+
+test('cli: hub search with an empty hub is a normal empty result', () => {
+  const prevHome = process.env.CONTEXTPOCKET_HOME;
+  process.env.CONTEXTPOCKET_HOME = tmpProject('cli-hubsearch-emptyhome');
+  try {
+    const dir = tmpProject('cli-hubsearch-empty');
+    const r = runCli(['hub', 'search', 'anything', '--json'], dir);
+    assert.strictEqual(r.code, 0, r.stderr);
+    const data = parseJsonLine(r);
+    assert.strictEqual(data.projects, 0, JSON.stringify(data));
+    assert.strictEqual(data.total, 0, JSON.stringify(data));
+  } finally {
+    process.env.CONTEXTPOCKET_HOME = prevHome;
+  }
 });

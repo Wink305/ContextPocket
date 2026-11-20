@@ -25,6 +25,7 @@
  *   context-pocket state update [--summary "..."] [--next-step "..."] [--pitfall "..."]
  *   context-pocket preferences update --key "..." --value "..."
  *   context-pocket code-map update
+ *   context-pocket merge --from <pocketDir> [--dry-run] [--include-archive]
  *   context-pocket migrate [--to v<N>|latest] [--dry-run] [--list]
  *   context-pocket install-hook
  *   context-pocket uninstall-hook
@@ -56,7 +57,7 @@ const {
   updatePreferences,
   updateCodeMap,
 } = require('../lib/writer');
-const { formatVerifyResult, formatStatus, colorize } = require('../lib/formatter');
+const { formatVerifyResult, formatStatus, colorize, formatSearchHitLines } = require('../lib/formatter');
 const { bootstrap } = require('../lib/bootstrap');
 const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('../lib/query');
 const {
@@ -89,6 +90,7 @@ const {
   listProjects,
   setGlobalPref,
   getGlobalPref,
+  searchProjects,
 } = require('../lib/userhub');
 
 // ============================================================
@@ -110,7 +112,7 @@ const VALUE_OPTIONS = new Set([
 // 纯开关型选项：绝不吞掉后面的裸词（旧实现会把 `--quiet rebuild` 里的
 // "rebuild" 当成 quiet 的值，导致开关失效）
 const BOOL_OPTIONS = new Set([
-  'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'force', 'full', 'help', 'h', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
+  'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'force', 'full', 'help', 'h', 'include-archive', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
   'quiet', 'read', 'rebuild', 'rank', 'verify', 'version', 'v', 'with-context',
 ]);
 
@@ -1065,38 +1067,7 @@ function cmdSearch(options, positional) {
     console.log('  (no matches)');
   } else {
     for (const r of results) {
-      const printHighlights = (r) => {
-        if (r.highlights && r.highlights.length > 0) {
-          for (const h of r.highlights.slice(0, 3)) {
-            const snippet = h.text.length > 60 ? h.text.slice(0, 60) + '...' : h.text;
-            console.log(colorize(`     ↳ [${h.field}] ${snippet}`, 'dim'));
-          }
-        }
-      };
-
-      if (r.type === 'ADR') {
-        console.log(`  ${colorize('ADR-' + r.adrId, 'bold')} · ${r.title}`);
-        printHighlights(r);
-      } else if (r.type === 'R') {
-        const flag = r.uncertain ? ' ❓' : '';
-        console.log(`  ${colorize('R' + r.rId, 'bold')} (${r.status})${flag} · ${r.text}`);
-        printHighlights(r);
-      } else if (r.type === 'pref') {
-        console.log(`  ${colorize('pref', 'bold')} · ${r.line}`);
-        printHighlights(r);
-      } else if (r.type === 'FIX') {
-        const fixTags = r.tags && r.tags.length > 0
-          ? ' ' + r.tags.map(t => colorize(`[${t}]`, 'cyan')).join('')
-          : '';
-        console.log(`  ${colorize(r.fixId, 'bold')}${fixTags} · ${r.gist} ${colorize('→ corrects T' + r.targetId, 'dim')}${r.archived ? colorize(' (archived)', 'dim') : ''}`);
-        printHighlights(r);
-      } else {
-        const tagsStr = r.tags && r.tags.length > 0
-          ? ' ' + r.tags.map(t => colorize(`[${t}]`, 'cyan')).join('')
-          : '';
-        console.log(`  ${colorize('T' + r.id, 'bold')}${tagsStr} · ${r.gist}${r.archived ? colorize(' (archived)', 'dim') : ''}`);
-        printHighlights(r);
-      }
+      for (const line of formatSearchHitLines(r)) console.log(line);
     }
   }
 
@@ -2434,7 +2405,89 @@ function cmdImport(options) {
 }
 
 // ============================================================
-// 命令：hub — 用户级跨项目注册表 + 全局偏好
+// 命令：merge — 合并另一个口袋（跨机器 / 多 Agent）
+// ============================================================
+
+function cmdMerge(options) {
+  const pocketDir = ensurePocket(options);
+  const dryRun = !!options['dry-run'];
+  const from = textOption(options, 'from');
+
+  if (!from) {
+    failJson(options, '--from is required. Usage: context-pocket merge --from <pocketDir> [--dry-run] [--include-archive]');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --from is required');
+    console.error('     Usage: context-pocket merge --from <other>/ContextPocket [--dry-run] [--include-archive]');
+    console.error('     Example: context-pocket merge --from ../other-clone/ContextPocket\n');
+    process.exit(1);
+  }
+
+  let result;
+  try {
+    const mergePocket = require('../lib/merge').mergePocket;
+    result = mergePocket(pocketDir, {
+      from,
+      dryRun,
+      includeArchive: !!options['include-archive'],
+    });
+  } catch (e) {
+    failJson(options, e.message);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + e.message + '\n');
+    process.exit(1);
+  }
+
+  if (options.json) {
+    emitJson(Object.assign({ ok: !!result.ok }, result));
+  }
+
+  if (!result.ok) {
+    console.error(colorize('\n  ❌ Merge failed:', 'red') + ' ' + result.error);
+    if (result.rolledBack) console.error(colorize('     Rolled back — target pocket was not changed.', 'dim'));
+    console.error('');
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log('');
+  if (result.alreadyMerged) {
+    console.log(colorize('  ℹ️  Nothing new — this source is already merged.', 'cyan'));
+    if (result.turns.archivedSkipped > 0) {
+      console.log(colorize(`     ${result.turns.archivedSkipped} archived turn(s) were skipped; add --include-archive to merge them.`, 'dim'));
+    }
+    if (result.docs.reqStatusConflicts.length > 0 || result.docs.prefConflicts.length > 0) {
+      console.log(colorize(`     Conflicts: ${result.docs.reqStatusConflicts.length} requirement(s), ${result.docs.prefConflicts.length} preference(s) — target kept`, 'yellow'));
+    }
+  } else {
+    console.log(colorize(
+      dryRun ? '  📋 Merge plan (dry-run)' : '  ✅ Pocket merged',
+      dryRun ? 'bold' : 'green'
+    ));
+    console.log(`     Source: ${result.source.pocketDir} (${result.source.version}, latest T${result.source.latestT})`);
+    console.log(`     Turns:  ${result.turns.added} added · ${result.turns.duplicates} already present · ${result.turns.fixesAdded} fix block(s)`);
+    if (result.newTIds.length > 0) {
+      console.log(`     New T:  T${result.newTIds[0]}–T${result.newTIds[result.newTIds.length - 1]}`);
+    }
+    console.log(`     Docs:   ADR +${result.docs.adrsAdded} · R +${result.docs.reqsAdded} · 🔒 +${result.docs.absoluteAdded} · prefs +${result.docs.prefsAdded}`);
+    if (result.docs.reqStatusConflicts.length > 0 || result.docs.prefConflicts.length > 0) {
+      console.log(colorize(`     Conflicts: ${result.docs.reqStatusConflicts.length} requirement(s), ${result.docs.prefConflicts.length} preference(s) — target kept`, 'yellow'));
+    }
+    if (result.attachments.copied.length > 0) {
+      console.log(`     Attachments: ${result.attachments.copied.length} copied`);
+    }
+    if (result.turns.archivedSkipped > 0) {
+      console.log(colorize(`     Archive: ${result.turns.archivedSkipped} turn(s) skipped (use --include-archive)`, 'dim'));
+    }
+    if (dryRun) {
+      console.log(colorize('     (dry-run: nothing written)', 'dim'));
+    } else {
+      console.log(`     Report: ${result.reportPath}`);
+      console.log(`     Verify: ${result.verifyAfter.errorCount} error(s), ${result.verifyAfter.warningCount} warning(s)`);
+    }
+  }
+  console.log('');
+}
+
+// ============================================================
+// 命令：hub — 用户级跨项目注册表 + 只读检索 + 全局偏好
 // ============================================================
 
 function cmdHub(options, positional) {
@@ -2503,6 +2556,66 @@ function cmdHub(options, positional) {
     console.log(colorize(`  ✅ Global preference ${r.isNew ? 'added' : 'updated'}:`, 'green'));
     console.log(`     ${options.key}: ${prefValue}`);
     console.log(`     Stored in: ${getHubFile()}`);
+    console.log('');
+    return;
+  }
+
+  // hub search — 跨项目只读检索
+  if (action === 'search') {
+    const keyword = positional.slice(1).join(' ').trim();
+    if (!keyword) {
+      failJson(options, 'keyword is required. Usage: context-pocket hub search <keyword> [--limit <n>]');
+      console.error(colorize('\n  ❌ Error:', 'red') + ' keyword is required');
+      console.error('     Usage: context-pocket hub search <keyword> [--limit <n>]');
+      console.error('     Example: context-pocket hub search "token refresh"\n');
+      process.exit(1);
+    }
+
+    const data = searchProjects(keyword, { limit: options.limit });
+    if (options.json) {
+      emitJson(data);
+      return;
+    }
+
+    console.log('');
+    console.log(colorize(`  Hub search: "${data.keyword}"`, 'bold'));
+    const shown = data.count < data.total
+      ? colorize(` · showing ${data.count}`, 'dim')
+      : '';
+    console.log(`  ${data.matched} of ${data.projects} project(s) matched · ${data.total} match${data.total !== 1 ? 'es' : ''}${shown}`);
+    console.log('  ' + colorize('─'.repeat(40), 'dim'));
+
+    if (data.projects === 0) {
+      console.log('  (no projects registered — run "context-pocket bootstrap" in a project)');
+    } else if (data.results.length === 0) {
+      console.log('  (no matches)');
+    } else {
+      for (const g of data.results) {
+        const active = (g.lastActiveAt || '').slice(0, 10) || '?';
+        console.log('');
+        console.log(`  ▸ ${colorize(g.name, 'bold')} · ${colorize('T' + g.latestT, 'cyan')} · last active ${active} · ${g.count}/${g.total}`);
+        console.log(colorize(`    ${g.key}`, 'dim'));
+        for (const r of g.rows) {
+          for (const line of formatSearchHitLines(r, { indent: '    ', highlightIndent: '       ' })) {
+            console.log(line);
+          }
+        }
+        if (g.hasMore) {
+          console.log(colorize(`       ↳ ${g.total - g.count} more — context-pocket search "${data.keyword}" --dir "${g.key}"`, 'dim'));
+        }
+      }
+    }
+
+    if (data.skipped.length > 0) {
+      const parts = data.skipped.map((s) => {
+        const why = s.reason === 'missing-pocket' ? 'missing pocket'
+          : s.reason === 'isolated' ? 'isolated'
+          : 'unreadable';
+        return `${s.name} (${why})`;
+      });
+      console.log('');
+      console.log(colorize(`  ↳ skipped: ${parts.join(', ')}`, 'dim'));
+    }
     console.log('');
     return;
   }
@@ -2859,6 +2972,16 @@ function main() {
       return;
     }
     cmdImport(args.options);
+    return;
+  }
+
+  // merge — 合并另一个口袋
+  if (cmd === 'merge') {
+    if (args.options.help || args.options.h) {
+      console.log(commandHelp('merge'));
+      return;
+    }
+    cmdMerge(args.options);
     return;
   }
 
