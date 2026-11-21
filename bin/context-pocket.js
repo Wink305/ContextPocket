@@ -5,33 +5,33 @@
  * ContextPocket CLI
  *
  * Usage:
- *   context-pocket bootstrap [--project-type <type>] [--mode <full|lite>] [--language <zh|en>]
- *   context-pocket verify [--quiet]
- *   context-pocket sync [--auto] [--dry-run] [--last-n <N>] [--quiet]
- *   context-pocket status
- *   context-pocket recall <T-id>
- *   context-pocket recall --since <T> --until <T> [--from <date>] [--to <date>]
- *   context-pocket diff <T-a> <T-b>
- *   context-pocket search <keyword>
- *   context-pocket why <file-path> [--limit <N>]
- *   context-pocket check-conflicts
- *   context-pocket log append --gist "..." --tags "a,b" --user "..." --action "..."
- *   context-pocket log amend <T-id> --user "..." [--action "..."]
- *   context-pocket absolute add --text "..." [--gist "..."]
- *   context-pocket req add "text" [--tags "a,b"] [--uncertain] [--impl "file1,file2"]
- *   context-pocket decision add --title "..." --context "..." --options "..." --decision "..."
- *   context-pocket archive [--keep-last <N>] [--dry-run]
- *   context-pocket repair [--dry-run] [--apply-refs] [--author <text>]
- *   context-pocket state update [--summary "..."] [--next-step "..."] [--pitfall "..."]
- *   context-pocket preferences update --key "..." --value "..."
- *   context-pocket code-map update
- *   context-pocket merge --from <pocketDir> [--dry-run] [--include-archive]
- *   context-pocket migrate [--to v<N>|latest] [--dry-run] [--list]
- *   context-pocket install-hook
- *   context-pocket uninstall-hook
- *   context-pocket handoff
- *   context-pocket help
- *   context-pocket --version          (aliases: -v, "context-pocket version")
+ *   context-pocket-quan bootstrap [--project-type <type>] [--mode <full|lite>] [--language <zh|en>]
+ *   context-pocket-quan verify [--quiet]
+ *   context-pocket-quan sync [--auto] [--dry-run] [--last-n <N>] [--quiet]
+ *   context-pocket-quan status
+ *   context-pocket-quan recall <T-id>
+ *   context-pocket-quan recall --since <T> --until <T> [--from <date>] [--to <date>]
+ *   context-pocket-quan diff <T-a> <T-b>
+ *   context-pocket-quan search <keyword>
+ *   context-pocket-quan why <file-path> [--limit <N>]
+ *   context-pocket-quan check-conflicts
+ *   context-pocket-quan log append --gist "..." --tags "a,b" --user "..." --action "..."
+ *   context-pocket-quan log amend <T-id> --user "..." [--action "..."]
+ *   context-pocket-quan absolute add --text "..." [--gist "..."]
+ *   context-pocket-quan req add "text" [--tags "a,b"] [--uncertain] [--impl "file1,file2"]
+ *   context-pocket-quan decision add --title "..." --context "..." --options "..." --decision "..."
+ *   context-pocket-quan archive [--keep-last <N>] [--dry-run]
+ *   context-pocket-quan repair [--dry-run] [--apply-refs] [--author <text>]
+ *   context-pocket-quan state update [--summary "..."] [--next-step "..."] [--pitfall "..."]
+ *   context-pocket-quan preferences update --key "..." --value "..."
+ *   context-pocket-quan code-map update
+ *   context-pocket-quan merge --from <pocketDir> [--dry-run] [--include-archive]
+ *   context-pocket-quan migrate [--to v<N>|latest] [--dry-run] [--list]
+ *   context-pocket-quan install-hook
+ *   context-pocket-quan uninstall-hook
+ *   context-pocket-quan handoff
+ *   context-pocket-quan help
+ *   context-pocket-quan --version          (aliases: -v, "context-pocket-quan version")
  *
  *   Any command above accepts --json for machine-readable output (one JSON
  *   line on stdout, no colors; exit codes unchanged).
@@ -82,12 +82,14 @@ const { toList, textOption, sectionFields, turnFields, hasAnySection, stateUpdat
 const { describeWhen, describeWhenLine } = require('../lib/when');
 const { afterWrite } = require('../lib/lifecycle');
 const { pkgVersion } = require('../lib/version');
+const { resolveEditionMode } = require('../lib/modes');
 const {
   getHubDir,
   getHubFile,
   registerProject,
   removeProject,
   listProjects,
+  findProjects,
   setGlobalPref,
   getGlobalPref,
   searchProjects,
@@ -103,7 +105,7 @@ const {
 const VALUE_OPTIONS = new Set([
   'action', 'append-summary', 'attachments', 'author', 'commits', 'conflicts', 'consequences',
   'context', 'decision', 'decisions', 'dir', 'drift-last-n', 'f', 'file', 'file-path',
-  'from', 'gist', 'id', 'impl', 'key', 'keyword', 'keep-last', 'language', 'last-n', 'limit',
+  'from', 'gist', 'id', 'impl', 'key', 'keyword', 'keep-last', 'language', 'last-n', 'limit', 'max-tokens', 'edition-mode',
   'mode', 'next-step', 'offset', 'options', 'pitfall', 'pitfalls', 'preferences', 'project-type', 'recent-keep', 'source',
   'since', 'status', 'summary', 'supersedes', 't', 't-a', 't-b', 't-id', 'tags', 'text', 'title', 'to', 'truncate', 'type', 'uncertain',
   'until', 'user', 'value', 'when', 'gitignore',
@@ -117,7 +119,7 @@ const BOOL_OPTIONS = new Set([
 ]);
 
 // 真实存在的两段式命令。只有落在这些组合里的第二个词才当子命令，
-// 否则 `context-pocket search update` 会把 "update" 从关键词里吞掉。
+// 否则 `context-pocket-quan search update` 会把 "update" 从关键词里吞掉。
 const SUBCOMMANDS_BY_COMMAND = {
   log: ['append', 'amend'],
   absolute: ['add'],
@@ -245,9 +247,9 @@ function ensurePocket(options) {
   const startDir = options.dir || process.cwd();
   const pocketDir = findPocketDir(startDir);
   if (!pocketDir) {
-    failJson(options, 'No ContextPocket/ directory found. Run "context-pocket bootstrap" first, or use --dir to specify a project path.');
+    failJson(options, 'No ContextPocket/ directory found. Run "context-pocket-quan bootstrap" first, or use --dir to specify a project path.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' No ContextPocket/ directory found.');
-    console.error('     Run "context-pocket bootstrap" first, or use --dir to specify a project path.\n');
+    console.error('     Run "context-pocket-quan bootstrap" first, or use --dir to specify a project path.\n');
     process.exit(1);
   }
   return pocketDir;
@@ -305,7 +307,7 @@ function cmdHelp(options) {
   if (opts.json) {
     emitJson({
       ok: true,
-      usage: 'context-pocket <command> [options]',
+      usage: 'context-pocket-quan <command> [options]',
       groups: HELP_GROUPS.map((g) => ({
         group: g.group,
         commands: g.commands.map((c) => ({ command: c[0], summary: c[1] })),
@@ -320,7 +322,7 @@ function cmdHelp(options) {
   lines.push('  Auto-record dev conversations into your project.');
   lines.push('');
   lines.push(colorize('  Usage:', 'bold'));
-  lines.push('    context-pocket <command> [options]');
+  lines.push('    context-pocket-quan <command> [options]');
   for (const g of HELP_GROUPS) {
     lines.push('');
     lines.push(colorize(`  ${g.group}:`, 'bold'));
@@ -334,13 +336,13 @@ function cmdHelp(options) {
     lines.push(`    ${name.padEnd(HELP_COL)}${summary}`);
   }
   lines.push('');
-  lines.push('  Run "context-pocket <command> --help" for command-specific help.');
+  lines.push('  Run "context-pocket-quan <command> --help" for command-specific help.');
   lines.push('');
   console.log(lines.join('\n'));
 }
 
 /**
- * 命令：version（`--version` / `-v` / `context-pocket version`）
+ * 命令：version（`--version` / `-v` / `context-pocket-quan version`）
  *
  * 只读 package.json（同一份判据在 lib/version.js，MCP 的 initialize 回包用它的
  * version），所以不需要 ContextPocket/ 目录、不碰家目录，装了就能问"我装的是哪版"。
@@ -351,9 +353,10 @@ function cmdVersion(options) {
   if (opts.json) {
     emitJson({
       ok: true,
-      name: 'context-pocket',
+      name: 'context-pocket-quan',
       version: info.version,
       display: info.display,
+      edition: info.edition,
       source: info.source,
       node: process.version,
     });
@@ -496,8 +499,8 @@ function cmdBootstrap(options) {
     console.log('');
     console.log('  Next steps:');
     console.log('    1. Edit ContextPocket/readme.md with project info');
-    console.log('    2. Run "context-pocket verify" to check health');
-    console.log('    3. Run "context-pocket install-hook" to enable pre-commit checks');
+    console.log('    2. Run "context-pocket-quan verify" to check health');
+    console.log('    3. Run "context-pocket-quan install-hook" to enable pre-commit checks');
     console.log('');
   } catch (e) {
     failJson(options, e.message);
@@ -596,7 +599,7 @@ function cmdSync(options) {
       .map(c => c.mentionedIn[0].tId))];
     console.log('');
     console.log(colorize(`  ℹ️  ${result.mentionedOnly.length} of them already appear in another section of a recent T-block.`, 'cyan'));
-    console.log(`     If you really changed them, prefer ${colorize(`context-pocket log amend T${ids[0]} --action "..."`, 'bold')}`);
+    console.log(`     If you really changed them, prefer ${colorize(`context-pocket-quan log amend T${ids[0]} --action "..."`, 'bold')}`);
     console.log(`     over an [auto] block — the turn exists, only its Action section is incomplete.`);
   };
 
@@ -632,7 +635,7 @@ function cmdSync(options) {
   console.log(listFiles(result.unrecorded));
   mentionHint();
   console.log('');
-  console.log('     Run "context-pocket sync --auto" to auto-record them,');
+  console.log('     Run "context-pocket-quan sync --auto" to auto-record them,');
   console.log('     or record manually before committing. (Use --quiet to stay silent.)');
   console.log('');
 }
@@ -782,18 +785,18 @@ function cmdRecall(options, positional) {
   if (tIdStr && hasWindow) {
     failJson(options, 'recall: a T-id and a time window cannot be used together. Use either recall <T-id> or recall --since/--until/--from/--to.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' A T-id and a time window cannot be used together.');
-    console.error('     Use either `context-pocket recall <T-id>` or `context-pocket recall --since <T> --until <T>`.\n');
+    console.error('     Use either `context-pocket-quan recall <T-id>` or `context-pocket-quan recall --since <T> --until <T>`.\n');
     process.exit(1);
   }
 
   if (!tIdStr && !hasWindow) {
     // 保留 "T-id is required" 这句老实话：已有调用方（与回归锁）认得它，
     // 后半句与下面两行再教会窗口用法。
-    failJson(options, 'T-id is required. Usage: context-pocket recall <T-id>, or a time window: recall --since <T> --until <T> --from <YYYY-MM-DD> --to <YYYY-MM-DD>');
+    failJson(options, 'T-id is required. Usage: context-pocket-quan recall <T-id>, or a time window: recall --since <T> --until <T> --from <YYYY-MM-DD> --to <YYYY-MM-DD>');
     console.error(colorize('\n  ❌ Error:', 'red') + ' T-id is required (or a time window)');
-    console.error('     Show one turn:  context-pocket recall <T-id>  (or --t-id <n>)');
-    console.error('     List a window:  context-pocket recall --since <T> --until <T>');
-    console.error('                     context-pocket recall --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n');
+    console.error('     Show one turn:  context-pocket-quan recall <T-id>  (or --t-id <n>)');
+    console.error('     List a window:  context-pocket-quan recall --since <T> --until <T>');
+    console.error('                     context-pocket-quan recall --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n');
     process.exit(1);
   }
 
@@ -802,7 +805,7 @@ function cmdRecall(options, positional) {
   if (!tIdStr && withContext) {
     failJson(options, 'recall: --with-context applies to a single T-id, not to a window listing.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --with-context needs a single T-id.');
-    console.error('     Use `context-pocket recall <T-id> --with-context`, or drop the flag for a window.\n');
+    console.error('     Use `context-pocket-quan recall <T-id> --with-context`, or drop the flag for a window.\n');
     process.exit(1);
   }
 
@@ -811,7 +814,7 @@ function cmdRecall(options, positional) {
   if (options.rank && !withContext) {
     failJson(options, 'recall: --rank orders --with-context output; pass --with-context too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --with-context.');
-    console.error('     Use `context-pocket recall <T-id> --with-context --rank`.\n');
+    console.error('     Use `context-pocket-quan recall <T-id> --with-context --rank`.\n');
     process.exit(1);
   }
 
@@ -894,9 +897,9 @@ function cmdDiff(options, positional) {
   const tBStr = positional[1] || tIdPair.tB;
 
   if (!tAStr || !tBStr) {
-    failJson(options, 'Two T-ids are required. Usage: context-pocket diff <T-a> <T-b> (or --t-a <n> --t-b <n>)');
+    failJson(options, 'Two T-ids are required. Usage: context-pocket-quan diff <T-a> <T-b> (or --t-a <n> --t-b <n>)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' Two T-ids are required');
-    console.error('     Usage: context-pocket diff <T-a> <T-b>  (or --t-a <n> --t-b <n>)\n');
+    console.error('     Usage: context-pocket-quan diff <T-a> <T-b>  (or --t-a <n> --t-b <n>)\n');
     process.exit(1);
   }
 
@@ -984,9 +987,9 @@ function cmdSearch(options, positional) {
   const keyword = positional[0] || (typeof options.keyword === 'string' ? options.keyword : undefined);
 
   if (!keyword) {
-    failJson(options, 'keyword is required. Usage: context-pocket search <keyword>');
+    failJson(options, 'keyword is required. Usage: context-pocket-quan search <keyword>');
     console.error(colorize('\n  ❌ Error:', 'red') + ' keyword is required');
-    console.error('     Usage: context-pocket search <keyword>\n');
+    console.error('     Usage: context-pocket-quan search <keyword>\n');
     process.exit(1);
   }
 
@@ -999,7 +1002,7 @@ function cmdSearch(options, positional) {
   if (options.rank && graphOptions.depth === 0) {
     failJson(options, 'search: --rank orders --expand graph context; pass --expand too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
-    console.error('     Use `context-pocket search <kw> --expand <n> --rank`.\n');
+    console.error('     Use `context-pocket-quan search <kw> --expand <n> --rank`.\n');
     process.exit(1);
   }
 
@@ -1094,11 +1097,11 @@ function cmdWhy(options, positional) {
   const filePath = positional[0] || filePathOption(options);
 
   if (!filePath) {
-    failJson(options, 'file path is required. Usage: context-pocket why <file-path> [--limit <N>] (or --file-path <p>, aliases --file / -f)');
+    failJson(options, 'file path is required. Usage: context-pocket-quan why <file-path> [--limit <N>] (or --file-path <p>, aliases --file / -f)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' file path is required');
-    console.error('     Usage: context-pocket why <file-path> [--limit <N>]');
+    console.error('     Usage: context-pocket-quan why <file-path> [--limit <N>]');
     console.error('     (also accepted: --file-path <p>, --file <p>, -f <p> — same as MCP filePath)\n');
-    console.error('     Example: context-pocket why lib/parser.js\n');
+    console.error('     Example: context-pocket-quan why lib/parser.js\n');
     process.exit(1);
   }
 
@@ -1113,7 +1116,7 @@ function cmdWhy(options, positional) {
   if (options.rank && graphOptions.depth === 0) {
     failJson(options, 'why: --rank orders --expand graph context; pass --expand too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
-    console.error('     Use `context-pocket why <file> --expand <n> --rank`.\n');
+    console.error('     Use `context-pocket-quan why <file> --expand <n> --rank`.\n');
     process.exit(1);
   }
   const results = why(pocketDir, filePath, { limit });
@@ -1289,7 +1292,7 @@ function cmdGraph(options, sub) {
       console.log(`     line ${issue.line}: ${issue.problem}`);
     }
     console.log('');
-    console.log('     Fix: context-pocket graph rebuild');
+    console.log('     Fix: context-pocket-quan graph rebuild');
     console.log('');
     process.exit(1);
   }
@@ -1381,7 +1384,7 @@ function cmdLogAppend(options) {
   if (missingValue(options, 'gist')) {
     failJson(options, '--gist is required (and needs a value)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --gist is required');
-    console.error('     Usage: context-pocket log append --gist "one-line summary"\n');
+    console.error('     Usage: context-pocket-quan log append --gist "one-line summary"\n');
     process.exit(1);
   }
 
@@ -1408,7 +1411,7 @@ function cmdLogAppend(options) {
       console.log(colorize(`  ⚠️  T${result.tId} 没有 ${result.missingSections.join(' / ')} 节 — verify 会判成 ERROR 并拦住 archive/migrate/提交：`, 'yellow'));
       for (const title of result.missingSections) {
         const flag = title === 'User' ? '--user' : '--action';
-        console.log(colorize(`     context-pocket log amend ${result.tId} ${flag} "…"\n`, 'dim'));
+        console.log(colorize(`     context-pocket-quan log amend ${result.tId} ${flag} "…"\n`, 'dim'));
       }
     }
 
@@ -1474,9 +1477,9 @@ function cmdLogAmend(options, positional) {
   const tId = toTId(tArg);
 
   if (!tId || Number.isNaN(tId)) {
-    failJson(options, 'a T-id is required. Usage: context-pocket log amend 3 --user "用户当时的原话" (or --t-id 3, aliases --t/--id)');
+    failJson(options, 'a T-id is required. Usage: context-pocket-quan log amend 3 --user "用户当时的原话" (or --t-id 3, aliases --t/--id)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' a T-id is required');
-    console.error('     Usage: context-pocket log amend 3 --user "用户当时的原话"');
+    console.error('     Usage: context-pocket-quan log amend 3 --user "用户当时的原话"');
     console.error('     (also accepted: --t-id <n>, --t <n>, --id <n>)\n');
     process.exit(1);
   }
@@ -1486,7 +1489,7 @@ function cmdLogAmend(options, positional) {
   if (!hasAnySection(payload)) {
     failJson(options, 'nothing to amend — pass at least one section');
     console.error(colorize('\n  ❌ Error:', 'red') + ' nothing to amend — pass at least one section');
-    console.error('     Usage: context-pocket log amend ' + tId + ' --user "用户当时的原话"\n');
+    console.error('     Usage: context-pocket-quan log amend ' + tId + ' --user "用户当时的原话"\n');
     process.exit(1);
   }
 
@@ -1541,7 +1544,7 @@ function cmdAbsoluteAdd(options, positional) {
   if (!text) {
     failJson(options, 'the requirement text is required');
     console.error(colorize('\n  ❌ Error:', 'red') + ' the requirement text is required');
-    console.error('     Usage: context-pocket absolute add --text "绝不允许改 X 的 API 形状"\n');
+    console.error('     Usage: context-pocket-quan absolute add --text "绝不允许改 X 的 API 形状"\n');
     process.exit(1);
   }
 
@@ -1552,7 +1555,7 @@ function cmdAbsoluteAdd(options, positional) {
   if (createdTId !== undefined && Number.isNaN(createdTId)) {
     failJson(options, 'Invalid T-id: ' + createdArg);
     console.error(colorize('\n  ❌ Error:', 'red') + ' Invalid T-id: ' + createdArg);
-    console.error('     Usage: context-pocket absolute add --text "…" --t-id <n>\n');
+    console.error('     Usage: context-pocket-quan absolute add --text "…" --t-id <n>\n');
     process.exit(1);
   }
 
@@ -1580,7 +1583,7 @@ function cmdReqAdd(options, positional) {
   if (!text) {
     failJson(options, 'requirement text is required');
     console.error(colorize('\n  ❌ Error:', 'red') + ' requirement text is required');
-    console.error('     Usage: context-pocket req add "requirement text"\n');
+    console.error('     Usage: context-pocket-quan req add "requirement text"\n');
     process.exit(1);
   }
 
@@ -1609,7 +1612,7 @@ function cmdDecisionAdd(options) {
   if (!title) {
     failJson(options, '--title is required (and needs a value)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --title is required');
-    console.error('     Usage: context-pocket decision add --title "Use X over Y"');
+    console.error('     Usage: context-pocket-quan decision add --title "Use X over Y"');
     console.error('            --context "..." --options "..." --decision "..."\n');
     process.exit(1);
   }
@@ -1655,11 +1658,18 @@ function cmdHandoff(options) {
     return;
   }
 
-  const result = generateHandoff(pocketDir);
+  const result = generateHandoff(pocketDir, {
+    maxTokens: intOption(options['max-tokens'], undefined),
+  });
 
   if (options.json) emitJson({ ok: true, handoff: result });
 
   console.log(`\n  ✅ Handoff generated: T${result.tId} · ${result.date}`);
+  if (result.maxTokens) {
+    console.log(`     Budget: ~${result.estimatedTokens} / ${result.maxTokens} tokens`
+      + (result.trimmed.length > 0 ? ` · trimmed: ${result.trimmed.join(', ')}` : '')
+      + (result.overBudget ? ' · over budget (section 0 is never trimmed)' : ''));
+  }
   console.log(`     File: ContextPocket/handoff.md\n`);
 }
 
@@ -1804,7 +1814,7 @@ function cmdRepair(options) {
     if (fileNames.length > 20) {
       console.log(colorize(`     … +${fileNames.length - 20} more (--json for the full list)`, 'dim'));
     }
-    console.log(colorize('     run the mv inside ContextPocket/, then `context-pocket verify` to confirm the links hold', 'dim'));
+    console.log(colorize('     run the mv inside ContextPocket/, then `context-pocket-quan verify` to confirm the links hold', 'dim'));
     console.log('');
   }
 
@@ -1836,7 +1846,7 @@ function cmdStateUpdate(options) {
   if (invalid) {
     failJson(options, 'at least one option is required (--summary / --next-step / --pitfall)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' At least one option is required');
-    console.error('     Usage: context-pocket state update [--summary "..."] [--next-step "..."] [--pitfall "..."]');
+    console.error('     Usage: context-pocket-quan state update [--summary "..."] [--next-step "..."] [--pitfall "..."]');
     console.error('     (a flag with no value counts as "not given" — nothing was written)\n');
     process.exit(1);
   }
@@ -1862,14 +1872,14 @@ function cmdPreferencesUpdate(options) {
   if (missingValue(options, 'key')) {
     failJson(options, '--key is required (and needs a value)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --key is required');
-    console.error('     Usage: context-pocket preferences update --key "..." --value "..."\n');
+    console.error('     Usage: context-pocket-quan preferences update --key "..." --value "..."\n');
     process.exit(1);
   }
 
   if (options.value === undefined || options.value === true) {
     failJson(options, '--value is required (and needs a value)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --value is required');
-    console.error('     Usage: context-pocket preferences update --key "..." --value "..."\n');
+    console.error('     Usage: context-pocket-quan preferences update --key "..." --value "..."\n');
     process.exit(1);
   }
 
@@ -1899,9 +1909,12 @@ function cmdCodeMapUpdate(options) {
   const autoSuggest = !!(options['auto-suggest'] || options.apply);
   const interactive = !!options.interactive;
 
-  if (interactive && options.json) {
-    failJson(options, '--interactive needs a human at the keyboard; use --auto-suggest [--apply] --json for machine mode');
-    console.error(colorize('\n  ❌ Error:', 'red') + ' --interactive 不能与 --json 同用，机器模式请走 --auto-suggest [--apply]');
+  if (interactive && (options.json || options.__editionMode === 'agent')) {
+    const why = options.__editionMode === 'agent'
+      ? 'agent 模式不提供交互提问；请改用 --auto-suggest [--apply] --json'
+      : '--interactive needs a human at the keyboard; use --auto-suggest [--apply] --json for machine mode';
+    failJson(options, why);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --interactive 不能与 --json 或 agent 模式同用，机器模式请走 --auto-suggest [--apply]');
     console.error('');
     process.exit(1);
     return;
@@ -2207,17 +2220,17 @@ function cmdInstallHook(options) {
     console.log('  Before each commit the hook will:');
     console.log('    1. check that a ' + POCKET_DIR_NAME + '/ exists here — if not, it skips (so an');
     console.log('       un-bootstrapped repo never has its commits blocked)');
-    console.log('    2. run "context-pocket sync --auto" — auto-record staged files that');
+    console.log('    2. run "context-pocket-quan sync --auto" — auto-record staged files that');
     console.log('       were missed in recent T-blocks (git safety net for agent forgets)');
-    console.log('    3. run "context-pocket verify --quiet" — block on errors, allow warnings');
+    console.log('    3. run "context-pocket-quan verify --quiet" — block on errors, allow warnings');
     console.log('');
     if (!pocketPresent) {
       console.log(colorize('  ⚠️  No ' + POCKET_DIR_NAME + '/ in this project yet.', 'yellow'));
       console.log('     The hook is installed but will skip every commit until you run:');
-      console.log('       context-pocket bootstrap --dir ' + projectDir);
+      console.log('       context-pocket-quan bootstrap --dir ' + projectDir);
       console.log('');
     }
-    console.log('  Run "context-pocket install-hook" again anytime to upgrade the hook.');
+    console.log('  Run "context-pocket-quan install-hook" again anytime to upgrade the hook.');
     console.log('');
   } catch (e) {
     failJson(options, e.message);
@@ -2316,7 +2329,7 @@ function cmdDistill(options) {
   if (result.nothing) {
     console.log(colorize('  ℹ️  Nothing to distill yet:', 'cyan'));
     console.log('     No log-archive.md and no old turns in log.md.');
-    console.log('     Distill becomes useful once archiving has moved old T-blocks out (context-pocket archive).');
+    console.log('     Distill becomes useful once archiving has moved old T-blocks out (context-pocket-quan archive).');
     console.log('');
     return;
   }
@@ -2359,9 +2372,9 @@ function cmdImport(options) {
   // 不等 lib/importer.js 抛出那句只认 `--file` 的错误 —— 猜对别名的人不该被告知"你只能用 --file"。
   const sessionFile = filePathOption(options);
   if (!sessionFile) {
-    failJson(options, 'session file is required. Usage: context-pocket import --file <session.jsonl> (also --file-path <p>, -f <p>)');
+    failJson(options, 'session file is required. Usage: context-pocket-quan import --file <session.jsonl> (also --file-path <p>, -f <p>)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' session file is required');
-    console.error('     Usage: context-pocket import --file <session.jsonl> [options]');
+    console.error('     Usage: context-pocket-quan import --file <session.jsonl> [options]');
     console.error('     (also accepted: --file-path <p>, -f <p> — same as MCP filePath)\n');
     process.exit(1);
   }
@@ -2400,7 +2413,7 @@ function cmdImport(options) {
   console.log(`     Turns:  ${result.imported} (T${result.tStart}–T${result.tEnd}, tagged [imported])`);
   console.log('');
   console.log('  Imported blocks are conversation backfill — skim them with');
-  console.log('  "context-pocket recall" and enrich gists where needed.');
+  console.log('  "context-pocket-quan recall" and enrich gists where needed.');
   console.log('');
 }
 
@@ -2408,16 +2421,134 @@ function cmdImport(options) {
 // 命令：merge — 合并另一个口袋（跨机器 / 多 Agent）
 // ============================================================
 
-function cmdMerge(options) {
+function cmdMergeReport(options, positional) {
+  const pocketDir = ensurePocket(options);
+  const mergeReview = require('../lib/merge-review');
+  const applyId = positional && positional[1] ? String(positional[1]).trim() : null;
+
+  if (options.apply) {
+    if (!applyId) {
+      failJson(options, '--apply needs a review id. Usage: context-pocket-quan merge report --apply <id>');
+      console.error(colorize('\n  ❌ Error:', 'red') + ' --apply needs a review id');
+      console.error('     Usage: context-pocket-quan merge report --apply merge-<date>#<n>');
+      console.error('     Run "context-pocket-quan merge report" to list ids\n');
+      process.exit(1);
+    }
+
+    const result = mergeReview.applyReview(pocketDir, applyId);
+    if (options.json) {
+      emitJson(Object.assign({ ok: result.ok }, result));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    if (!result.ok) {
+      console.error(colorize('\n  ❌ Error:', 'red') + ' ' + result.error + '\n');
+      process.exitCode = 1;
+      return;
+    }
+    if (result.alreadyApplied) {
+      console.log('');
+      console.log(colorize(`  ℹ️  ${result.review.id} was already applied at ${result.review.appliedAt}.`, 'cyan'));
+      console.log('');
+      return;
+    }
+
+    console.log('');
+    console.log(colorize(`  ✅ Merge review applied: ${result.review.id}`, 'green'));
+    console.log(`     Applied: ${result.applied.length} · Skipped: ${result.skipped.length}`);
+    for (const item of result.applied) {
+      if (item.type === 'requirement') console.log(`     - R${String(item.id).replace(/^R/, '')}: ${item.from} → ${item.to}`);
+      else if (item.type === 'preference') console.log(`     - ${item.key}: ${item.from} → ${item.to}`);
+      else console.log(`     - state ${item.kind}: ${item.text}`);
+    }
+    for (const item of result.skipped) {
+      const what = item.type === 'requirement' ? item.id
+        : item.type === 'preference' ? item.key
+          : item.type === 'state' ? 'state ' + item.kind
+            : item.type;
+      console.log(colorize(`     ↳ skipped ${what}: ${item.reason}`, 'dim'));
+    }
+    console.log('');
+    return;
+  }
+
+  const requested = textOption(options, 'file');
+
+  if (requested) {
+    const name = path.basename(requested);
+    const filePath = path.join(pocketDir, name);
+    if (!/^merge-.*\.md$/.test(name) || !fs.existsSync(filePath)) {
+      failJson(options, 'merge report not found: ' + name);
+      console.error(colorize('\n  ❌ Error:', 'red') + ' merge report not found: ' + name + '\n');
+      process.exit(1);
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (options.json) emitJson({ ok: true, file: name, path: filePath, content });
+    else console.log('\n' + content.replace(/\n*$/, '\n'));
+    return;
+  }
+
+  const reports = fs.readdirSync(pocketDir)
+    .filter((name) => /^merge-.*\.md$/.test(name))
+    .sort()
+    .map((name) => {
+      const filePath = path.join(pocketDir, name);
+      const stat = fs.statSync(filePath);
+      return { file: name, path: filePath, bytes: stat.size, modifiedAt: stat.mtime.toISOString() };
+    });
+  const reviews = mergeReview.listReviews(pocketDir);
+
+  if (options.json) {
+    emitJson({ ok: true, pocketDir, count: reports.length, reports, reviewCount: reviews.length, reviews });
+    return;
+  }
+
+  console.log('');
+  console.log(colorize(`  Merge reviews · ${reviews.length}`, 'bold'));
+  console.log('  ' + colorize('─'.repeat(50), 'dim'));
+  if (reviews.length === 0) {
+    console.log('  (none — merge a pocket first; sidecars arrive with 3.0 merges)');
+  } else {
+    for (const r of reviews) {
+      const state = r.appliedAt
+        ? `applied ${r.appliedAt.slice(0, 10)} · skipped ${r.skippedCount}`
+        : `pending ${r.pending}${r.manual ? ' · manual ' + r.manual : ''}`;
+      console.log(`  ${colorize(r.id, 'cyan')} · ${state}`);
+      console.log(colorize(`    from ${r.source.pocketDir}`, 'dim'));
+    }
+    console.log('');
+    console.log(colorize('  Apply one with: context-pocket-quan merge report --apply <id>', 'dim'));
+  }
+
+  console.log('');
+  console.log(colorize(`  Merge report files · ${reports.length}`, 'bold'));
+  console.log('  ' + colorize('─'.repeat(50), 'dim'));
+  if (reports.length === 0) {
+    console.log('  (none — run "context-pocket-quan merge --from <pocket>" first)');
+  } else {
+    for (const r of reports) {
+      console.log(`  ${colorize(r.file, 'cyan')} · ${r.bytes} B · ${r.modifiedAt.slice(0, 10)}`);
+    }
+    console.log('');
+    console.log(colorize('  Review one with: context-pocket-quan merge report --file <name>', 'dim'));
+  }
+  console.log('');
+}
+
+function cmdMerge(options, positional) {
+  if (positional && positional[0] === 'report') {
+    return cmdMergeReport(options, positional);
+  }
+
   const pocketDir = ensurePocket(options);
   const dryRun = !!options['dry-run'];
   const from = textOption(options, 'from');
 
   if (!from) {
-    failJson(options, '--from is required. Usage: context-pocket merge --from <pocketDir> [--dry-run] [--include-archive]');
+    failJson(options, '--from is required. Usage: context-pocket-quan merge --from <pocketDir> [--dry-run] [--include-archive]');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --from is required');
-    console.error('     Usage: context-pocket merge --from <other>/ContextPocket [--dry-run] [--include-archive]');
-    console.error('     Example: context-pocket merge --from ../other-clone/ContextPocket\n');
+    console.error('     Usage: context-pocket-quan merge --from <other>/ContextPocket [--dry-run] [--include-archive]');
+    console.error('     Example: context-pocket-quan merge --from ../other-clone/ContextPocket\n');
     process.exit(1);
   }
 
@@ -2480,6 +2611,9 @@ function cmdMerge(options) {
       console.log(colorize('     (dry-run: nothing written)', 'dim'));
     } else {
       console.log(`     Report: ${result.reportPath}`);
+      if (result.reviewId) {
+        console.log(`     Review: ${result.reviewId} (${result.reviewPending} pending) — apply with "context-pocket-quan merge report --apply ${result.reviewId}"`);
+      }
       console.log(`     Verify: ${result.verifyAfter.errorCount} error(s), ${result.verifyAfter.warningCount} warning(s)`);
     }
   }
@@ -2505,7 +2639,7 @@ function cmdHub(options, positional) {
       console.log(colorize(`  Global preferences · ${getHubFile()}`, 'bold'));
       console.log('  ' + colorize('─'.repeat(40), 'dim'));
       if (entries.length === 0) {
-        console.log('  (none — set with: context-pocket hub pref --key "k" --value "v")');
+        console.log('  (none — set with: context-pocket-quan hub pref --key "k" --value "v")');
       } else {
         for (const [k, v] of entries) {
           console.log(`  ${colorize(k, 'cyan')}: ${v}`);
@@ -2518,9 +2652,9 @@ function cmdHub(options, positional) {
     if (missingValue(options, 'key')) {
       failJson(options, '--key is required (or --list for all global preferences)');
       console.error(colorize('\n  ❌ Error:', 'red') + ' --key is required');
-      console.error('     Usage: context-pocket hub pref --key "<k>" --value "<v>"   (set)');
-      console.error('            context-pocket hub pref --key "<k>"                 (get)');
-      console.error('            context-pocket hub pref --list                      (all)\n');
+      console.error('     Usage: context-pocket-quan hub pref --key "<k>" --value "<v>"   (set)');
+      console.error('            context-pocket-quan hub pref --key "<k>"                 (get)');
+      console.error('            context-pocket-quan hub pref --list                      (all)\n');
       process.exit(1);
     }
 
@@ -2530,7 +2664,7 @@ function cmdHub(options, positional) {
     if (options.value !== undefined && prefValue === undefined) {
       failJson(options, '--value was given without a value — nothing was stored');
       console.error(colorize('\n  ❌ Error:', 'red') + ' --value needs a value');
-      console.error('     Usage: context-pocket hub pref --key "<k>" --value "<v>"');
+      console.error('     Usage: context-pocket-quan hub pref --key "<k>" --value "<v>"');
       console.error('            (no value written — use "hub pref --key \\"<k>\\"" to read it)\n');
       process.exit(1);
     }
@@ -2560,14 +2694,53 @@ function cmdHub(options, positional) {
     return;
   }
 
+  // hub merge — 按 hub 注册名选源，省去手敲路径
+  if (action === 'merge') {
+    const query = positional.slice(1).join(' ').trim();
+    if (!query) {
+      failJson(options, 'project name is required. Usage: context-pocket-quan hub merge <project-name> [--dry-run]');
+      console.error(colorize('\n  ❌ Error:', 'red') + ' project name is required');
+      console.error('     Usage: context-pocket-quan hub merge <project-name> [--dry-run] [--include-archive]');
+      console.error('     Run "context-pocket-quan hub list" to see registered names\n');
+      process.exit(1);
+    }
+
+    const matches = findProjects(query);
+
+    if (matches.length === 0) {
+      failJson(options, 'no registered project matches "' + query + '"');
+      console.error(colorize('\n  ❌ Error:', 'red') + ` no registered project matches "${query}"`);
+      const available = listProjects().map(({ key, project }) => project.name || path.basename(key));
+      console.error('     Registered: ' + (available.length > 0 ? available.join(', ') : '(none)') + '\n');
+      process.exit(1);
+    }
+    if (matches.length > 1) {
+      failJson(options, 'project name "' + query + '" is ambiguous');
+      console.error(colorize('\n  ❌ Error:', 'red') + ` project name "${query}" is ambiguous`);
+      for (const { key, project } of matches) console.error('     ' + (project.name || '?') + '  ' + key);
+      console.error('     Use the full path as the name to disambiguate\n');
+      process.exit(1);
+    }
+
+    const sourceRoot = matches[0].key;
+    if (!fs.existsSync(path.join(sourceRoot, 'ContextPocket', 'log.md'))) {
+      failJson(options, 'registered project has no readable ContextPocket/log.md: ' + sourceRoot);
+      console.error(colorize('\n  ❌ Error:', 'red') + ' registered project has no readable ContextPocket/log.md');
+      console.error('     ' + sourceRoot + '\n');
+      process.exit(1);
+    }
+
+    return cmdMerge(Object.assign({}, options, { from: sourceRoot }));
+  }
+
   // hub search — 跨项目只读检索
   if (action === 'search') {
     const keyword = positional.slice(1).join(' ').trim();
     if (!keyword) {
-      failJson(options, 'keyword is required. Usage: context-pocket hub search <keyword> [--limit <n>]');
+      failJson(options, 'keyword is required. Usage: context-pocket-quan hub search <keyword> [--limit <n>]');
       console.error(colorize('\n  ❌ Error:', 'red') + ' keyword is required');
-      console.error('     Usage: context-pocket hub search <keyword> [--limit <n>]');
-      console.error('     Example: context-pocket hub search "token refresh"\n');
+      console.error('     Usage: context-pocket-quan hub search <keyword> [--limit <n>]');
+      console.error('     Example: context-pocket-quan hub search "token refresh"\n');
       process.exit(1);
     }
 
@@ -2586,7 +2759,7 @@ function cmdHub(options, positional) {
     console.log('  ' + colorize('─'.repeat(40), 'dim'));
 
     if (data.projects === 0) {
-      console.log('  (no projects registered — run "context-pocket bootstrap" in a project)');
+      console.log('  (no projects registered — run "context-pocket-quan bootstrap" in a project)');
     } else if (data.results.length === 0) {
       console.log('  (no matches)');
     } else {
@@ -2601,7 +2774,7 @@ function cmdHub(options, positional) {
           }
         }
         if (g.hasMore) {
-          console.log(colorize(`       ↳ ${g.total - g.count} more — context-pocket search "${data.keyword}" --dir "${g.key}"`, 'dim'));
+          console.log(colorize(`       ↳ ${g.total - g.count} more — context-pocket-quan search "${data.keyword}" --dir "${g.key}"`, 'dim'));
         }
       }
     }
@@ -2650,7 +2823,7 @@ function cmdHub(options, positional) {
   console.log(colorize(`  ContextPocket Hub · ${projects.length} project(s) · ${getHubDir()}`, 'bold'));
   console.log('  ' + colorize('─'.repeat(60), 'dim'));
   if (projects.length === 0) {
-    console.log('  (no projects registered — run "context-pocket bootstrap" in a project)');
+    console.log('  (no projects registered — run "context-pocket-quan bootstrap" in a project)');
   } else {
     for (const { key, project } of projects) {
       const active = (project.lastActiveAt || '').slice(0, 10);
@@ -2673,7 +2846,21 @@ function main() {
   const cmd = args.command || 'help';
   const sub = args.subcommand;
 
-  // version —— 放在 help 分支之前：只写 `context-pocket --version` 时 command 是空的，
+  // 版本内模式：solo（默认，人驱动）/ agent（Agent 驱动，不提问、不上色）。
+  // 模式值非法时直接退 1，不把拼写错误悄悄当成默认值。
+  let editionMode;
+  try {
+    editionMode = resolveEditionMode(args.options);
+  } catch (e) {
+    failJson(args.options, e.message);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + e.message);
+    console.error('     Usage: context-pocket-quan <command> --edition-mode <solo|agent>\n');
+    process.exit(1);
+  }
+  args.options.__editionMode = editionMode;
+  if (editionMode === 'agent') process.env.NO_COLOR = '1';
+
+  // version —— 放在 help 分支之前：只写 `context-pocket-quan --version` 时 command 是空的，
   // 会掉进默认 help，用户要的号码被整页帮助盖掉（1.1.0 之前的实际行为）。
   if (cmd === 'version' || args.options.version || args.options.v) {
     cmdVersion(args.options);
@@ -2981,7 +3168,7 @@ function main() {
       console.log(commandHelp('merge'));
       return;
     }
-    cmdMerge(args.options);
+    cmdMerge(args.options, args.positional);
     return;
   }
 
@@ -2998,7 +3185,7 @@ function main() {
   const unknown = cmd + (sub ? ' ' + sub : '');
   failJson(args.options, 'Unknown command: ' + unknown);
   console.error(colorize('\n  ❌ Unknown command:', 'red') + ' ' + unknown);
-  console.error('     Run "context-pocket help" for available commands.\n');
+  console.error('     Run "context-pocket-quan help" for available commands.\n');
   process.exit(1);
 }
 

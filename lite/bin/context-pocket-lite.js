@@ -160,9 +160,9 @@ function ensurePocket(options) {
   const startDir = options.dir || process.cwd();
   const pocketDir = findPocketDir(startDir);
   if (!pocketDir) {
-    failJson(options, 'No ContextPocket/ directory found. Run "context-pocket-lite bootstrap" first, or use --dir to specify a project path.');
+    failJson(options, 'No ContextPocket/ directory found. Run "context-pocket-xi bootstrap" first, or use --dir to specify a project path.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' No ContextPocket/ directory found.');
-    console.error('     Run "context-pocket-lite bootstrap" first, or use --dir to specify a project path.\n');
+    console.error('     Run "context-pocket-xi bootstrap" first, or use --dir to specify a project path.\n');
     process.exit(1);
   }
   return pocketDir;
@@ -205,7 +205,7 @@ function cmdHelp(options) {
   if (opts.json) {
     emitJson({
       ok: true,
-      usage: 'context-pocket-lite <command> [options]',
+      usage: 'context-pocket-xi <command> [options]',
       groups: HELP_GROUPS.map((g) => ({
         group: g.group,
         commands: g.commands.map((c) => ({ command: c[0], summary: c[1] })),
@@ -220,7 +220,7 @@ function cmdHelp(options) {
   lines.push('  Record dev conversations into your project — the light way.');
   lines.push('');
   lines.push(colorize('  Usage:', 'bold'));
-  lines.push('    context-pocket-lite <command> [options]');
+  lines.push('    context-pocket-xi <command> [options]');
   for (const g of HELP_GROUPS) {
     lines.push('');
     lines.push(colorize(`  ${g.group}:`, 'bold'));
@@ -234,13 +234,13 @@ function cmdHelp(options) {
     lines.push(`    ${name.padEnd(HELP_COL)}${summary}`);
   }
   lines.push('');
-  lines.push('  Run "context-pocket-lite <command> --help" for command-specific help.');
+  lines.push('  Run "context-pocket-xi <command> --help" for command-specific help.');
   lines.push('');
   console.log(lines.join('\n'));
 }
 
 /**
- * 命令：version（`--version` / `-v` / `context-pocket-lite version`）
+ * 命令：version（`--version` / `-v` / `context-pocket-xi version`）
  *
  * 只读 lite/package.json（lib/version.js），不需要 ContextPocket/ 目录。
  * 对外展示：hotfix 预发布显示完整串（2.0.1-Lite-hotfix1）；稳定版两位加 -lite。
@@ -251,9 +251,10 @@ function cmdVersion(options) {
   if (opts.json) {
     emitJson({
       ok: true,
-      name: 'context-pocket-lite',
+      name: 'context-pocket-xi',
       version: info.version,
       display: info.display,
+      edition: info.edition,
       source: info.source,
       node: process.version,
     });
@@ -344,7 +345,7 @@ function cmdBootstrap(options) {
     console.log('');
     console.log('  Next steps:');
     console.log('    1. Edit ContextPocket/readme.md with project info');
-    console.log('    2. Run "context-pocket-lite verify" to check health');
+    console.log('    2. Run "context-pocket-xi verify" to check health');
     console.log('');
   } catch (e) {
     failJson(options, e.message);
@@ -516,16 +517,16 @@ function cmdRecall(options, positional) {
   if (tIdStr && hasWindow) {
     failJson(options, 'recall: a T-id and a time window cannot be used together. Use either recall <T-id> or recall --since/--until/--from/--to.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' A T-id and a time window cannot be used together.');
-    console.error('     Use either `context-pocket-lite recall <T-id>` or `context-pocket-lite recall --since <T> --until <T>`.\n');
+    console.error('     Use either `context-pocket-xi recall <T-id>` or `context-pocket-xi recall --since <T> --until <T>`.\n');
     process.exit(1);
   }
 
   if (!tIdStr && !hasWindow) {
-    failJson(options, 'T-id is required. Usage: context-pocket-lite recall <T-id>, or a time window: recall --since <T> --until <T> --from <YYYY-MM-DD> --to <YYYY-MM-DD>');
+    failJson(options, 'T-id is required. Usage: context-pocket-xi recall <T-id>, or a time window: recall --since <T> --until <T> --from <YYYY-MM-DD> --to <YYYY-MM-DD>');
     console.error(colorize('\n  ❌ Error:', 'red') + ' T-id is required (or a time window)');
-    console.error('     Show one turn:  context-pocket-lite recall <T-id>  (or --t-id <n>)');
-    console.error('     List a window:  context-pocket-lite recall --since <T> --until <T>');
-    console.error('                     context-pocket-lite recall --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n');
+    console.error('     Show one turn:  context-pocket-xi recall <T-id>  (or --t-id <n>)');
+    console.error('     List a window:  context-pocket-xi recall --since <T> --until <T>');
+    console.error('                     context-pocket-xi recall --from <YYYY-MM-DD> --to <YYYY-MM-DD>\n');
     process.exit(1);
   }
 
@@ -533,7 +534,7 @@ function cmdRecall(options, positional) {
   if (!tIdStr && withContext) {
     failJson(options, 'recall: --with-context applies to a single T-id, not to a window listing.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --with-context needs a single T-id.');
-    console.error('     Use `context-pocket-lite recall <T-id> --with-context`, or drop the flag for a window.\n');
+    console.error('     Use `context-pocket-xi recall <T-id> --with-context`, or drop the flag for a window.\n');
     process.exit(1);
   }
 
@@ -541,7 +542,7 @@ function cmdRecall(options, positional) {
   if (!tIdStr && brief) {
     failJson(options, 'recall: --brief applies to a single T-id, not to a window listing.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --brief needs a single T-id.');
-    console.error('     Use `context-pocket-lite recall <T-id> --brief`, or drop the flag for a window.\n');
+    console.error('     Use `context-pocket-xi recall <T-id> --brief`, or drop the flag for a window.\n');
     process.exit(1);
   }
 
@@ -549,7 +550,7 @@ function cmdRecall(options, positional) {
   if (options.rank && !withContext) {
     failJson(options, 'recall: --rank orders --with-context output; pass --with-context too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --with-context.');
-    console.error('     Use `context-pocket-lite recall <T-id> --with-context --rank`.\n');
+    console.error('     Use `context-pocket-xi recall <T-id> --with-context --rank`.\n');
     process.exit(1);
   }
 
@@ -635,9 +636,9 @@ function cmdSearch(options, positional) {
   const keyword = positional[0] || (typeof options.keyword === 'string' ? options.keyword : undefined);
 
   if (!keyword) {
-    failJson(options, 'keyword is required. Usage: context-pocket-lite search <keyword>');
+    failJson(options, 'keyword is required. Usage: context-pocket-xi search <keyword>');
     console.error(colorize('\n  ❌ Error:', 'red') + ' keyword is required');
-    console.error('     Usage: context-pocket-lite search <keyword>\n');
+    console.error('     Usage: context-pocket-xi search <keyword>\n');
     process.exit(1);
   }
 
@@ -653,7 +654,7 @@ function cmdSearch(options, positional) {
   if (options.rank && expand === 0) {
     failJson(options, 'search: --rank orders --expand graph context; pass --expand too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
-    console.error('     Use `context-pocket-lite search <kw> --expand <n> --rank`.\n');
+    console.error('     Use `context-pocket-xi search <kw> --expand <n> --rank`.\n');
     process.exit(1);
   }
   // 输出分级：默认紧凑（一行一命中），--full 展开命中片段预览
@@ -779,11 +780,11 @@ function cmdWhy(options, positional) {
   const filePath = positional[0] || filePathOption(options);
 
   if (!filePath) {
-    failJson(options, 'file path is required. Usage: context-pocket-lite why <file-path> [--limit <N>] (or --file-path <p>, aliases --file / -f)');
+    failJson(options, 'file path is required. Usage: context-pocket-xi why <file-path> [--limit <N>] (or --file-path <p>, aliases --file / -f)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' file path is required');
-    console.error('     Usage: context-pocket-lite why <file-path> [--limit <N>]');
+    console.error('     Usage: context-pocket-xi why <file-path> [--limit <N>]');
     console.error('     (also accepted: --file-path <p>, --file <p>, -f <p> — same as MCP filePath)\n');
-    console.error('     Example: context-pocket-lite why lib/parser.js\n');
+    console.error('     Example: context-pocket-xi why lib/parser.js\n');
     process.exit(1);
   }
 
@@ -792,7 +793,7 @@ function cmdWhy(options, positional) {
   if (options.rank && expand === 0) {
     failJson(options, 'why: --rank orders --expand graph context; pass --expand too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
-    console.error('     Use `context-pocket-lite why <file> --expand <n> --rank`.\n');
+    console.error('     Use `context-pocket-xi why <file> --expand <n> --rank`.\n');
     process.exit(1);
   }
   // 输出分级：默认紧凑（证据徽章 + gist），--full 展开引用片段
@@ -952,7 +953,7 @@ function cmdLogAppend(options) {
   if (missingValue(options, 'gist')) {
     failJson(options, '--gist is required (and needs a value)');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --gist is required');
-    console.error('     Usage: context-pocket-lite log append --gist "one-line summary"\n');
+    console.error('     Usage: context-pocket-xi log append --gist "one-line summary"\n');
     process.exit(1);
   }
 
@@ -974,7 +975,7 @@ function cmdLogAppend(options) {
     // 修法是 `log amend`（只填缺失小节、不覆盖历史），不必手改 markdown。
     if (result.missingSections && result.missingSections.length > 0) {
       console.log(colorize(`  ⚠️  T${result.tId} 没有 ${result.missingSections.join(' / ')} 节 — verify 会判成 ERROR：`, 'yellow'));
-      console.log(colorize(`     用 context-pocket-lite log amend ${result.tId} --user "…" --action "…" 补齐（只填缺失小节，不覆盖历史）\n`, 'dim'));
+      console.log(colorize(`     用 context-pocket-xi log amend ${result.tId} --user "…" --action "…" 补齐（只填缺失小节，不覆盖历史）\n`, 'dim'));
     }
   }
 
@@ -1018,9 +1019,9 @@ function cmdDiff(options, positional) {
   const bStr = positional[1] || textOption(options, 't-b');
 
   if (!aStr || !bStr) {
-    failJson(options, 'two T-ids are required. Usage: context-pocket-lite diff <T-a> <T-b>');
+    failJson(options, 'two T-ids are required. Usage: context-pocket-xi diff <T-a> <T-b>');
     console.error(colorize('\n  ❌ Error:', 'red') + ' two T-ids are required');
-    console.error('     Usage: context-pocket-lite diff <T-a> <T-b>  (or --t-a <T> --t-b <T>)\n');
+    console.error('     Usage: context-pocket-xi diff <T-a> <T-b>  (or --t-a <T> --t-b <T>)\n');
     process.exit(1);
   }
 
@@ -1084,9 +1085,9 @@ function cmdLogAmend(options, positional) {
   const tIdStr = positional[0] || tIdOption(options);
 
   if (!tIdStr) {
-    failJson(options, 'T-id is required. Usage: context-pocket-lite log amend <T-id> [--user "…" --action "…"]');
+    failJson(options, 'T-id is required. Usage: context-pocket-xi log amend <T-id> [--user "…" --action "…"]');
     console.error(colorize('\n  ❌ Error:', 'red') + ' T-id is required');
-    console.error('     Usage: context-pocket-lite log amend <T-id> --user "…" --action "…"\n');
+    console.error('     Usage: context-pocket-xi log amend <T-id> --user "…" --action "…"\n');
     process.exit(1);
   }
 
@@ -1268,9 +1269,9 @@ function main() {
   const unknown = command === 'log'
     ? `log ${subcommand || ''}`.trim()
     : command;
-  failJson(options, 'Unknown command: ' + unknown + '. Run "context-pocket-lite help" for available commands.');
+  failJson(options, 'Unknown command: ' + unknown + '. Run "context-pocket-xi help" for available commands.');
   console.error(colorize('\n  ❌ Unknown command:', 'red') + ' ' + unknown);
-  console.error('     Run "context-pocket-lite help" for available commands.\n');
+  console.error('     Run "context-pocket-xi help" for available commands.\n');
   process.exit(1);
 }
 
@@ -1288,9 +1289,9 @@ function printCommandHelp(key, options) {
     entry = null;
   }
   if (!entry) {
-    failJson(options, 'No help for command "' + normalized + '". Run "context-pocket-lite help" for available commands.');
+    failJson(options, 'No help for command "' + normalized + '". Run "context-pocket-xi help" for available commands.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' No help for command "' + normalized + '"');
-    console.error('     Run "context-pocket-lite help" for available commands.\n');
+    console.error('     Run "context-pocket-xi help" for available commands.\n');
     process.exit(1);
   }
   if (options && options.json) {

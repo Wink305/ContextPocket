@@ -533,6 +533,7 @@ test('repair: renumbering refreshes an existing graph cache; absent cache stays 
 // ------------------------------------------------------------
 
 const merge = require(path.join(ROOT, 'lib', 'merge'));
+const mergeReview = require(path.join(ROOT, 'lib', 'merge-review'));
 
 function addTurn(pocketDir, gist, extra = {}) {
   return writer.appendLogBlock(pocketDir, Object.assign({
@@ -623,6 +624,52 @@ test('merge: ADRs, requirements, red lines and preferences are deduped; conflict
   assert.ok(prefs.includes('- 解释风格: 详细'), prefs);
   assert.ok(!prefs.includes('- 语言: en'), '冲突偏好必须保留目标值：\n' + prefs);
   assert.strictEqual(verify(target.pocketDir).errorCount, 0, '合并后 verify 必须干净');
+});
+
+test('merge: source code-map descriptions are reported for existing target files', () => {
+  const target = makePocket('merge-codemap-target');
+  const source = makePocket('merge-codemap-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'source first');
+
+  writePocketFile(source.pocketDir, 'code-map.md', [
+    '# Code Map',
+    '',
+    '## Structure',
+    '',
+    '```',
+    'app.js → 源描述',
+    'missing.js → 目标里不存在',
+    '```',
+    '',
+  ].join('\n'));
+  writePocketFile(target.pocketDir, 'code-map.md', [
+    '# Code Map',
+    '',
+    '## Structure',
+    '',
+    '```',
+    'app.js → 目标已有描述',
+    '```',
+    '',
+  ].join('\n'));
+
+  const dry = merge.mergePocket(target.pocketDir, { from: source.pocketDir, dryRun: true });
+  assert.strictEqual(dry.ok, true, JSON.stringify(dry));
+  assert.deepStrictEqual(dry.codeMap.suggestions.map((item) => item.path), ['app.js'], JSON.stringify(dry.codeMap));
+  assert.strictEqual(dry.codeMap.suggestions[0].reason, 'different');
+  assert.strictEqual(dry.codeMap.suggestions[0].current, '目标已有描述');
+  assert.strictEqual(dry.codeMap.suggestions[0].description, '源描述');
+
+  const applied = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(applied.ok, true, JSON.stringify(applied));
+  const report = readPocketFile(target.pocketDir, path.basename(applied.reportPath));
+  assert.ok(report.includes('app.js'), report);
+  assert.ok(report.includes('源描述'), report);
+  assert.ok(!report.includes('missing.js'), '目标不存在的文件不应出现在建议里：' + report);
+
+  const reviews = mergeReview.listReviews(target.pocketDir);
+  assert.ok(reviews.some((review) => review.manual >= 1), JSON.stringify(reviews));
 });
 
 test('merge: archive is skipped by default and merged with --include-archive', () => {

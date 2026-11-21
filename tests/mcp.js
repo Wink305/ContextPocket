@@ -1142,3 +1142,23 @@ test('mcp: hub search spans registered projects and rejects a missing keyword', 
   assert.strictEqual(raw.isError, true, JSON.stringify(raw));
   assert.match(raw.content.map((c) => c.text).join('\n'), /keyword is required/);
 });
+
+test('mcp: hub merge resolves a registered name and dry-runs without writing', async () => {
+  const target = makePocket('mcp-hubmerge-target');
+  const source = makePocket('mcp-hubmerge-source');
+  cliAppend(source.pocketDir, { gist: 'mcp hub merge source turn', user: 'u', action: 'a' });
+  const before = fs.readFileSync(path.join(target.pocketDir, 'log.md'), 'utf-8');
+
+  const text = await mcpCall(target.projectDir, 'context_pocket_hub', {
+    action: 'merge',
+    project: path.basename(source.projectDir),
+    dryRun: true,
+  }, 2);
+  assert.match(text, /Merge plan \(dry-run\)/);
+  assert.ok(text.includes(source.pocketDir), text);
+  assert.strictEqual(fs.readFileSync(path.join(target.pocketDir, 'log.md'), 'utf-8'), before);
+
+  const missing = await mcpCallRaw(target.projectDir, 'context_pocket_hub', { action: 'merge' });
+  assert.strictEqual(missing.isError, true, JSON.stringify(missing));
+  assert.match(missing.content.map((c) => c.text).join('\n'), /project is required/);
+});

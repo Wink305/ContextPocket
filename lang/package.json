@@ -1,0 +1,42 @@
+{
+  "name": "context-pocket-yuan",
+  "version": "3.0",
+  "private": true,
+  "description": "ContextPocket Yuan (渊) — workspace edition: multiple pockets, repo map, budgeted context assembly. Preview: workspace / map / context commands.",
+  "keywords": [
+    "context",
+    "memory",
+    "handoff",
+    "mcp",
+    "ai-agent",
+    "markdown",
+    "workspace",
+    "repo-map"
+  ],
+  "license": "MIT",
+  "author": "ContextPocket Contributors",
+  "homepage": "https://github.com/Wink305/ContextPocket/tree/main/lang#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wink305/ContextPocket.git",
+    "directory": "lang"
+  },
+  "bugs": {
+    "url": "https://github.com/Wink305/ContextPocket/issues"
+  },
+  "bin": {
+    "context-pocket-yuan": "bin/context-pocket-yuan.js",
+    "context-pocket-yuan-mcp": "mcp-server-yuan.js"
+  },
+  "main": "lib/workspace.js",
+  "engines": {
+    "node": ">=14"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "edition.json",
+    "mcp-server-yuan.js",
+    "README.md"
+  ]
+}

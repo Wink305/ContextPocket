@@ -1,0 +1,22 @@
+{
+  "edition": "quan",
+  "package": "context-pocket-quan",
+  "family": "3.0",
+  "status": "stable",
+  "dataFormat": "v2",
+  "coreFiles": 10,
+  "commands": 29,
+  "tools": 29,
+  "modes": [
+    "solo",
+    "agent"
+  ],
+  "outputTiers": [
+    "brief",
+    "full"
+  ],
+  "derivedCaches": [
+    "search-index",
+    "graph"
+  ]
+}

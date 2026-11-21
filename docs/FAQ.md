@@ -20,7 +20,7 @@ git add ContextPocket/
 git commit -m "chore: track ContextPocket/ for team sharing"
 ```
 
-> ⚠️ **注意**：共享的是**数据**，不是并发权。同一台机器上多个 Agent 同时写由写入锁排队（`lib/io.js` 的 `withPocketLock`，锁文件在 `os.tmpdir()`，作用范围就是一台机器）；跨机器同时写会各自算出同一个 T 号，合并后撞号——所以跨机器仍然按"串行交接"用：写完提交，别人先 `git pull`。真撞上了用 `context-pocket repair` 收回来（见「协作 / 团队」）。
+> ⚠️ **注意**：共享的是**数据**，不是并发权。同一台机器上多个 Agent 同时写由写入锁排队（`lib/io.js` 的 `withPocketLock`，锁文件在 `os.tmpdir()`，作用范围就是一台机器）；跨机器同时写会各自算出同一个 T 号，合并后撞号——所以跨机器仍然按"串行交接"用：写完提交，别人先 `git pull`。真撞上了用 `context-pocket-quan repair` 收回来（见「协作 / 团队」）。
 
 ### Q: 🔒 区能加密吗？
 
@@ -39,8 +39,8 @@ git commit -m "chore: track ContextPocket/ for team sharing"
 v1 → v2 只多了一样东西：每个 T-block 标题下面那条 `--- WHEN: <时间> ---` 时间行。升上去要做的只有一件事：
 
 ```bash
-context-pocket migrate --dir <project-root> --to v2 --dry-run   # 先看会改什么
-context-pocket migrate --dir <project-root> --to v2             # 真写：先备份、逐跳体检、失败自动回滚
+context-pocket-quan migrate --dir <project-root> --to v2 --dry-run   # 先看会改什么
+context-pocket-quan migrate --dir <project-root> --to v2             # 真写：先备份、逐跳体检、失败自动回滚
 ```
 
 停在 v1 的目录只会在 `verify` 里多一条 `format-upgrade` **WARNING**（提醒有升级可用），不会拦提交，也不会有任何写动作偷偷把版本号抬上去。
@@ -53,9 +53,9 @@ context-pocket migrate --dir <project-root> --to v2             # 真写：先�
 
 向后兼容性原则：**新 skill 能读旧数据，旧 skill 可能不识别新数据**。当前这一跳属于前者——v2 相对 v1 只多一行结构行，v1 的读取路径（`lib/parser.js` 的 `parseLogText`）遇到它不会多出任何行为，这一点由测试直接钉住（同一份内容加不加时间行，解析结果必须相等）。
 
-### Q: 怎么确认我装的 context-pocket 是哪个版本？版本号写在哪里？
+### Q: 怎么确认我装的 context-pocket-quan 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket --version`（`-v` 和 `context-pocket version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket","version":"2.13","display":"2.13","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位如 `2.3`；带预发布/hotfix 后缀时显示完整串，如 `2.0.1-hotfix1`）。
+**A**: `context-pocket-quan --version`（`-v` 和 `context-pocket-quan version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket-quan","version":"3.0","display":"3.0-quan","edition":"quan","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位 + 版本名如 `3.0-quan`，轻量版为 `3.0-xi`；带预发布/hotfix 后缀时显示完整串）。旧命令 `context-pocket` 仍指向同一个通用版，3.0 / 3.1 保留，3.2 移除。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余六处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、`CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 三处说明与示例里写着的那串号。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 
@@ -84,23 +84,23 @@ MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就�
 export CONTEXTPOCKET_HOME=/path/to/synced/folder   # 指向网盘/Dropbox/iCloud/git bare repo
 ```
 
-`~/.contextpocket/hub.json`（hub 注册表 + 跨项目只读检索 + 全局偏好）会跟着这个文件夹走。新机器登录后，`context-pocket hub list` 就能看到已注册项目。
+`~/.contextpocket/hub.json`（hub 注册表 + 跨项目只读检索 + 全局偏好）会跟着这个文件夹走。新机器登录后，`context-pocket-quan hub list` 就能看到已注册项目。
 
 **2) 把整份 `ContextPocket/` 进 git（项目级同步）**
 
 ```bash
-context-pocket bootstrap --gitignore: false --dir <root>
+context-pocket-quan bootstrap --gitignore: false --dir <root>
 ```
 
 或 MCP 模式下 `context_pocket_bootstrap({ gitignore: false })`。`ContextPocket/` 不再被 `.gitignore` 忽略，整份目录（包括项目级偏好）跟着 git 走。
 
-> ⚠️ 两条路径都要明白锁的边界：`withPocketLock` 的锁文件写在 `os.tmpdir()` 里、按 pocket 路径命名，所以它**只在一台机器内**给写入排队。跨机器共享时请串行交接（谁做完谁提交，下一个先 `git pull`）；真的两个克隆同时写了，合并后会撞到同一个 T 号，用 `context-pocket repair` 收回来。Hub 是**注册表**，项目数据永远在各项目的 `ContextPocket/` 里；hub 故障（磁盘满、权限不够）不会影响正常记录。
+> ⚠️ 两条路径都要明白锁的边界：`withPocketLock` 的锁文件写在 `os.tmpdir()` 里、按 pocket 路径命名，所以它**只在一台机器内**给写入排队。跨机器共享时请串行交接（谁做完谁提交，下一个先 `git pull`）；真的两个克隆同时写了，合并后会撞到同一个 T 号，用 `context-pocket-quan repair` 收回来。Hub 是**注册表**，项目数据永远在各项目的 `ContextPocket/` 里；hub 故障（磁盘满、权限不够）不会影响正常记录。
 
 ### Q: `assets/search-index.json` 是什么？能删吗？
 
 **A**: 这是**派生缓存**，不是真相源。索引覆盖 `log.md` / `log-archive.md` / `decisions.md` / `requirements.md` / `preferences.md`（`lib/indexer.js` 的 `SOURCE_FILES`）。每次写入后刷新时先比对这几个文件的 mtime + size 签名（`sourceSignature`）：签名没变就整轮跳过；变了也只对**内容变了的那几篇**重新分词，其余条目按 hash 复用。实测 800 轮、每轮 7 个小节的项目：首次整库重建约 0.14 秒，无变化的刷新约 0.07 秒，追加一轮后的刷新约 0.18 秒且只重分词 1 篇（另外 800 篇按 hash 复用）。删除它完全安全——下次 `search` 会自动重建。如果索引损坏或格式过时（`INDEX_VERSION` 对不上），搜索也是**当场重建再走索引**：实测三种情况（文件缺失、内容是坏 JSON、把 `version` 改成对不上的值）里 `search --json` 的 `viaIndex` 都是 `true`。只有连重建都做不成（只读盘、`assets/search-index.json` 这个位置被别的东西占了）才透明回退到全量扫描，那时 `viaIndex` 才是 `false`——实测这样一次搜索的命中数与顺序和索引路径完全一样，索引任何问题都不会阻断搜索，也不会改变结果。
 
-> 剩下的一次性开销来自"整个索引是一个 JSON 文件"：每次读它都要 `JSON.parse` 整份（上面那个 800 轮的项目，v2 二字组分词下 1003 KiB；把分词退回"整串中文当一个词元"的旧写法、同一批语料重测是 628 KiB —— 二字组换来的命中率是要花这 60% 体积买的，见下一问）。所以 `lib/indexer.js` 里加了一层**进程内缓存**（`indexMemo`）：按 `pocketDir` 记住上一次的解析结果 + 当时的源文件签名，签名一致就直接复用，不再读盘。这对常驻的 MCP server 才有意义——实测同一份 800 轮、查同一个中文短语 20 次：每次都从盘上读是 38 ms/次，命中缓存是 11 ms/次（约 3.5 倍）。一次性 CLI 调用（`context-pocket search …`）本来就只搜一次，走不到这层缓存，行为与数字不变。
+> 剩下的一次性开销来自"整个索引是一个 JSON 文件"：每次读它都要 `JSON.parse` 整份（上面那个 800 轮的项目，v2 二字组分词下 1003 KiB；把分词退回"整串中文当一个词元"的旧写法、同一批语料重测是 628 KiB —— 二字组换来的命中率是要花这 60% 体积买的，见下一问）。所以 `lib/indexer.js` 里加了一层**进程内缓存**（`indexMemo`）：按 `pocketDir` 记住上一次的解析结果 + 当时的源文件签名，签名一致就直接复用，不再读盘。这对常驻的 MCP server 才有意义——实测同一份 800 轮、查同一个中文短语 20 次：每次都从盘上读是 38 ms/次，命中缓存是 11 ms/次（约 3.5 倍）。一次性 CLI 调用（`context-pocket-quan search …`）本来就只搜一次，走不到这层缓存，行为与数字不变。
 >
 > 数字怎么来的：`bootstrap` 一个临时项目，用 `log append` 灌 800 轮（每轮 7 个小节、含中文短语），删掉索引后 `buildIndex({rebuild:true})` 计时，再跑无变化刷新、追加一轮后的刷新，最后各查 20 次取平均。换机器、换语料都会变，它说明的是量级与"缓存这条路值得走"，不是 SLA。
 >
@@ -108,13 +108,13 @@ context-pocket bootstrap --gitignore: false --dir <root>
 
 ```bash
 # 手动强制重建
-context-pocket index --rebuild --dir <root>
+context-pocket-quan index --rebuild --dir <root>
 
 # 临时跳过索引走全量扫描（调试时有用）
-context-pocket search <keyword> --no-index --dir <root>
+context-pocket-quan search <keyword> --no-index --dir <root>
 
 # 写入侧也有 --no-index，含义是缓存的另一头：这一次写完不刷索引
-context-pocket log append --gist "批量灌历史" --user "…" --no-index --dir <root>
+context-pocket-quan log append --gist "批量灌历史" --user "…" --no-index --dir <root>
 ```
 
 > ⚠️ `--no-index` 这个名字出现在两类命令上，读法不同但都动不到数据：在 `search` 上是"这一次查询不信缓存，直接扫 Markdown"；在 `log append` / `log amend` 上是"这次写入完不刷新缓存"。后者省掉的是每轮一次的分词与写盘，代价只有"下一次 search 自己发现源文件签名变了、现场重建"——实测这样灌进去的一轮照样搜得到，且 `assets/search-index.json` 在搜索后回到磁盘上。（注意 `import` 没有这个开关，也不需要：它是一批写完再刷一次，不是每轮刷一次。）Markdown 永远是真相源，所以两种读法给出的命中集合与顺序都完全一致。
@@ -142,19 +142,19 @@ context-pocket log append --gist "批量灌历史" --user "…" --no-index --dir
 
 ```bash
 # 1) 先 dry-run 看导入计划
-context-pocket import --file <session.jsonl> --dry-run --dir <root>
+context-pocket-quan import --file <session.jsonl> --dry-run --dir <root>
 
 # 2) 确认无误后真正导入
-context-pocket import --file <session.jsonl> --dir <root>
+context-pocket-quan import --file <session.jsonl> --dir <root>
 ```
 
-T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标签。工具调用噪音（tool_use / tool_result / 命令标记 / 系统注入）自动跳过。源类型默认嗅探，可用 `--source claude-code` 或 `--source codex` 强制指定。轮次与长度也能调：`--limit N`（默认 100，最多导几轮）、`--truncate N`（默认 400，每条原话/摘要截断到几个字，`--dry-run` 的 preview gist 另有 60 字上限）。导入后建议跑一次 `context-pocket verify`，看有没有 import-shaped 漏填项。
+T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标签。工具调用噪音（tool_use / tool_result / 命令标记 / 系统注入）自动跳过。源类型默认嗅探，可用 `--source claude-code` 或 `--source codex` 强制指定。轮次与长度也能调：`--limit N`（默认 100，最多导几轮）、`--truncate N`（默认 400，每条原话/摘要截断到几个字，`--dry-run` 的 preview gist 另有 60 字上限）。导入后建议跑一次 `context-pocket-quan verify`，看有没有 import-shaped 漏填项。
 
 ***
 
 ## 工作流 / 习惯
 
-### Q: 应该多久跑一次健康检查（`context-pocket verify`）？
+### Q: 应该多久跑一次健康检查（`context-pocket-quan verify`）？
 
 **A**: 经验法则：
 
@@ -166,27 +166,27 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 
 - 交接前：必跑
 
-### Q: `context-pocket sync` 和直接 bootstrap 区别？
+### Q: `context-pocket-quan sync` 和直接 bootstrap 区别？
 
 **A**:
 
-- `bootstrap`（`context-pocket bootstrap`）— 初始化：按模板建 10 个核心文件（lite 模式 5 个）、扫目录预填 code-map、登记 hub（加 `--no-hub`，MCP 写 `noHub: true`，就只建 pocket，`CONTEXTPOCKET_HOME` 下一个字节都不写；之后去掉这个开关重跑一次即可补登记）。**不做体检**，`ContextPocket/` 已存在时是无害的 no-op（退 0，一个字节都不改）
+- `bootstrap`（`context-pocket-quan bootstrap`）— 初始化：按模板建 10 个核心文件（lite 模式 5 个）、扫目录预填 code-map、登记 hub（加 `--no-hub`，MCP 写 `noHub: true`，就只建 pocket，`CONTEXTPOCKET_HOME` 下一个字节都不写；之后去掉这个开关重跑一次即可补登记）。**不做体检**，`ContextPocket/` 已存在时是无害的 no-op（退 0，一个字节都不改）
 
-- `context-pocket verify` — 体检，默认 15 项：文件完整性（含 🔒 区 `absolute.md` 在不在）、编号连续性（T/R/ADR）、引用完整性、index 一致性、T-block 小节格式（缺 `### User` / `### Action` 是 ERROR；`log append` 当场就把缺的那一节说出来并给出 `log amend` 命令，不再让你只看到"追加成功"；还有一种 ERROR 专门照 1.1.0 写坏的时间行 `--- WHEN: undefined → undefined ---`，判据是"这一行没有 `stated: ` 前缀，工具不可能这样写原话"，所以用户逐字说过 "undefined" 不会被误拦在提交门外）、code-map 漂移、handoff 过期、标题行 T 一致、畸形编号、log 体积 vs `archive_at`、pocket 里的密钥 / PII 形状、**附件声明对不对得上磁盘**（`### Attachments` 写了 `assets/T04-x.png` 而文件不在 = ERROR，`log.md` 与 `log-archive.md` 都扫；模板占位 `<...>`、URL、绝对路径、含 `..` 的、以及已经按规范标了 `[missing: T<n> <file>]` 的那一条都不算，宁可不报也不误报。修法是补回文件，或按 `[missing: …]` 把这一条标注成缺失，然后重跑 `context-pocket verify`）、**格式版本是否落后**（`lib/validator.js:74`；登记表里真有可走的一跳才报，而且是 WARNING，所以它既不刷屏也不拦提交）。加 `--drift` 才跑另两项扫目录的检查：认知漂移（最近 T-block 提到的路径 vs 工作树）与"代码比记录新"（mtime 晚于上次记录的文件，**不需要 git**）
+- `context-pocket-quan verify` — 体检，默认 15 项：文件完整性（含 🔒 区 `absolute.md` 在不在）、编号连续性（T/R/ADR）、引用完整性、index 一致性、T-block 小节格式（缺 `### User` / `### Action` 是 ERROR；`log append` 当场就把缺的那一节说出来并给出 `log amend` 命令，不再让你只看到"追加成功"；还有一种 ERROR 专门照 1.1.0 写坏的时间行 `--- WHEN: undefined → undefined ---`，判据是"这一行没有 `stated: ` 前缀，工具不可能这样写原话"，所以用户逐字说过 "undefined" 不会被误拦在提交门外）、code-map 漂移、handoff 过期、标题行 T 一致、畸形编号、log 体积 vs `archive_at`、pocket 里的密钥 / PII 形状、**附件声明对不对得上磁盘**（`### Attachments` 写了 `assets/T04-x.png` 而文件不在 = ERROR，`log.md` 与 `log-archive.md` 都扫；模板占位 `<...>`、URL、绝对路径、含 `..` 的、以及已经按规范标了 `[missing: T<n> <file>]` 的那一条都不算，宁可不报也不误报。修法是补回文件，或按 `[missing: …]` 把这一条标注成缺失，然后重跑 `context-pocket-quan verify`）、**格式版本是否落后**（`lib/validator.js:74`；登记表里真有可走的一跳才报，而且是 WARNING，所以它既不刷屏也不拦提交）。加 `--drift` 才跑另两项扫目录的检查：认知漂移（最近 T-block 提到的路径 vs 工作树）与"代码比记录新"（mtime 晚于上次记录的文件，**不需要 git**）
 
-- `context-pocket sync` — 补档，只关心"最近几轮是否漏记"。判定"记过没有"只认**强证据**：路径出现在最近某轮的 `### Action` 小节里
+- `context-pocket-quan sync` — 补档，只关心"最近几轮是否漏记"。判定"记过没有"只认**强证据**：路径出现在最近某轮的 `### Action` 小节里
 
 ### Q: 我在 `### Uncertain` 里写了"要不要一起改 `lib/store.js`"，`sync` 为什么还说这个文件漏记？
 
 **A**: 因为那句话不声明 `lib/store.js` 被改过。工具把证据分两级（`lib/parser.js` 的 `weakMentions()`）：Action 小节里的路径 = 强证据，算覆盖；其它小节（Uncertain / Attachments / Conflicts / Pitfalls / Decisions…）里的路径 = 弱证据，**不算覆盖**，但也不会被扔掉——
 
-- `sync` 会把它单独列出来，写成 `← only mentioned in T7/Uncertain, never in Action`，并建议改用 `context-pocket log amend T7 --action "…"` 把那一轮补全，而不是新起一个 `[auto]` 块（后者只会留下一条免责声明）；
+- `sync` 会把它单独列出来，写成 `← only mentioned in T7/Uncertain, never in Action`，并建议改用 `context-pocket-quan log amend T7 --action "…"` 把那一轮补全，而不是新起一个 `[auto]` 块（后者只会留下一条免责声明）；
 - `--auto` 真的补录时，`[auto]` 块的 Action 行里也带着"（此前只出现在 T7 的 Uncertain，未记入 Action）"，核对的人一眼看得懂；
 - `why` 对同一件事给两种答案：`evidence: "changed"` 与 `evidence: "mentioned"`，改过的那几轮排在前面。
 
 取舍说明：反过来做（把弱证据也算覆盖）会静默放过真实漏记；只认严格 `<操作> <文件> — <描述>` 格式则会让自然语言的 Action（`新增 src/a.ts 和 src/b.ts`）被误判，于是每次提交多出一个冗余 `[auto]` 块。分级是这两者之间唯一不撒谎的位置：**谈过 ≠ 改过**，但"谈过"值得告诉你去哪儿补。
 
-如果怀疑漏记，跑 `context-pocket sync`。新会话接入时 bootstrap 即可（它是幂等的）。
+如果怀疑漏记，跑 `context-pocket-quan sync`。新会话接入时 bootstrap 即可（它是幂等的）。
 
 ### Q: 怎么让 Agent 主动问🔒？
 
@@ -213,13 +213,13 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 - **同一台机器上几个 Agent 同时在写**：安全。每次写入先取锁再读 `latestT`、再追加（`lib/io.js` 的 `withPocketLock`，锁按 pocket 路径放在 `os.tmpdir()`），所以它们会排队，各自拿到不同的 T 号。
 - **几台机器各自有一份克隆，同时在写**：锁看不见别的机器，两边都算出 `latestT + 1`，合并后 `log.md` 里就会有两个 `## T9`。所以跨机器请按**串行交接**用：一个 Agent 做完 → 提交 → 下一个先 `git pull`。
 
-真撞上了不用手改 markdown：`verify` 会把 `Duplicate T-id: T9` 报成 error 并给出命令，`context-pocket repair --dry-run` 看方案、去掉 `--dry-run` 执行。它把撞号那块**连同它之后的每一块**整体后移（`log.md` 只追加，编号必须继续随文件顺序递增），派生值（各文件头行的 `· T<n>`、`index.md`）跟着对齐，`log-archive.md` 只报不改，改动本身写成一个 `[auto]` T-block；改完体检更差就整份回滚。
+真撞上了不用手改 markdown：`verify` 会把 `Duplicate T-id: T9` 报成 error 并给出命令，`context-pocket-quan repair --dry-run` 看方案、去掉 `--dry-run` 执行。它把撞号那块**连同它之后的每一块**整体后移（`log.md` 只追加，编号必须继续随文件顺序递增），派生值（各文件头行的 `· T<n>`、`index.md`）跟着对齐，`log-archive.md` 只报不改，改动本身写成一个 `[auto]` T-block；改完体检更差就整份回滚。
 
 **正文里写着旧编号的地方默认只列出来、不改**——一句 `T9` 可能指两块中的任何一块，只有读的人知道是哪一块；确认之后再加 `--apply-refs` 一次性替换。
 
 替换只认**独立的 `T<数字>`**，而且有两类东西它永不改写：
 - **词**：`GPT4`、`RTX4090`、`UTF8` 里含着 `T4`/`T2` 的形状，但不是编号，`--apply-refs` 也不会把它们改成别的型号名字。
-- **附件文件名**：`T04-diagram.png`、`assets/T04-diagram.png` 是文件名不是引用。改名是两步——先 `mv` 文件、再改文本——repair 不替你动磁盘上的文件，所以也绝不只改文本那一半：那只会造出一条断链，还顺手丢掉零填充（`T04`→`T4`）。它们单独列在输出的 `📎 Attachment file names…` / `--json` 的 `fileNames[]` 里，每条给一句现成的 `mv "旧名" "新名"`，你执行完再跑一次 `context-pocket verify` 确认链接没断。
+- **附件文件名**：`T04-diagram.png`、`assets/T04-diagram.png` 是文件名不是引用。改名是两步——先 `mv` 文件、再改文本——repair 不替你动磁盘上的文件，所以也绝不只改文本那一半：那只会造出一条断链，还顺手丢掉零填充（`T04`→`T4`）。它们单独列在输出的 `📎 Attachment file names…` / `--json` 的 `fileNames[]` 里，每条给一句现成的 `mv "旧名" "新名"`，你执行完再跑一次 `context-pocket-quan verify` 确认链接没断。
 
 团队协作模式：
 
@@ -283,7 +283,7 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 
 - 把详细文档链接进 attachments 而不是全文复制
 
-- 定期归档：`log.md` 行数到了 `config.md` 的 `archive_at`（默认 800）时，`status` 与 `verify` 会明确报"archive is due"。**归档不会自动发生**——搬动历史必须有人触发（`context-pocket archive`）
+- 定期归档：`log.md` 行数到了 `config.md` 的 `archive_at`（默认 800）时，`status` 与 `verify` 会明确报"archive is due"。**归档不会自动发生**——搬动历史必须有人触发（`context-pocket-quan archive`）
 
 ### Q: token 消耗如何？
 
@@ -327,13 +327,13 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 
 **A**: 能——而且这是唯一的用法。ContextPocket 没有斜杠命令，Agent 按 [SKILL.md](../SKILL.md) 的「快速响应」表把大白话映射到具体子命令：
 
-- 首次进入项目 → `context-pocket bootstrap`
+- 首次进入项目 → `context-pocket-quan bootstrap`
 
-- 把某条规则设为绝对保留 → `context-pocket absolute add`
+- 把某条规则设为绝对保留 → `context-pocket-quan absolute add`
 
-- 查看当前状态 → `context-pocket status`
+- 查看当前状态 → `context-pocket-quan status`
 
-- 回看某一轮 → `context-pocket recall T5`
+- 回看某一轮 → `context-pocket-quan recall T5`
 
 想要零歧义就把子命令名直接说出来，Agent 会照着执行。
 
@@ -358,16 +358,16 @@ T 编号从当前最新继续，每个导入的 T-block 都打 `[imported]` 标�
 1. 检查 Agent 是否真的加载了本 skill（看它怎么回应"读 SKILL.md"）
 2. 检查工作目录是否在项目根（不是子目录）
 3. 检查 ContextPocket/ 是否已存在（已存在时 `bootstrap` 是无害 no-op：退 0 并告诉你路径，接着改读 `index.md` + `state.md` 就能继续）
-4. 触发一次状态查询（`context-pocket status`）看是否识别
+4. 触发一次状态查询（`context-pocket-quan status`）看是否识别
 
 ### Q: log.md 里出现重复内容？
 
-**A**: 通常是 Agent 在 token 紧张时重写而不是 append；也可能是两个克隆各写了一轮同一个 T 号（跨机器并行，见「协作 / 团队」）。先看 `context-pocket verify` 怎么说：
+**A**: 通常是 Agent 在 token 紧张时重写而不是 append；也可能是两个克隆各写了一轮同一个 T 号（跨机器并行，见「协作 / 团队」）。先看 `context-pocket-quan verify` 怎么说：
 
-- 报 `Duplicate T-id: T9`（error）→ 是撞号。用 `context-pocket repair --dry-run` 看方案，再 `context-pocket repair` 执行；它把撞号那块及其后的块整体后移，正文一个字不动，还会列出哪些地方仍写着旧号（确认后用 `--apply-refs` 改写；`GPT4` 这类词和 `assets/T04-x.png` 这类文件名不在替换范围内，文件名那条给你现成的 `mv` 命令）。**不要手改 markdown**，那是唯一别的工具查不出来的改法。
-- 内容重复但 T 号不撞（同一个 Agent 把一轮写了两遍、块号分别是 T9 和 T10）→ repair 不管这件事，因为"哪一份是该留的"是判断而不是算法：保留信息更全的那一块，另一块用 `context-pocket log amend` 把缺的小节补进去，或直接删掉多余那块再 `verify` 确认序列仍然合法。
+- 报 `Duplicate T-id: T9`（error）→ 是撞号。用 `context-pocket-quan repair --dry-run` 看方案，再 `context-pocket-quan repair` 执行；它把撞号那块及其后的块整体后移，正文一个字不动，还会列出哪些地方仍写着旧号（确认后用 `--apply-refs` 改写；`GPT4` 这类词和 `assets/T04-x.png` 这类文件名不在替换范围内，文件名那条给你现成的 `mv` 命令）。**不要手改 markdown**，那是唯一别的工具查不出来的改法。
+- 内容重复但 T 号不撞（同一个 Agent 把一轮写了两遍、块号分别是 T9 和 T10）→ repair 不管这件事，因为"哪一份是该留的"是判断而不是算法：保留信息更全的那一块，另一块用 `context-pocket-quan log amend` 把缺的小节补进去，或直接删掉多余那块再 `verify` 确认序列仍然合法。
 
-无论哪种，之后都跑一次 `context-pocket verify` 确认恢复干净。下次：在 Agent 回复前如果提示"output truncated"或类似信号，主动要求"先 append log.md 再继续"。
+无论哪种，之后都跑一次 `context-pocket-quan verify` 确认恢复干净。下次：在 Agent 回复前如果提示"output truncated"或类似信号，主动要求"先 append log.md 再继续"。
 
 ### Q: 我想完全重置 ContextPocket/，但保留配置？
 
@@ -394,7 +394,7 @@ cp /tmp/cp-config-backup.md ContextPocket/config.md
 node path/to/context-pocket/bin/context-pocket.js <command> --dir <project-root>
 
 # 方式二：本地仓库注册成全局命令（README 的"From a clone"）
-cd path/to/context-pocket && npm link    # 得到 context-pocket / context-pocket-mcp
+cd path/to/ContextPocket && npm link    # 得到 context-pocket-quan / context-pocket-quan-mcp（旧名 context-pocket / context-pocket-mcp 同时保留）
 ```
 
 常用命令：
@@ -413,7 +413,7 @@ cd path/to/context-pocket && npm link    # 得到 context-pocket / context-pocke
 - `state update --summary "…" --next-step "…"` — 更新当前状态
 - `preferences update --key … --value …` — 更新项目偏好（`prefs update` 是别名）
 - `code-map update` — 重新扫描目录、刷新代码地图（`codemap update` 是别名）
-- `handoff` — 生成交接摘要
+- `handoff` — 生成交接摘要（`--max-tokens <N>` 可把可选小节裁到近似预算，红线区永不裁）
 - `archive [--keep-last N] [--dry-run]` — 归档旧轮次（含失败自动回滚；必须有人触发，永不自动发生）
 - `index [--rebuild]` — 查看/重建搜索索引
 - `distill [--dry-run] [--recent-keep N]` — 从归档与旧轮次里提炼摘要报告
@@ -424,7 +424,7 @@ cd path/to/context-pocket && npm link    # 得到 context-pocket / context-pocke
 - `repair [--dry-run] [--apply-refs] [--author "…"]` — 把跨机器并行写出来的撞号 T 编号收回来：撞号那块及其后的块整体后移，派生值跟着对齐，正文旧引用默认只列不改（`--apply-refs` 才改写），改完体检更差整份回滚
 - `install-hook` / `uninstall-hook` — 安装/移除 Git pre-commit 钩子
 
-上面这份表由 `context-pocket help --json` 生成（同一张数据源），命令总数与 MCP 工具数都是 29，
+上面这份表由 `context-pocket-quan help --json` 生成（同一张数据源），命令总数与 MCP 工具数都是 29，
 `tests/cli.js` 与 `tests/mcp.js` 会同时核对"帮助 ↔ README 表 ↔ MCP 工具名"三处，任何一处漏项测试就红。
 
 每个命令（含 `help` 本身）都接受 `--json`：stdout 只有一行 JSON，出错时 `{"ok":false,"error":"…"}` 且退出码非 0。
@@ -434,11 +434,28 @@ cd path/to/context-pocket && npm link    # 得到 context-pocket / context-pocke
 在目标项目里跑：
 
 ```bash
-context-pocket merge --from /path/to/other/ContextPocket --dry-run
-context-pocket merge --from /path/to/other/ContextPocket
+context-pocket-quan merge --from /path/to/other/ContextPocket --dry-run
+context-pocket-quan merge --from /path/to/other/ContextPocket
 ```
 
 源口袋只读，轮次会接在目标最新 T 之后重新编号；ADR、需求、🔒 红线与非冲突偏好一并合入。`state.md`、`code-map.md`、冲突偏好/需求不自动覆盖，写进 `ContextPocket/merge-<date>.md`。默认跳过源 `log-archive.md`，需要时加 `--include-archive`。重复合并是增量的，不会把旧轮次再加一遍。
+
+如果源项目已经在 hub 里登记过，可以按名字合并，省去手敲路径：
+
+```bash
+context-pocket-quan hub merge <项目名> --dry-run
+context-pocket-quan hub merge <项目名>
+```
+
+名字可以写 hub 里显示的 project name，也可以写项目目录名；重名时命令会列出候选路径并要求改用完整路径，不会猜。合并完成后，用 `merge report` 查看目标口袋里的报告清单，`--file <名称>` 打印其中一份；`--apply <id>` 会重放对应的结构化复核记录：
+
+```bash
+context-pocket-quan merge report
+context-pocket-quan merge report --file merge-2026-11-21.md
+context-pocket-quan merge report --apply merge-2026-11-21#1
+```
+
+`--apply` 只处理三类可安全重放的项：需求状态冲突（目标仍停在合并时的状态才改）、偏好冲突（目标值仍是合并时记录的值才改）、源 state 的 summary / next steps / pitfalls（目标没有那一行才追加）。合并后有人又改过的项会跳过，绝不覆盖；code-map 会列出目标中真实存在、但描述缺失或不同的文件建议，仍留在 Markdown 报告里人工确认；附件冲突同样人工处理。重复执行同一个 id 是无害的 no-op。
 
 ### Q: 如何安装 Git pre-commit hook？
 
@@ -451,8 +468,8 @@ node path/to/context-pocket/bin/context-pocket.js install-hook --dir <project-ro
 这会向 `.git/hooks/pre-commit` 追加一段带管理标记的脚本（`lib/hooks.js` 生成，嵌入 CLI 的绝对路径），每次 commit 前跑三步：
 
 1. 从仓库根向上找 `ContextPocket/`。找不到就打印提示并 `exit 0` —— 先装 hook、后 `bootstrap` 是正常顺序，绝不能因此把每一次提交都锁死（那种情况下唯一的出路只有 `--no-verify`）
-2. `context-pocket sync --auto` —— git 兜底：把最近几轮漏记的 staged 文件补成 `[auto]` T-block
-3. `context-pocket verify --quiet` —— 体检：**只有 error 阻止提交，warning 放行**（所以"archive is due"这类 warning 不会挡住你 commit）
+2. `context-pocket-quan sync --auto` —— git 兜底：把最近几轮漏记的 staged 文件补成 `[auto]` T-block
+3. `context-pocket-quan verify --quiet` —— 体检：**只有 error 阻止提交，warning 放行**（所以"archive is due"这类 warning 不会挡住你 commit）
 
 hook 缺失 `node` 或找不到 CLI 时同样打印提示并 `exit 0`（不锁死仓库）。这三条兜底路径和"该拦的要拦住"都由 `tests/hooks.js` 看着：既有对生成脚本的逐行内容断言，也有真 `git init` + 真提交的端到端用例（本机没有 git/sh 时该组自动跳过）。
 
@@ -464,7 +481,7 @@ node path/to/context-pocket/bin/context-pocket.js uninstall-hook --dir <project-
 
 ### Q: 数据迁移怎么处理？
 
-**A**: 使用 `context-pocket migrate` 命令。执行逻辑已经实现并有测试覆盖（`tests/migrate.js` 16 例）：先备份整个 `ContextPocket/` 到 `ContextPocket.backup-TIMESTAMP/`，每跳之前体检，任何一跳抛错**或跳完之后体检报 error**（哪怕迁移函数自己一声不吭地把数据写坏了）都整体回滚，回滚成功后删掉那份备份；只有全部走通才留备份给用户对比。迁移前体检就不干净会直接拒绝开始，一个字节都不改。
+**A**: 使用 `context-pocket-quan migrate` 命令。执行逻辑已经实现并有测试覆盖（`tests/migrate.js` 16 例）：先备份整个 `ContextPocket/` 到 `ContextPocket.backup-TIMESTAMP/`，每跳之前体检，任何一跳抛错**或跳完之后体检报 error**（哪怕迁移函数自己一声不吭地把数据写坏了）都整体回滚，回滚成功后删掉那份备份；只有全部走通才留备份给用户对比。迁移前体检就不干净会直接拒绝开始，一个字节都不改。
 
 **登记表里现在有两跳**（`MIGRATIONS`，`lib/migrate.js:35`）：
 
@@ -475,13 +492,13 @@ v1 项目因此不是"只能等 v2 发布"，而是现在就能升：`--to v2` �
 
 ```bash
 # 查看当前版本 + 登记表里都有哪些跳
-context-pocket migrate --dir <project-root> --list
+context-pocket-quan migrate --dir <project-root> --list
 
 # 预览这一跳会改哪些块（一个字节都不写）
-context-pocket migrate --dir <project-root> --to v2 --dry-run
+context-pocket-quan migrate --dir <project-root> --to v2 --dry-run
 
 # 真执行：先备份，逐跳体检，失败整体回滚
-context-pocket migrate --dir <project-root> --to latest
+context-pocket-quan migrate --dir <project-root> --to latest
 ```
 
 目标版本超出登记表时仍然退 1，并把现存的跳全列出来，例如 `--to v3`：
@@ -490,9 +507,9 @@ context-pocket migrate --dir <project-root> --to latest
 ❌ Error: No migration path from v2 to v3. Registered step(s): v1 → v1: ... | v1 → v2: ...
 ```
 
-不健康的 v1 目录也不受影响：verify 会多一条 `format-upgrade` **WARNING** 告诉你"有升级可用"，但 pocket 本身合法，WARNING 不拦提交；任何写动作（`log append` / `archive` / `import`）都不会偷偷把版本号抬上去。v1 的 pocket 里 `--when` 不会落盘（不能往 v1 里塞 v2 才有的字段），但块照记、`log.md` 永远是 P0，并且 CLI 与 MCP 都会明说一句"pocket 还是 v1 格式：先 context-pocket migrate --to latest 才记时间"（`--json` 里是 `whenSkipped` 字段），不会把你给的时间悄悄吞掉。
+不健康的 v1 目录也不受影响：verify 会多一条 `format-upgrade` **WARNING** 告诉你"有升级可用"，但 pocket 本身合法，WARNING 不拦提交；任何写动作（`log append` / `archive` / `import`）都不会偷偷把版本号抬上去。v1 的 pocket 里 `--when` 不会落盘（不能往 v1 里塞 v2 才有的字段），但块照记、`log.md` 永远是 P0，并且 CLI 与 MCP 都会明说一句"pocket 还是 v1 格式：先 context-pocket-quan migrate --to latest 才记时间"（`--json` 里是 `whenSkipped` 字段），不会把你给的时间悄悄吞掉。
 
-升级前仍然建议手工做两件事：先 `context-pocket verify` 确认健康（否则 `migrate` 会拒绝对外写入，只会告诉你"改完再试"），再让 Agent 导出一份完整快照 —— 命令内的备份就在项目目录里，同盘损坏时它救不了你。
+升级前仍然建议手工做两件事：先 `context-pocket-quan verify` 确认健康（否则 `migrate` 会拒绝对外写入，只会告诉你"改完再试"），再让 Agent 导出一份完整快照 —— 命令内的备份就在项目目录里，同盘损坏时它救不了你。
 
 ### Q: archive 会丢数据吗？
 

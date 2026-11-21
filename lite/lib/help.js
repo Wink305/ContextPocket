@@ -14,7 +14,7 @@
  */
 
 // ============================================================
-// 主帮助页（context-pocket-lite help）
+// 主帮助页（context-pocket-xi help）
 // ============================================================
 
 const HELP_GROUPS = [
@@ -51,7 +51,7 @@ const HELP_COL = 20;
 const HELP_OPTIONS = [
   ['--dir <path>', 'Specify project directory (default: cwd)'],
   ['--json', 'Machine-readable output: one JSON line on stdout, no colors, same exit codes (1 on verify errors)'],
-  ['--version', 'Print the installed version and exit (aliases: -v, "context-pocket-lite version"); works without a ContextPocket/ directory'],
+  ['--version', 'Print the installed version and exit (aliases: -v, "context-pocket-xi version"); works without a ContextPocket/ directory'],
 ];
 
 // ============================================================
@@ -60,7 +60,7 @@ const HELP_OPTIONS = [
 
 const COMMAND_HELP = {
   "bootstrap": { argv: ["bootstrap"], text: `
-  Usage: context-pocket-lite bootstrap [options]
+  Usage: context-pocket-xi bootstrap [options]
 
   Initialize ContextPocket/ with 5 core template files
   (index.md / log.md / state.md / code-map.md / readme.md).
@@ -79,7 +79,7 @@ const COMMAND_HELP = {
     --dir <path>           Project directory (default: cwd)
 ` },
   "status": { argv: ["status"], text: `
-  Usage: context-pocket-lite status [options]
+  Usage: context-pocket-xi status [options]
 
   Show the pocket at a glance: latest T, T-block count, log size vs the
   archive threshold, and the next steps / pitfalls recorded in state.md.
@@ -89,7 +89,7 @@ const COMMAND_HELP = {
     --json         One JSON line on stdout
 ` },
   "verify": { argv: ["verify"], text: `
-  Usage: context-pocket-lite verify [options]
+  Usage: context-pocket-xi verify [options]
 
   Run the Lite health check on ContextPocket/: file existence (the 5 core
   files), T-id continuity, implausible ids, T-block section format
@@ -111,8 +111,8 @@ const COMMAND_HELP = {
     --dir <path>   Project directory
 ` },
   "recall": { argv: ["recall"], text: `
-  Usage: context-pocket-lite recall <T-id> [options]
-         context-pocket-lite recall --since <T> --until <T> --from <date> --to <date>
+  Usage: context-pocket-xi recall <T-id> [options]
+         context-pocket-xi recall --since <T> --until <T> --from <date> --to <date>
 
   Show one T-block in full (gist, tags, every section, raw text). Archived
   turns (log-archive.md) are included and marked.
@@ -145,7 +145,7 @@ const COMMAND_HELP = {
     --json                One JSON line on stdout (always complete)
 ` },
   "search": { argv: ["search"], text: `
-  Usage: context-pocket-lite search <keyword> [options]
+  Usage: context-pocket-xi search <keyword> [options]
 
   Keyword search over the whole history: T-blocks (gist + every section,
   archived turns included), ADRs, requirements and preferences.
@@ -178,7 +178,7 @@ const COMMAND_HELP = {
     --json                One JSON line on stdout (always complete)
 ` },
   "why": { argv: ["why"], text: `
-  Usage: context-pocket-lite why <file-path> [options]
+  Usage: context-pocket-xi why <file-path> [options]
 
   Reverse lookup: which T-blocks referenced this file path? Searches every
   section of every turn, archived turns included.
@@ -209,7 +209,7 @@ const COMMAND_HELP = {
     --json                One JSON line on stdout (always complete)
 ` },
   "diff": { argv: ["diff"], text: `
-  Usage: context-pocket-lite diff <T-a> <T-b> [options]
+  Usage: context-pocket-xi diff <T-a> <T-b> [options]
 
   Compare two turns and report what changed between them (exclusive of T-a,
   inclusive of T-b): requirements opened / completed / cancelled, ADRs added,
@@ -222,7 +222,7 @@ const COMMAND_HELP = {
     --json                  One JSON line on stdout
 ` },
   "graph": { argv: ["graph"], text: `
-  Usage: context-pocket-lite graph [options]
+  Usage: context-pocket-xi graph [options]
 
   Show the link graph derived from log.md, log-archive.md, decisions.md,
   requirements.md and code-map.md: turns, files, ADRs, requirements and tags
@@ -244,7 +244,7 @@ const COMMAND_HELP = {
     --json                One JSON line on stdout
 ` },
   "log append": { argv: ["log", "append"], text: `
-  Usage: context-pocket-lite log append --gist "one-line summary" [options]
+  Usage: context-pocket-xi log append --gist "one-line summary" [options]
 
   Append a new T-block to log.md. Auto-assigns the T-id, writes the session
   separator when the date changes, and updates the index.md header.
@@ -282,7 +282,7 @@ const COMMAND_HELP = {
     --json            One JSON line on stdout
 ` },
   "log amend": { argv: ["log", "amend"], text: `
-  Usage: context-pocket-lite log amend <T-id> [options]
+  Usage: context-pocket-xi log amend <T-id> [options]
 
   Fill missing sections of an existing T-block — e.g. add the User / Action
   that verify flags as an ERROR, or attach a Pitfall you forgot. Only fills
@@ -313,7 +313,7 @@ const COMMAND_HELP = {
     --json            One JSON line on stdout
 ` },
   "handoff": { argv: ["handoff"], text: `
-  Usage: context-pocket-lite handoff [options]
+  Usage: context-pocket-xi handoff [options]
 
   Derive handoff.md: a three-tier handoff view for the next session (or the
   next person). "0 · Start here" carries identity, state, 🔒 red lines, ❓

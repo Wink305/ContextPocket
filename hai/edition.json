@@ -1,0 +1,23 @@
+{
+  "edition": "hai",
+  "package": "context-pocket-hai",
+  "family": "3.0",
+  "status": "planned",
+  "dataFormat": "v2",
+  "plannedCommands": 45,
+  "plannedTools": 45,
+  "modes": [
+    "team",
+    "review",
+    "private"
+  ],
+  "outputTiers": [
+    "brief",
+    "full"
+  ],
+  "derivedCaches": [
+    "search-index",
+    "graph",
+    "audit-log"
+  ]
+}

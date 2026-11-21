@@ -10,8 +10,21 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `2.13` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `3.0` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
+
+### 3.0 家族：包名与命令名迁移
+
+3.0 起 ContextPocket 按场景拆成四个独立包，对外统一用 `xi` / `quan` / `yuan` / `hai`：
+
+| 场景 | 新包名 / 命令 | 旧包名 / 命令 | 说明 |
+|------|---------------|---------------|------|
+| 通用版 | `context-pocket-quan` | `context-pocket` | 3.0 / 3.1 保留旧名作为转发入口，3.2 移除 |
+| 轻量版 | `context-pocket-xi` | `context-pocket-lite` | 同上 |
+| 专业攻坚版 | `context-pocket-yuan` | — | 尚未发布 |
+| 协作强化版 | `context-pocket-hai` | — | 尚未发布 |
+
+MCP 入口同名：`context-pocket-quan-mcp` / `context-pocket-xi-mcp`；旧的 `context-pocket-mcp` / `context-pocket-lite-mcp` 同样保留到 3.1。**数据格式与口袋目录不变**（仍为 `ContextPocket/` + format v2），换包不需要迁移数据；只是命令名和 npm 包名换了。已安装旧包的机器可以继续用旧命令，也可以改装新包后按新命令调用。
 
 ### 兼容性原则
 
@@ -28,7 +41,7 @@ ContextPocket 存在两套独立的版本号，各司其职：
 | 项目 | 值 |
 |------|----|
 | 当前数据格式 | **v2** |
-| 对应 skill 版本 | **1.x.x** |
+| 对应 skill 版本 | **3.x** |
 | 状态 | 稳定 / 当前 |
 
 v1 是 ContextPocket 的首个正式数据格式，包含 10 个核心文件（`lib/constants.js` 的 `CORE_FILES`）+ 2 个按需文件（`log-archive.md`、`handoff.md`，用到才创建），以及 T-block / R-id / ADR 等基础结构。lite 模式下核心文件只有 5 个（`LITE_CORE_FILES`），缺的文件由写入方在第一次需要时补齐。
@@ -43,10 +56,10 @@ v1 是 ContextPocket 的首个正式数据格式，包含 10 个核心文件（`
 
 数据格式版本存在 `ContextPocket/readme.md` 的标题行里（新建的是 `# ContextPocket · format: v2`），由 `lib/migrate.js` 的 `detectFormatVersion(pocketDir)` 读取（正则 `/format:\s*(v\d+)/i`，`lib/migrate.js:134`）。新建项目的这一行来自 `templates/readme.md:1`，它是"新 pocket 出生时是什么格式"的唯一真相源。**已经存在的 v1 pocket 不会被任何写动作偷偷抬到 v2** —— 版本戳只由 `migrate` 盖。
 
-**检测发生在 `migrate`，不在 `bootstrap`**：`context-pocket bootstrap --dir <root>` 只做幂等保护——已有 `ContextPocket/` 时什么都不写、退 0 并报出该路径（库层 `lib/bootstrap.js` 仍然是遇到已存在目录直接抛错、绝不覆盖），它不会去比对格式版本。要看当前项目的格式与可用迁移，用：
+**检测发生在 `migrate`，不在 `bootstrap`**：`context-pocket-quan bootstrap --dir <root>` 只做幂等保护——已有 `ContextPocket/` 时什么都不写、退 0 并报出该路径（库层 `lib/bootstrap.js` 仍然是遇到已存在目录直接抛错、绝不覆盖），它不会去比对格式版本。要看当前项目的格式与可用迁移，用：
 
 ```bash
-context-pocket migrate --dir <project-root> --list
+context-pocket-quan migrate --dir <project-root> --list
 ```
 
 `--list` 固定输出四行——`Current version` / `Target version` / `Latest registered` / `Status`，再补一段 `Registered steps:`（登记表里全部一跳，`bin/context-pocket.js:1647` 的那个循环）。只有当确实存在跨版本路径且当前不是最新时，才会追加 `Migration path:` 步骤列表。`--json` 时这些字段原样进 JSON（`currentVersion` / `targetVersion` / `latestVersion` / `available` / `path` / `isLatest`）；目标版本写错或路径不可达时 `ok:false` + 带 `error` 文本，退 1。MCP 侧是同名参数 `context_pocket_migrate` 的 `list: true`，文本内容与 CLI 一致。
@@ -58,12 +71,12 @@ context-pocket migrate --dir <project-root> --list
 示例提示（当未来的 skill 读到比自己更新的格式时）：
 ```
 ⚠️ ContextPocket 数据格式为 v2，但当前 skill 版本仅支持 v1。
-建议升级 skill 到 2.x，或执行 context-pocket migrate --dir <project-root> --to v1 进行降级迁移。
+建议升级 skill 到更新版本，或执行 context-pocket-quan migrate --dir <project-root> --to v1 进行降级迁移。
 ```
 
 ### 迁移命令
 
-#### `context-pocket migrate`（已实现）
+#### `context-pocket-quan migrate`（已实现）
 
 CLI 迁移命令。真正干活的是登记表 `MIGRATIONS`（`lib/migrate.js:35`），一条记录 = 一跳 `from → to`；下面的执行语义由框架提供，与具体是哪一跳无关：
 
@@ -78,26 +91,26 @@ CLI 迁移命令。真正干活的是登记表 `MIGRATIONS`（`lib/migrate.js:35
 
 ```bash
 # 查看当前版本、登记表里都有哪些跳（v1 的 pocket 会给出 "Status: upgrade available" 和一段 Migration path）
-context-pocket migrate --dir <project-root> --list
+context-pocket-quan migrate --dir <project-root> --list
 
 # 同版本自检（任何 pocket 上都退 0 并打印 "Migration skipped: Already at <当前版本>"，什么都不改）
-context-pocket migrate --dir <project-root> --to v1 --dry-run
+context-pocket-quan migrate --dir <project-root> --to v1 --dry-run
 
 # 看升级计划：只打印每一跳，不写文件、不留备份
-context-pocket migrate --dir <project-root> --to v2 --dry-run
+context-pocket-quan migrate --dir <project-root> --to v2 --dry-run
 
 # 真的升级（把每个 T-block 的时间行补出来）
-context-pocket migrate --dir <project-root> --to v2
+context-pocket-quan migrate --dir <project-root> --to v2
 
 # 再跑一次是空跑：Already at v2，一个字节都不动
-context-pocket migrate --dir <project-root> --to v2
+context-pocket-quan migrate --dir <project-root> --to v2
 
 # 升到登记表里的最新版本（多跳会自动串起来，全成或全滚）
-context-pocket migrate --dir <project-root> --to latest
+context-pocket-quan migrate --dir <project-root> --to latest
 
 # 目标不可达时退 1，并把登记表现存的全部一跳列给你看：
 #   ❌ Error: No migration path from v1 to v3. Registered step(s): v1 → v1: ... | v1 → v2: ...
-context-pocket migrate --dir <project-root> --to v3
+context-pocket-quan migrate --dir <project-root> --to v3
 ```
 
 In MCP mode, use `context_pocket_migrate` tool.
@@ -164,7 +177,7 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 ### 向后兼容说明
 
 - **v1 的代码读 v2 的文件不丢东西**：解析器在 `## T<n>` 标题与第一个 `###` 之间只认结构行，其余行会被忽略，所以旧版本读到的 gist 与各个小节和新版本逐字相同（`tests/unit.js` 用同一个 `parseLogText` 对比带行/不带行的解析结果来钉住这点）。
-- **v2 的代码读 v1 的文件**：`block.when` 为 `null`，`recall` 就少一行 `When:`，不会假装知道时间；写入层在 v1 的 pocket 里**永不**写时间行（`formatSupportsWhen` 说了算），免得内容超出它自己声明的版本。但"不写"不等于"不说"：调用方在 v1 里传了 `--when`，块照常追加（`log.md` 是 P0，不能因为版本没到就漏记一轮），同时把时间没落盘的原因讲回来 —— 人类输出多一行 `⚠️ pocket 还是 v1 格式：先 context-pocket migrate --to latest 才记时间`，`--json` 里是 `whenSkipped` 字段，MCP 文本同一句话（`tests/cli.js` 与 `tests/mcp.js` 各钉一条）。
+- **v2 的代码读 v1 的文件**：`block.when` 为 `null`，`recall` 就少一行 `When:`，不会假装知道时间；写入层在 v1 的 pocket 里**永不**写时间行（`formatSupportsWhen` 说了算），免得内容超出它自己声明的版本。但"不写"不等于"不说"：调用方在 v1 里传了 `--when`，块照常追加（`log.md` 是 P0，不能因为版本没到就漏记一轮），同时把时间没落盘的原因讲回来 —— 人类输出多一行 `⚠️ pocket 还是 v1 格式：先 context-pocket-quan migrate --to latest 才记时间`，`--json` 里是 `whenSkipped` 字段，MCP 文本同一句话（`tests/cli.js` 与 `tests/mcp.js` 各钉一条）。
 - **归档安全**：`archive` 是按行范围把整块搬进 `log-archive.md` 的，时间行紧跟标题，所以它一定跟着自己的块走（`tests/pocket.js` 有一条专门查这个）。
 - **精度不会倒退**：迁移补出来的历史只有"天"，之后新记录的轮次仍然精确到分钟。想知道某块是升级前还是升级后记的，看 `(day)` 就够了。
 - 反过来（v2 降回 v1）登记表里没有这一跳，也不会加：时间行是加法产物，留着它对 v1 读者无害。
@@ -198,7 +211,7 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 
 ### 与 format v1/v2 的关系（重要）
 
-- **不需要迁移**：v1 与 v2 的口袋都直接可用，第一次跑 `context-pocket graph`
+- **不需要迁移**：v1 与 v2 的口袋都直接可用，第一次跑 `context-pocket-quan graph`
   时缓存自动生成（只新增 `assets/graph.jsonl`，五份源 Markdown 一个字节不动）。
 - **旧 skill 读新口袋**：1.x 的读者只认白名单里的 Markdown 与
   `assets/search-index.json`，多出来的 `graph.jsonl` 被原样忽略、不报错。
@@ -233,7 +246,7 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 
 ### 自动回滚（已实现）
 
-`context-pocket migrate` 本身就会回滚，正常情况下不需要手工干预。触发条件与行为：
+`context-pocket-quan migrate` 本身就会回滚，正常情况下不需要手工干预。触发条件与行为：
 
 | 情况 | 行为 |
 |------|------|
@@ -258,14 +271,14 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
    ```bash
    mv ContextPocket.backup-<timestamp>/ ContextPocket/
    ```
-4. 执行 `context-pocket verify` 确认回滚后数据健康
+4. 执行 `context-pocket-quan verify` 确认回滚后数据健康
 5. 把 `migrate` 的报错原文（含是哪一跳）连同 `ContextPocket.broken/` 反馈到 issue
 
 ### 迁移前检查清单
 
 执行任何迁移操作前，**必须**完成以下两项：
 
-- ✅ `context-pocket verify` — 确认当前 ContextPocket 状态健康（无 broken refs、文件齐全）。`migrate` 自己也会先跑一次体检并在不健康时拒绝开始，但那只会告诉你"改完再试"，先手工确认能少跑一趟
+- ✅ `context-pocket-quan verify` — 确认当前 ContextPocket 状态健康（无 broken refs、文件齐全）。`migrate` 自己也会先跑一次体检并在不健康时拒绝开始，但那只会告诉你"改完再试"，先手工确认能少跑一趟
 - ✅ 导出完整快照作为离线备份（让 Agent 直接写一份快照文件）——命令内的备份在项目目录里，同盘损坏时它救不了你
 
 ---

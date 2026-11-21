@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0] - 2026-11-21
+
+### ContextPocket 3.0 家族：xi / quan / yuan / hai
+
+- **产品线升级**：四个独立版本，对外对内统一命名 xi（轻量）/ quan（通用）/ yuan（专业攻坚）/ hai（协作强化）；每个版本有自己的包、命令面、MCP、版本线和内部模式。
+- **本版落地**：主包更名 `context-pocket-quan`，Lite 更名 `context-pocket-xi`；新增 `context-pocket-xi` / `-xi-mcp` 与 `context-pocket-quan` / `-quan-mcp` 入口，旧 CLI/MCP 名继续可用。
+- **旧名兼容**：`context-pocket` 与 `context-pocket-lite` 保留到 3.1，3.2 移除；口袋格式仍为 v2，数据目录不改名。
+- **同源核心**：`shared/` 扩到 25 个文件；`links` 拆成纯派生 `links-core`（quan / yuan）与 quan 的 `graph.jsonl` 缓存外壳，`handoff` 的 token 估算 / 裁剪抽成 `budget`，文件提取抽成 `files`，`indexer` / `query` / `validator` / `migrate` / `writer` 以及 merge 闭包（`merge` / `merge-review` / `repair` / `lifecycle` / `userhub`）也进入共享清单（yuan 复用归档、校验与合并，不另写一套）。`scripts/sync-core.js` 支持按文件指定同步目标，CI 继续做漂移门禁。
+- **quan 收尾**：`hub merge <项目名>` 按 hub 注册名选源（CLI 与 MCP `action=merge`；重名时列出候选，不猜）；`merge report [--json] [--file <名称>] [--apply <id>]` 查看并重放合并复核记录（需求状态 / 偏好冲突 / 源 state，冲突项改动过就跳过）；`merge` 报告新增 code-map 建议（目标中真实存在、但描述缺失或不同的文件，仍人工确认）；`handoff --max-tokens <N>` 把可选小节裁到近似预算，红线区永不裁。
+- **yuan 预览**：新增 `context-pocket-yuan` CLI / MCP，提供 `workspace`（多口袋清单、限定 id、跨口袋检索/回看/verify --deep/repair 安全计划）、`map`（JS/TS/Python 文件与符号，缓存 + 漂移检查）、`context build/explain`（红线/事实/相关三层 + 各层 token 与预算模拟）、`recap`（只读周期回顾）、`forget`（按 T / 日期 / keep-last 归档最旧轮次，默认只出计划，`--apply` 才写；归档后仍可 recall / search / recap）、`consolidate`（重复 ADR / 需求 / 偏好检测；`--apply` 只删除完全重复的偏好行并同步 index 计数，带编号的记录永远人工合并）、`merge`（按工作区口袋名把 source 合并进 target，默认 dry-run，`--apply` 才写；重编号 / 去重 / 冲突复核复用 quan 的 merge）与工作区本地检索（`workspace index` 建 BM25 索引，`workspace search` 默认走索引，支持 `--pocket` / `--type` 过滤与 `--no-index` 现场扫描；按源文件签名增量刷新）、`audit`（只读汇总 verify 健康、repo map / 索引新鲜度、窗口内活动与未决事项）、`decay`（只读保留策略：按 max-age / keep-last 找出最旧连续冷轮次前缀并给出 forget 命令，标记关联冷需求 / ❓ / ADR）、`capture`（把本地 PR / CI 摘要写成 T-block，只摘标题/要点/链接，写入前扫描凭据）；仍为 private，未发布。
+- **版本一致性**：xi / quan / yuan 的 `version --json` 都返回 `edition` 与 `display`，由 `tests/shared.js` 锁定。
+- **yuan 模式**：`--edition-mode focus|audit|migrate` 落成 context / search / recap 的默认预设（focus 最少上下文、audit 全证据链、migrate 全量导出）；显式参数优先，不改变未指定模式时的既有行为。
+- **能力清单**：四版各增 `edition.json`（包名、版本线、核心文件数、命令 / 工具数、模式、缓存能力），由 `tests/shared.js` 对照 `help --json` 与 constants 锁定。
+- **模式层**：quan 新增 `--edition-mode <solo|agent>`；agent 模式禁止交互提问并去掉 ANSI 颜色，`--version --json` 增加 `edition` 字段。
+- **CI**：门禁增加 `node scripts/sync-core.js`，四版共享核心漂移会在 PR 阶段报红。
+- **目录状态**：`lang/` 已可运行（private 预览，暴露 CLI + MCP）；`hai/` 仍为 private 规划骨架，不暴露 bin。
+- **文档**：README 中英、SECURITY、COMPATIBILITY、FAQ、MIGRATION、format-spec 全量切到 3.0 / 3.0-quan / 3.0-xi，并补旧名 → 新名迁移说明。
+- **回归**：全量测试、lint、format、smoke、smoke-live 全绿；命令面为 quan 29 / xi 11 / yuan 10（预览）。
+
 ## [2.13-lite] - 2026-11-20
 
 ### ContextPocket Lite 2.13 — 版本对齐（稳定版）

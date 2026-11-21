@@ -154,7 +154,7 @@ function textOf(msg, idx) {
   });
 
   const init = await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
-  check('initialize', !init.timedOut && init.result && init.result.serverInfo && init.result.serverInfo.name === 'context-pocket',
+  check('initialize', !init.timedOut && init.result && init.result.serverInfo && init.result.serverInfo.name === 'context-pocket-quan',
     init.timedOut ? 'TIMED OUT' : JSON.stringify(init.result && init.result.serverInfo));
   check('initialize echoes negotiated protocolVersion',
     !init.timedOut && init.result && init.result.protocolVersion === '2024-11-05',

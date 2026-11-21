@@ -141,7 +141,7 @@ function handleInitialize(id, params) {
       tools: { listChanged: false },
     },
     serverInfo: {
-      name: 'context-pocket-lite',
+      name: 'context-pocket-xi',
       version: SERVER_VERSION,
     },
     instructions: SERVER_INSTRUCTIONS,

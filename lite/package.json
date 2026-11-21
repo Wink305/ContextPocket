@@ -1,6 +1,6 @@
 {
-  "name": "context-pocket-lite",
-  "version": "2.13",
+  "name": "context-pocket-xi",
+  "version": "3.0",
   "description": "The lightweight sibling of context-pocket: same pocket format, 11 commands, 11 MCP tools, zero caches, zero dependencies. Records AI coding conversation turns into a project-local ContextPocket/ folder of plain Markdown.",
   "keywords": [
     "context",
@@ -31,6 +31,8 @@
     "url": "https://github.com/Wink305/ContextPocket/issues"
   },
   "bin": {
+    "context-pocket-xi": "bin/context-pocket-lite.js",
+    "context-pocket-xi-mcp": "mcp-server-lite.js",
     "context-pocket-lite": "bin/context-pocket-lite.js",
     "context-pocket-lite-mcp": "mcp-server-lite.js"
   },
@@ -46,6 +48,7 @@
     "bin/",
     "lib/",
     "templates/",
+    "edition.json",
     "mcp-server-lite.js",
     "SKILL.md",
     "README.md",

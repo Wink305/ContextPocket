@@ -8,11 +8,11 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
 
 | Agent / 工具 | Skill 加载方式 | 备注 |
 |--------------|---------------|------|
-| **MiniMax Code** | 把 `context-pocket/` 放到 `~/.minimax/skills/` | ✅ 推荐 |
-| **Claude Code** | 把 `context-pocket/` 放到 `~/.claude/skills/` | ✅ 完全兼容 |
-| **Cursor** | `~/.cursor/skills/context-pocket/` 或项目内 `.cursor/skills/` | ✅ 完全兼容 |
+| **MiniMax Code** | 把 `context-pocket-quan/` 放到 `~/.minimax/skills/` | ✅ 推荐 |
+| **Claude Code** | 把 `context-pocket-quan/` 放到 `~/.claude/skills/` | ✅ 完全兼容 |
+| **Cursor** | `~/.cursor/skills/context-pocket-quan/` 或项目内 `.cursor/skills/` | ✅ 完全兼容 |
 | **Continue.dev** | 把 `SKILL.md` 路径加到 `~/.continue/config.json` 的 `slashCommands` | ✅ 兼容 |
-| **Cline / Roo Cline** | 把 `context-pocket/` 加到 VSCode 的 skill 路径 | ✅ 兼容 |
+| **Cline / Roo Cline** | 把 `context-pocket-quan/` 加到 VSCode 的 skill 路径 | ✅ 兼容 |
 | **Aider** | 通过自定义 `.aider.conf.yml` + system prompt 引用 | ✅ 兼容(无原生 skill 加载，需手工引入) |
 | **直接编辑器** | 不需要 skill 加载,直接读 `ContextPocket/*.md` | ✅ 完全兼容 |
 
@@ -42,7 +42,7 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
 
 ### MCP 模式
 
-支持 MCP 的 Agent 不用 shell,直接调工具即可——CLI 子命令与 MCP 工具一一对应,共 29 个,工具名是子命令名加 `context_pocket_` 前缀(如 `context_pocket_log_amend`、`context_pocket_absolute_add`、`context_pocket_repair`)。检索索引的开关是 `context_pocket_search` 的 `noIndex` 参数,不是单独一个工具;关联图的查看/重建/校验是 `context_pocket_graph` 的 `action` 参数(view/rebuild/verify),同样不拆成三个工具。这条对应关系不是文档承诺,而是断言:`context-pocket help --json` 给出命令全集,`tests/mcp.js` 拿它逐个核对 `tools/list` 去掉前缀后的工具名,少一个测试就红。
+支持 MCP 的 Agent 不用 shell,直接调工具即可——CLI 子命令与 MCP 工具一一对应,共 29 个,工具名是子命令名加 `context_pocket_` 前缀(如 `context_pocket_log_amend`、`context_pocket_absolute_add`、`context_pocket_repair`)。检索索引的开关是 `context_pocket_search` 的 `noIndex` 参数,不是单独一个工具;关联图的查看/重建/校验是 `context_pocket_graph` 的 `action` 参数(view/rebuild/verify),同样不拆成三个工具。这条对应关系不是文档承诺,而是断言:`context-pocket-quan help --json` 给出命令全集,`tests/mcp.js` 拿它逐个核对 `tools/list` 去掉前缀后的工具名,少一个测试就红。
 
 ## 不兼容 / 有限支持
 
@@ -52,7 +52,7 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
 | 单轮对话工具(如 ChatGPT 网页) | 无法维护 state | 每次对话手工贴 ContextPocket 内容 |
 | Agent 只支持纯文本输入 | 无法调 CLI / MCP 工具 | 直接说自然语言,让 Agent 自己读写 Markdown 文件 |
 | 多 Agent **同时**编辑同一台机器上的 ContextPocket/ | 写入交错 | 由写入锁排队(`lib/io.js` 的 `withPocketLock`,锁文件在 `os.tmpdir()`,按 pocket 路径命名),不需要人工串行 |
-| 多 Agent **同时**编辑跨机器的 ContextPocket/(共享 git 仓库) | 两个克隆各自算 `latestT + 1`,合并后撞到同一个 T 号 | 仍按串行交接用(谁做完谁提交,下一个先 `git pull`);真撞上了用 `context-pocket repair --dry-run` → `repair` 收回来,`verify` 会把撞号报成 error 并直接给出这条命令 |
+| 多 Agent **同时**编辑跨机器的 ContextPocket/(共享 git 仓库) | 两个克隆各自算 `latestT + 1`,合并后撞到同一个 T 号 | 仍按串行交接用(谁做完谁提交,下一个先 `git pull`);真撞上了用 `context-pocket-quan repair --dry-run` → `repair` 收回来,`verify` 会把撞号报成 error 并直接给出这条命令 |
 
 ## 平台特定说明
 
@@ -67,7 +67,7 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
      "claude.skillPaths": ["~/.cursor/skills/"]
    }
    ```
-3. 把 `context-pocket/` 复制到该路径
+3. 把 `context-pocket-quan/` 复制到该路径
 4. 重启 Cursor
 
 ### VSCode + Continue
@@ -76,7 +76,7 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
 slashCommands:
   - name: ContextPocket
     description: "Cross-agent dev context sync"
-    source: "file:///<path-to>/context-pocket/SKILL.md"
+    source: "file:///<path-to>/context-pocket-quan/SKILL.md"
 ```
 
 ### Aider
@@ -95,4 +95,4 @@ read: [CONVENTIONS.md]  # 创建一个 CONVENTIONS.md,内容写"用大白话提�
 
 ---
 
-最后更新:2026（对应 skill 2.13 + merge；CLI 子命令与 MCP 工具各 29 个）
+最后更新:2026（对应 skill 3.0 + merge；CLI 子命令与 MCP 工具各 29 个）

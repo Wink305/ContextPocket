@@ -1,0 +1,23 @@
+{
+  "edition": "yuan",
+  "package": "context-pocket-yuan",
+  "family": "3.0",
+  "status": "preview",
+  "dataFormat": "v2",
+  "commands": 10,
+  "tools": 10,
+  "plannedCommands": 38,
+  "plannedTools": 38,
+  "modes": [
+    "focus",
+    "audit",
+    "migrate"
+  ],
+  "outputTiers": [
+    "brief",
+    "full"
+  ],
+  "derivedCaches": [
+    "repo-map"
+  ]
+}

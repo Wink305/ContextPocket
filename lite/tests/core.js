@@ -492,20 +492,20 @@ test('CLI help, MCP tool list, version, unknown commands, and command-specific h
   const mcp = runMcp(projectDir);
   assert.strictEqual(commandCount, 11);
   assert.strictEqual(mcp.tools.length, 11);
-  assert.strictEqual(mcp.initialize.serverInfo.name, 'context-pocket-lite');
+  assert.strictEqual(mcp.initialize.serverInfo.name, 'context-pocket-xi');
   assert.strictEqual(mcp.initialize.protocolVersion, '2025-06-18');
 
   const version = runCli(['--version'], projectDir);
   assert.strictEqual(version.status, 0);
-  assert.match(version.stdout, /2\.13-lite/);
+  assert.match(version.stdout, /3\.0-xi/);
   const versionJson = runCliJson(['version', '--json'], projectDir).json;
-  assert.strictEqual(versionJson.version, '2.13');
-  assert.strictEqual(versionJson.display, '2.13-lite');
+  assert.strictEqual(versionJson.version, '3.0');
+  assert.strictEqual(versionJson.display, '3.0-xi');
 
   assert.strictEqual(runCli(['unknown-command'], projectDir).status, 1);
   const commandHelp = runCli(['status', '--help'], projectDir);
   assert.strictEqual(commandHelp.status, 0);
-  assert.match(commandHelp.stdout, /Usage: context-pocket-lite status/);
+  assert.match(commandHelp.stdout, /Usage: context-pocket-xi status/);
   assert.doesNotMatch(commandHelp.stdout, /No ContextPocket\/ directory found/i);
 });
 
@@ -516,7 +516,7 @@ test('lite version copies stay aligned: package.json, lib/version.js, SKILL.md',
   // 展示规则与主包同一条（ROADMAP §12 + hotfix 追加）：prerelease 显示完整串，稳定版两位加 -lite。
   const expectedDisplay = pkg.version.includes('-')
     ? pkg.version
-    : pkg.version.split('.').slice(0, 2).join('.') + '-lite';
+    : pkg.version.split('.').slice(0, 2).join('.') + '-xi';
   assert.strictEqual(DISPLAY_VERSION, expectedDisplay, 'lite DISPLAY_VERSION violates the display rule');
   const skill = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
   const stamped = skill.match(/^version:\s*(\S+)\s*$/m);

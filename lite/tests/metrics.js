@@ -135,12 +135,11 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
     ['CLI commands', liteCommands, mainCommands, 11, 29],
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 29],
-    ['package files', litePack.files, mainPack.files, 30, 69],
-    ['cold-start module count', liteModules, mainModules, 17, null],
-    // 133.0 / 466.3：主包新增 lib/merge.js（跨机器合并口袋），包内文件 68 → 69；
-    // Lite 未变（仍 30 / 133.0）。主包体积按 npm pack 实测追平，
-    // 冷启动模块数仍由「主包不锁精确值、Lite 必须更少」的结构性断言兜底。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 133.0, 466.3],
+    ['package files', litePack.files, mainPack.files, 33, 77],
+    ['cold-start module count', liteModules, mainModules, 19, null],
+    // 479.5 / 77：shared v2 把 links 拆成 links-core + 缓存外壳，并新增 budget/files；
+    // Lite 新增 shared/files.js（33 / 135.1）。总量几乎不变，是把同一份逻辑重新分层。
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 135.1, 479.5],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

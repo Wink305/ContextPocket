@@ -2,6 +2,18 @@
 
 Lite has its own version line. The full package stays on its own releases; a Lite pocket is a valid full-package pocket at any time.
 
+## [3.0-xi] - 2026-11-21
+
+### ContextPocket xi 3.0 — 轻量版加入四版家族
+
+> Lite 版本线并入 3.0 家族，对外名称改为 **xi**；包名 `context-pocket-xi`。
+
+- **更名**：`context-pocket-lite` → `context-pocket-xi`；新增 `context-pocket-xi` / `-xi-mcp` 入口，旧入口保留到 3.1。
+- **不变**：仍 11 命令 / 11 工具、5 个核心文件、零缓存零依赖；口袋格式仍 v2。
+- **能力清单**：新增 `edition.json`，声明 xi 的包名、版本线、11 命令 / 工具、5 个核心文件与 `brief` / `full` 模式；由家族一致性测试对照实际命令数。
+- **兼容**：旧包名 `context-pocket-lite` 继续转发；数据目录不改名。
+- **升级动作**：无。**破坏性**：仅命令名新增，旧名仍可用。
+
 ## [2.13-lite] - 2026-11-20
 
 ### ContextPocket Lite 2.13 — 版本对齐（稳定版）

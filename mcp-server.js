@@ -63,6 +63,7 @@ const {
   registerProject,
   removeProject,
   listProjects,
+  findProjects,
   setGlobalPref,
   getGlobalPref,
   searchProjects,
@@ -187,7 +188,7 @@ function handleInitialize(id, params) {
       tools: { listChanged: false },
     },
     serverInfo: {
-      name: 'context-pocket',
+      name: 'context-pocket-quan',
       version: SERVER_VERSION,
     },
     instructions: SERVER_INSTRUCTIONS,
@@ -748,7 +749,12 @@ const TOOLS = [
     description: TOOL_DESCRIPTIONS.context_pocket_handoff,
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        maxTokens: {
+          type: 'number',
+          description: 'Approximate token budget for the generated view. Trims optional 1 · On demand subsections and Pointers; section 0 is never trimmed. Omit for the default uncapped view.',
+        },
+      },
     },
   },
   {
@@ -1003,9 +1009,23 @@ const TOOLS = [
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'search', 'pref', 'remove'],
-          description: 'list = registered projects (default); search = read-only search across registered projects; pref = global preferences; remove = unregister this project',
+          enum: ['list', 'search', 'pref', 'remove', 'merge'],
+          description: 'list = registered projects (default); search = read-only search across registered projects; pref = global preferences; remove = unregister this project; merge = merge a registered project into this one by name',
           default: 'list',
+        },
+        project: {
+          type: 'string',
+          description: 'Registered project name, directory basename or full path (action=merge)',
+        },
+        dryRun: {
+          type: 'boolean',
+          description: 'Plan the merge without writing (action=merge)',
+          default: false,
+        },
+        includeArchive: {
+          type: 'boolean',
+          description: 'Also merge the source log-archive.md (action=merge)',
+          default: false,
         },
         keyword: {
           type: 'string',
@@ -1112,7 +1132,7 @@ function handleToolsCall(id, params) {
         result = toolDecisionAdd(args || {});
         break;
       case 'context_pocket_handoff':
-        result = toolHandoff();
+        result = toolHandoff(args || {});
         break;
       case 'context_pocket_state_update':
         result = toolStateUpdate(args || {});
@@ -1838,7 +1858,7 @@ function toolGraph(args) {
       lines.push(`- line ${issue.line}: ${issue.problem}`);
     }
     lines.push('');
-    lines.push('Fix: call this tool with action="rebuild" (or `context-pocket graph rebuild`).');
+    lines.push('Fix: call this tool with action="rebuild" (or `context-pocket-quan graph rebuild`).');
     return { content: [{ type: 'text', text: lines.join('\n') }], isError: true };
   }
 
@@ -2150,15 +2170,24 @@ function toolDecisionAdd(args) {
   };
 }
 
-function toolHandoff() {
+function toolHandoff(args = {}) {
   const pocketDir = getPocketDir();
-  const result = generateHandoff(pocketDir);
+  const maxTokens = Number(args.maxTokens);
+  const result = generateHandoff(pocketDir, {
+    maxTokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : undefined,
+  });
+
+  const budget = result.maxTokens
+    ? `\n\nBudget: ~${result.estimatedTokens} / ${result.maxTokens} tokens`
+      + (result.trimmed.length > 0 ? ` · trimmed: ${result.trimmed.join(', ')}` : '')
+      + (result.overBudget ? ' · over budget (section 0 is never trimmed)' : '')
+    : '';
 
   return {
     content: [
       {
         type: 'text',
-        text: `✅ **Handoff generated:** T${result.tId} · ${result.date}\n\nFile: ContextPocket/handoff.md`,
+        text: `✅ **Handoff generated:** T${result.tId} · ${result.date}\n\nFile: ContextPocket/handoff.md${budget}`,
       },
     ],
   };
@@ -2740,6 +2769,9 @@ function toolMerge(args) {
     lines.push('*(dry-run: nothing written)*');
   } else {
     lines.push(`- Report: ${result.reportPath}`);
+    if (result.reviewId) {
+      lines.push(`- Review: ${result.reviewId} (${result.reviewPending} pending) — apply with \`merge report --apply ${result.reviewId}\``);
+    }
     lines.push(`- Verify: ${result.verifyAfter.errorCount} error(s), ${result.verifyAfter.warningCount} warning(s)`);
   }
 
@@ -2777,6 +2809,43 @@ function formatHubHitMarkdown(row) {
 function toolHub(args) {
   const action = args.action || 'list';
   const lines = [];
+
+  if (action === 'merge') {
+    const query = textOption(args, 'project');
+    if (!query) {
+      return {
+        content: [{ type: 'text', text: '❌ Error: project is required for action=merge (registered name, basename or full path)' }],
+        isError: true,
+      };
+    }
+    const matches = findProjects(query);
+    if (matches.length === 0) {
+      const available = listProjects().map(({ key, project }) => project.name || path.basename(key));
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Error: no registered project matches "${query}"\n\nRegistered: ${available.length ? available.join(', ') : '(none)'}`,
+        }],
+        isError: true,
+      };
+    }
+    if (matches.length > 1) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Error: project name "${query}" is ambiguous\n\n`
+            + matches.map(({ key, project }) => `- ${project.name || '?'} · ${key}`).join('\n')
+            + '\n\nUse the full path as project to disambiguate.',
+        }],
+        isError: true,
+      };
+    }
+    return toolMerge({
+      from: matches[0].key,
+      dryRun: !!args.dryRun,
+      includeArchive: !!args.includeArchive,
+    });
+  }
 
   if (action === 'pref') {
     // key / value 都只收文本（schema 写的就是 type: 'string'）：`{ value: true }` 存进
@@ -2853,7 +2922,7 @@ function toolHub(args) {
         lines.push(`- ${g.key}`);
         for (const r of g.rows) lines.push(formatHubHitMarkdown(r));
         if (g.hasMore) {
-          lines.push(`- ↳ ${g.total - g.count} more — \`context-pocket search "${data.keyword}" --dir "${g.key}"\``);
+          lines.push(`- ↳ ${g.total - g.count} more — \`context-pocket-quan search "${data.keyword}" --dir "${g.key}"\``);
         }
       }
     }

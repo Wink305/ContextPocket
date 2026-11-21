@@ -1,0 +1,104 @@
+{
+  "files": [
+    "budget.js",
+    "constants.js",
+    "core.js",
+    "edition.js",
+    "fields.js",
+    "files.js",
+    "handoff-path.js",
+    "indexer.js",
+    "io.js",
+    "isolate.js",
+    "lifecycle.js",
+    "links-core.js",
+    "links.js",
+    "merge-review.js",
+    "merge.js",
+    "migrate.js",
+    "parser.js",
+    "query.js",
+    "repair.js",
+    "secrets.js",
+    "userhub.js",
+    "validator.js",
+    "version.js",
+    "when.js",
+    "writer.js"
+  ],
+  "targets": [
+    "lib",
+    "lite/lib",
+    "lang/lib"
+  ],
+  "targetsByFile": {
+    "budget.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "constants.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "core.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "indexer.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "links-core.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "links.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "lifecycle.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "merge-review.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "merge.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "migrate.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "query.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "repair.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "userhub.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "validator.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "version.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "when.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "writer.js": [
+      "lib",
+      "lang/lib"
+    ]
+  }
+}

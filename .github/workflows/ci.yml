@@ -1,12 +1,13 @@
 name: CI
 
-# 四道发版门禁与本地完全一致（零依赖，不需要 npm install）：
+# 发版门禁与本地完全一致（零依赖，不需要 npm install）：
 #   lint        全部 .js 过 node --check（语法）
+#   sync-core   quan / xi 的共享核心与 shared/ 逐字一致
 #   tests       单元 + 集成回归（tests/run.js）
 #   smoke       MCP 协议冒烟（mcp-smoke.js）
 #   smoke-live  真实 CLI 子进程整链路活测（tests/smoke-live.js，全程临时目录，不碰 ~/.contextpocket）
-# 发版前本地跑的就是这四条，CI 再兜一遍 —— 两边跑的命令一字不差，避免"本地绿、CI 红"的口径漂移。
-# 1.6.1 起发版 tag 也触发：tag 推上去用自己的代码再跑一遍四道门禁，不再只是 main 那条 run
+# 发版前本地跑的就是这五条，CI 再兜一遍 —— 两边跑的命令一字不差，避免"本地绿、CI 红"的口径漂移。
+# 1.6.1 起发版 tag 也触发：tag 推上去用自己的代码再跑一遍五道门禁，不再只是 main 那条 run
 # 的附属品。1.5.1 当时只有 push main 触发，tag 和 Release 都发完了才发现那条 run 是红的。
 # 2.0.1-hotfix1 起 tag 去掉 v 前缀（用户拍板「以后不要v了」）：`[0-9]*` 认新命名，
 # `v*` 继续兼容历史 tag，两条都在，发版闸门不因改名而失效。
@@ -26,6 +27,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm run lint
+      - run: node scripts/sync-core.js
       - run: node tests/run.js
       - run: npm run smoke
       - run: npm run smoke-live

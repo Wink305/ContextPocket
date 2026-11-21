@@ -1,6 +1,6 @@
 {
-  "name": "context-pocket",
-  "version": "2.13",
+  "name": "context-pocket-quan",
+  "version": "3.0",
   "description": "Zero-dependency CLI + MCP server that auto-records every AI coding conversation turn into a project-local ContextPocket/ folder of plain Markdown, so any agent or model can pick the context back up in seconds.",
   "keywords": [
     "context",
@@ -29,6 +29,8 @@
     "url": "https://github.com/Wink305/ContextPocket/issues"
   },
   "bin": {
+    "context-pocket-quan": "bin/context-pocket.js",
+    "context-pocket-quan-mcp": "mcp-server.js",
     "context-pocket": "bin/context-pocket.js",
     "context-pocket-mcp": "mcp-server.js"
   },
@@ -49,6 +51,7 @@
     "assets/",
     "docs/",
     "scripts/",
+    "edition.json",
     "mcp-server.js",
     "SKILL*.md",
     "README.md",

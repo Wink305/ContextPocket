@@ -3,7 +3,7 @@
 > **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 2.13](https://img.shields.io/badge/version-2.13-blueviolet.svg)](CHANGELOG.md)
+[![Version: 3.0](https://img.shields.io/badge/version-3.0-blueviolet.svg)](CHANGELOG.md)
 [![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -24,27 +24,36 @@
 
 > **Context memory for AI coding agents.** ContextPocket records the durable parts of each development turn as plain Markdown inside your project, so the next conversation — or a different Agent — reads back the same timeline. Cross-session and cross-agent by design; no server, no database, no vendor lock-in.
 
-## ContextPocket 2.13 and ContextPocket Lite 2.13
+## The ContextPocket 3.0 family: xi / quan / yuan / hai
 
-**ContextPocket 2.13** keeps sourced multi-hop graph context and historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), and derives a byte-identical link graph to Lite (6 node types / 10 edge types) with faster exact `T<n>` lookup. It now ships a 29-command CLI / MCP toolset for larger, long-lived project memories. New in 2.13: cross-machine / multi-agent pocket merge and read-only cross-project search. `merge --from <pocket>` renumbers incoming turns, carries ADRs / requirements / 🔒 red lines / non-conflicting preferences, writes state, code-map and conflict notes to `merge-<date>.md`, and rolls back if verify gets worse. `hub search <kw>` scans every registered project without building indexes or writing `hub.json`. Also ships opt-in `--rank` relevance ranking, the isolation switch, the three-tier handoff, sourced node chains, current-only decisions, the read-side `handoff --read` view and [SECURITY.md](SECURITY.md).
+Starting with 3.0, ContextPocket is split into four **independent packages** — separate version lines and separate release archives — unified under four names:
 
-**ContextPocket Lite 2.13** shares the same pocket format and temporal graph fields, but simplifies the read/write path for small projects and everyday conversation memory: five core Markdown files, eleven CLI commands / MCP tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache, nothing to rebuild. 2.13 is a version-alignment release with no Lite functional changes; it still reads and writes standard v2 pockets, including pockets produced by the full package's `merge`. It also keeps the isolation switch (detection byte-identical to the full package), the three-tier handoff, sourced node chains, current-only decisions, the `handoff --read` view and token-saving output tiers (`--brief` / `--full`, `--json` always complete) on top of `log amend`, `diff`, `handoff` and `--expand` multi-hop context.
-
-| Edition | Best for | Context graph | Footprint |
+| Edition | Positioning | Best for | Footprint |
 |---|---|---|---|
-| **2.13** | Larger, long-running projects | Cached multi-hop graph context with historical validity filtering | 10 core files · 29 commands / tools |
-| **2.13 Lite** | Small projects and everyday conversation memory | Runtime-derived multi-hop links; no cache | 5 core files · 11 commands / tools |
+| **xi** | Lightweight: one project, one agent, record out of the box | Small projects, scripts, quick trials | 5 core files · 11 commands / tools |
+| **quan** | General: the default personal memory across sessions and agents | Solo developers, long-running projects | 10 core files · 29 commands / tools |
+| **yuan** | Deep-work: multi-pocket workspaces and deeper audits | Complex repositories, long efforts | Preview: 10 commands · workspace / merge / map / context / recap / audit / decay / forget / consolidate |
+| **hai** | Collaboration: shared memory, review and audit | Teams, multiple writers | Planned |
+
+- **quan** (package / command `context-pocket-quan`) is the former full package: sourced multi-hop graph context with historical validity filtering (`search <kw> --expand 2`, `why <file> --expand 2`, `--as-of <T>`), a link graph byte-identical to xi (6 node types / 10 edge types), and a 29-command CLI / MCP toolset covering cross-machine merge, read-only cross-project search, isolation, the three-tier handoff and the index. 3.0 is mainly a family rename and migration release, plus a short finishing pass: `merge report --apply`, hub-name merge (CLI + MCP), `handoff --max-tokens`, a per-edition capability manifest, and the quan `solo` / `agent` mode layer.
+- **xi** (package / command `context-pocket-xi`) is the former Lite: same pocket format, five core Markdown files, eleven commands / tools, search that always scans the markdown, and a link graph derived at runtime — no search index, no graph cache.
+- **yuan** (package / command `context-pocket-yuan`) is in preview: `workspace` registers multiple pockets in `contextpocket.workspace.json`, `map` scans JS/TS/Python into a repo map, `context build/explain` assembles a budgeted view from red lines, facts and related material, and `recap` / `audit` / `decay` / `forget` / `consolidate` / `merge` / `capture` cover the long-term lifecycle. Cross-pocket ids are qualified (`api:T12`).
+- **hai** is at the planning stage; the repository only carries a private skeleton, with no installable command yet.
+
+**Legacy names**: `context-pocket` / `context-pocket-mcp` still point at quan, and `context-pocket-lite` / `context-pocket-lite-mcp` still point at xi; both survive 3.0 and 3.1 and are removed in 3.2. All four editions read and write the **same** `ContextPocket/` folder and format v2 data, so switching editions needs no pocket migration.
 
 ### Which version should I download?
 
-Download the latest **stable** Release — it is what the `main` branch and the version badge above track (`package.json` = `2.13`).
+`main` tracks the 3.0 family. Release archives:
 
-| Edition | Stable version | Download |
+| Edition | Display version | Archive |
 |---|---|---|
-| **Full** | `2.13` | [ContextPocket-2.13.zip](https://github.com/Wink305/ContextPocket/releases/download/2.13/ContextPocket-2.13.zip) |
-| **Lite** | `2.13-lite` | [ContextPocket-2.13-Lite.zip](https://github.com/Wink305/ContextPocket/releases/download/2.13-lite/ContextPocket-2.13-Lite.zip) |
+| **quan** | `3.0-quan` | `ContextPocket-3.0-quan.zip` |
+| **xi** | `3.0-xi` | `ContextPocket-3.0-xi.zip` |
+| **yuan** | `3.0-yuan` (preview) | `ContextPocket-3.0-yuan-preview.zip` |
+| **hai** | Planned | — |
 
-Each archive includes its `package.json`, README and license; no npm registry release is involved. Between stable releases, development lands on `main` under preview version tags — clone the repo (see [Quick Start](#1-install)) to try it early.
+Each archive includes its `package.json`, README and license; no npm registry release is involved. The previous stable releases ([`2.13`](https://github.com/Wink305/ContextPocket/releases/tag/2.13) / [`2.13-lite`](https://github.com/Wink305/ContextPocket/releases/tag/2.13-lite)) remain available under Releases.
 
 🚀 **Getting started**
 
@@ -92,9 +101,9 @@ cd ContextPocket
 
 Then pick **one** of the three install methods below.
 
-#### (a) Install it as a command — `context-pocket` on your PATH
+#### (a) Install it as a command — `context-pocket-quan` on your PATH
 
-This is the only method that makes the bare `context-pocket <cmd>` form used across this README work.
+This is the only method that makes the bare `context-pocket-quan <cmd>` form used across this README work.
 
 **From a clone — works today** (`package.json` is in the repo, so `npm link` registers the CLI globally from your local directory):
 
@@ -109,22 +118,23 @@ Or install it globally from the local folder instead:
 npm install -g .
 ```
 
-**From the registry — not published yet.** `npm install -g context-pocket` is the intended final form, but the package has **never been published to the npm registry**: every release so far ships only via a GitHub Release or a git clone, and `npm view context-pocket` returning 404 is expected. Use one of the clone-based commands above until the first publish lands. The publish checklist (login + 2FA → `npm publish` → replace this paragraph) is in `CONTRIBUTING.md` under "发布流程（维护者）".
+**From the registry — not published yet.** `npm install -g context-pocket-quan` is the intended final form, but the package has **never been published to the npm registry**: every release so far ships only via a GitHub Release or a git clone, and `npm view context-pocket-quan` returning 404 is expected. Use one of the clone-based commands above until the first publish lands. The publish checklist (login + 2FA → `npm publish` → replace this paragraph) is in `CONTRIBUTING.md` under "发布流程（维护者）".
 
-`package.json` declares two binaries, so linking installs both:
+`package.json` declares four binaries, so linking installs the canonical pair plus the legacy aliases:
 
 | Command | Entry point | What it is |
 |---------|-------------|------------|
-| `context-pocket` | `bin/context-pocket.js` | the CLI |
-| `context-pocket-mcp` | `mcp-server.js` | the MCP stdio server |
+| `context-pocket-quan` | `bin/context-pocket.js` | the CLI |
+| `context-pocket-quan-mcp` | `mcp-server.js` | the MCP stdio server |
+| `context-pocket` / `context-pocket-mcp` | same files | legacy aliases, kept through 3.1 and removed in 3.2 |
 
 Verify:
 
 ```bash
-context-pocket help
+context-pocket-quan help
 ```
 
-Windows note: `npm link` generates `context-pocket.cmd` / `context-pocket-mcp.cmd` shims, so the commands work in PowerShell and cmd unchanged. Remove later with `npm uninstall -g context-pocket`.
+Windows note: `npm link` generates `context-pocket-quan.cmd` / `context-pocket-quan-mcp.cmd` shims (plus legacy `context-pocket*` aliases), so the commands work in PowerShell and cmd unchanged. Remove later with `npm uninstall -g context-pocket-quan`.
 
 #### (b) No install at all — call the script with `node`
 
@@ -140,7 +150,7 @@ node /path/to/ContextPocket/bin/context-pocket.js status --dir /path/to/your/pro
 node C:\Users\<you>\ContextPocket\bin\context-pocket.js status --dir C:\path\to\your\project
 ```
 
-Every `context-pocket <cmd>` in this README or in [docs/FAQ.md](docs/FAQ.md) can be run this way by swapping the prefix for `node <path>/bin/context-pocket.js`.
+Every `context-pocket-quan <cmd>` in this README or in [docs/FAQ.md](docs/FAQ.md) can be run this way by swapping the prefix for `node <path>/bin/context-pocket.js`.
 
 #### (c) Skill-directory copy — no Node.js needed at all
 
@@ -150,10 +160,10 @@ POSIX (bash / zsh):
 
 ```bash
 # MiniMax Code / Claude Code / similar
-cp -r . ~/.minimax/skills/context-pocket/
+cp -r . ~/.minimax/skills/context-pocket-quan/
 
 # Cursor / Continue / IDE plugins
-cp -r . ~/.cursor/skills/context-pocket/
+cp -r . ~/.cursor/skills/context-pocket-quan/
 ```
 
 Windows / PowerShell:
@@ -169,17 +179,17 @@ Copy-Item -Recurse -Force . "$env:USERPROFILE\.cursor\skills\context-pocket"
 Windows / cmd.exe:
 
 ```bat
-xcopy . "%USERPROFILE%\.cursor\skills\context-pocket\" /E /I /Y
+xcopy . "%USERPROFILE%\.cursor\skills\context-pocket-quan\" /E /I /Y
 ```
 
-> ⚠️ Method (c) alone does **not** put `context-pocket` on your PATH. Combine it with (a) or (b) if you also want to run the CLI yourself.
+> ⚠️ Method (c) alone does **not** put `context-pocket-quan` on your PATH. Combine it with (a) or (b) if you also want to run the CLI yourself.
 
 **For MCP mode:** add this to your MCP config (works with every install method — point `args` at the absolute path of `mcp-server.js`):
 
 ```json
 {
   "mcpServers": {
-    "context-pocket": {
+    "context-pocket-quan": {
       "command": "node",
       "args": ["/absolute/path/to/ContextPocket/mcp-server.js"]
     }
@@ -192,7 +202,7 @@ On Windows, either use forward slashes or escape the backslashes in the JSON str
 ```json
 {
   "mcpServers": {
-    "context-pocket": {
+    "context-pocket-quan": {
       "command": "node",
       "args": ["C:\\Users\\<you>\\ContextPocket\\mcp-server.js"]
     }
@@ -200,7 +210,7 @@ On Windows, either use forward slashes or escape the backslashes in the JSON str
 }
 ```
 
-After install method (a) you may instead use the installed bin directly: `"command": "context-pocket-mcp"` with `"args": []`.
+After install method (a) you may instead use the installed bin directly: `"command": "context-pocket-quan-mcp"` with `"args": []`.
 
 See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the full list of supported agents.
 
@@ -236,7 +246,7 @@ The new agent can read the pocket and continue recording from there.
 
 ## ⚡ Quick responses
 
-**There are no slash commands to memorize.** Say what you want in plain language — the agent infers the intent and runs the right `context-pocket` subcommand or MCP tool, then answers in one line. The full intent → action mapping lives in [SKILL.md](SKILL.md).
+**There are no slash commands to memorize.** Say what you want in plain language — the agent infers the intent and runs the right `context-pocket-quan` subcommand or MCP tool, then answers in one line. The full intent → action mapping lives in [SKILL.md](SKILL.md).
 
 | Intent | The agent runs | It replies |
 |------------------------|-----------------|------------|
@@ -265,7 +275,7 @@ The new agent can read the pocket and continue recording from there.
 | Archive and start over | `archive --keep-last N` | Confirm with the user first |
 | Explain how this works | Answers inline — **never** "see README.md" | An inline answer |
 
-> 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket verify`) also works if you want zero ambiguity.
+> 💡 Prefer the plain phrasing; it reads better than a command name. Naming the subcommand explicitly (`context-pocket-quan verify`) also works if you want zero ambiguity.
 
 **The graph layer.** `recall --with-context` and `graph` read a *derived* link graph — turns ↔ files ↔ ADRs ↔ tags ↔ requirements — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing the order of the original text matches; `--as-of <T>` filters that context to facts valid at a past T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close the old fact's validity interval. Every edge retains its source. Reach for it when the question is about **relationships** ("what happened around this turn?", "which decisions touched this file?"); skip it when the question is about **content** ("what did T7 say?"), where plain `recall` / `search` are faster and already complete.
 
@@ -273,54 +283,54 @@ The new agent can read the pocket and continue recording from there.
 
 ## 💻 CLI Commands (Node.js Required)
 
-All commands below work via CLI when Node.js 14+ is available. Type `context-pocket …` if you used install method **(a)**; otherwise prefix with `node <path>/ContextPocket/bin/context-pocket.js` — install method **(b)**. Pass `--dir <project-root>` to target a project.
+All commands below work via CLI when Node.js 14+ is available. Type `context-pocket-quan …` if you used install method **(a)**; otherwise prefix with `node <path>/ContextPocket/bin/context-pocket.js` — install method **(b)**. Pass `--dir <project-root>` to target a project.
 
 | Command | What it does |
 |---------|--------------|
-| `context-pocket bootstrap --dir <root>` | Auto-detect project type, scan tree, copy templates, pre-fill code-map & state. Registers the project in `~/.contextpocket/hub.json`; add `--no-hub` (MCP `noHub: true`) to build the pocket without touching the hub |
-| `context-pocket verify --dir <root>` | 15-check health check: files, IDs, refs, index consistency, 🔒 integrity, log size vs `archive_at`, credential/PII shapes in the markdown (vendor keys = error and block the pre-commit hook; personal data = warning only), attachment existence (a `### Attachments` line naming a file that is not on disk is an error — placeholders, URLs, absolute paths and entries already marked `[missing: …]` are skipped), and — as a warning that never blocks a commit — a data format left behind the registry (`lib/validator.js:74`) |
-| `context-pocket verify --drift --dir <root>` | Add the two tree-scanning drift checks: cognition drift (paths in recent T-blocks vs working tree) + code-newer-than-log (files modified after the last record; works without git). Add `--drift-last-n <N>` to tune lookback |
-| `context-pocket status --dir <root>` | One-line summary (T-range, reqs, ADRs, ❓, archive status) |
-| `context-pocket recall <T-id> --dir <root>` | View full details of one T-block |
-| `context-pocket recall --dir <root> --since <T> [--until <T>] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit N] [--offset N]` | **Window mode**: no T-id, at least one window flag — list turns when you have no keyword to search for. Same window semantics as `search` (see "Time windows" below). Oldest first, archived turns included and marked; `--limit 0` = all. A T-id and a window cannot be combined. MCP: `context_pocket_recall` without `tId`, with `sinceT` / `untilT` / `fromDate` / `toDate` |
-| `context-pocket diff <Ta> <Tb> --dir <root>` | Compare two turns: req changes, ADR additions, file changes |
-| `context-pocket search <keyword> --dir <root> [--limit N] [--offset N] [--no-index]` | Keyword search over the whole history: T-blocks (gist, tags, every section, archived turns included), ADRs, requirements and preferences. Auto-uses the `assets/search-index.json` index; `--no-index` scans the markdown instead — both paths match and order identically, so `--limit`/`--offset` page the same list (`--limit 0` = all). Matching: latin words split on separators, Chinese is indexed as adjacent two-character pairs, and **every** query term must hit. A phrase inside a longer Chinese run therefore works (`时间分页` finds 「给搜索加时间分页」) and a reordered one does not (`分页时间`); one lone Chinese character only matches where that character stands alone |
-| `context-pocket why <file-path> --dir <root>` | Reverse lookup: which T-blocks mention this file, split by evidence — `[changed]` (path in that turn's Action section) vs `[mentioned only]` (elsewhere: Uncertain / Attachments / Conflicts / Pitfalls …). Changed turns are listed first, so `--limit` drops the weak ones, never the real edits (Inspired by ThoughtDAG) |
-| `context-pocket check-conflicts --dir <root>` | 6-dimension conflict scan with severity (critical / warning / info) |
-| `context-pocket graph --dir <root> [--type <t>] [--limit <N>]` | View the derived link graph (T ↔ file ↔ ADR ↔ tag ↔ requirement; edges: modifies / mentions / references / decided-in / supersedes / last-changed / tagged / opened-in / completed-in / implements, each citing source + T-id). `graph rebuild` rewrites the `assets/graph.jsonl` cache byte-identically from the markdown; `graph verify` reports cache-vs-source drift |
-| `context-pocket log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | Append one T-block to log.md (pass `--user "<what the user asked>"` — a block without it fails verify and blocks commits). `--when` is optional: the block is stamped with the moment you record it, and `--when` only overrides that when the turn actually happened at another time. `--author "<who is recording>"` signs the turn in a `### Author` section — use it when several agents share one pocket; omit it and the block simply has no author, the tool never guesses one. Every append also compares this turn against what the pocket already says and writes what it **newly** collides with into the block's `### Conflicts` section prefixed `[auto]` (`--no-conflict-check` opts out and the tool says so). The scan reports, it never blocks the record |
-| `context-pocket log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | Fill in sections **missing** from an existing T-block. Never overwrites existing content — `--when` will add a missing time line or sharpen a day-only one, but refuses to rewrite a moment that was already recorded, and `--author` only adds a missing `### Author` section |
-| `context-pocket absolute add --dir <root> --text "..." [--gist "..."]` | Append a 🔒 red-line entry to absolute.md (verbatim, never compressed) |
-| `context-pocket req add --dir <root> --text "..."` | Add a requirement (auto-assigns next R-id) |
-| `context-pocket decision add --dir <root> --title "..."` | Add an ADR |
-| `context-pocket handoff --dir <root>` | Generate handoff.md summary |
-| `context-pocket state update --dir <root> --summary "..."` | Update current state |
-| `context-pocket preferences update --dir <root> --key "..." --value "..."` | Update a preference |
-| `context-pocket code-map update --dir <root>` | Rescan project directory, update code-map.md |
-| `context-pocket archive --dir <root> [--keep-last N] [--dry-run]` | Archive old T-blocks (you trigger it; it is never automatic) with verify → archive → verify → rollback. `--keep-last` defaults to `recent_keep` in `config.md` (30) |
-| `context-pocket migrate --dir <root> [--to v<N>\|latest] [--dry-run] [--list]` | Format migration along the registered hop chain (`v1 → v2 → v3` in one call; `--to` accepts `v2` / `2` / `latest`). Backs up first, verifies before each hop, restores the backup if any hop or the post-check fails. Two hops are registered: `v1 → v1` (a no-op format self-check) and **`v1 → v2`**, which really rewrites content — every T-block in `log.md` / `log-archive.md` gets a `--- WHEN: <date> (day) ---` line from the SESSION date above it, a block with no date above it is left untouched, and blocks that already have a line are skipped so re-running changes nothing. A v1 folder shows one `format-upgrade` WARNING in `verify` until you run it — a warning, so the commit hook never blocks on it |
-| `context-pocket repair --dir <root> [--dry-run] [--apply-refs] [--author "..."]` | Renumber T-ids that collide after two agents wrote the same turn number (the write lock is per-machine — see "Will multiple users/agents conflict?"). The colliding block **and every block after it** shift up one, so ids keep increasing with file order, because `log.md` is append-only. Prose is never rewritten: every line still naming an old number is *listed* (that number can point at either of the two colliding blocks — only a reader knows which), and `--apply-refs` is what actually substitutes them, in one simultaneous pass so a `T3→T4` + `T4→T5` cascade cannot move one reference twice. Only a **standalone** `T<n>` is a reference — `GPT4` / `RTX4090` / `UTF8` are words that contain the shape, not ids — and attachment file names (`T04-diagram.png`, `assets/T04-diagram.png`) are never rewritten even under `--apply-refs`: renaming a file is two halves (`mv`, then edit the text) and doing only the second leaves a broken link plus lost zero-padding, so those are listed in `fileNames` with the exact `mv` command to run. Derived counters (the `· T<n>` header of state/requirements/decisions/preferences/code-map/handoff, and `index.md`) are realigned automatically; `log-archive.md` is reported but never touched (it declares itself read-only). The move itself becomes an `[auto]` T-block, and if `verify` comes out worse the whole repair rolls back |
-| `context-pocket sync --dir <root> [--auto] [--dry-run] [--last-n <N>] [--quiet]` | Git safety net: detect staged changes unrecorded in recent T-blocks (hook uses `--auto`). Coverage needs strong evidence — the path in a turn's **Action** section; a file only named in Uncertain / Attachments / Conflicts still counts as unrecorded, and the report says which turn mentioned it so you can `log amend` instead of getting a fresh `[auto]` block |
-| `context-pocket install-hook --dir <root>` | Install Git pre-commit hook (v3: skip when no pocket → auto-fill missed → verify) |
-| `context-pocket uninstall-hook --dir <root>` | Remove our pre-commit hook, preserve other hooks |
-| `context-pocket index --dir <root> [--rebuild]` | Build / refresh the search index (`assets/search-index.json`). Markdown files are always the source of truth; the index is a derived cache |
-| `context-pocket distill --dir <root> [--dry-run]` | Distill old turns: emit a `digest-<date>.md` report listing decisions / pitfalls / preferences worth merging back into the living docs (inspired by Basic Memory) |
-| `context-pocket import --dir <root> --file <session.jsonl> [--source auto\|claude-code\|codex]` | Import a past agent session as `[imported]` T-blocks so a mid-stream adoption doesn't lose history |
-| `context-pocket merge --dir <root> --from <other>/ContextPocket [--dry-run] [--include-archive]` | Merge another pocket (another machine / clone / agent): turns renumbered, plus ADRs, requirements, 🔒 red lines and non-conflicting preferences. state/code-map/conflicts go to `merge-<date>.md` |
-| `context-pocket hub [list\|search\|pref\|remove] --dir <root>` | User-level hub: list registered projects / read-only search across registered projects / read+write global prefs / unregister this project |
-| `context-pocket help [--json]` | Show all commands. With `--json` the same table comes back as one line of `{groups:[{group,commands:[{command,summary}]}]}`, so an agent can discover the command surface without parsing colored text |
+| `context-pocket-quan bootstrap --dir <root>` | Auto-detect project type, scan tree, copy templates, pre-fill code-map & state. Registers the project in `~/.contextpocket/hub.json`; add `--no-hub` (MCP `noHub: true`) to build the pocket without touching the hub |
+| `context-pocket-quan verify --dir <root>` | 15-check health check: files, IDs, refs, index consistency, 🔒 integrity, log size vs `archive_at`, credential/PII shapes in the markdown (vendor keys = error and block the pre-commit hook; personal data = warning only), attachment existence (a `### Attachments` line naming a file that is not on disk is an error — placeholders, URLs, absolute paths and entries already marked `[missing: …]` are skipped), and — as a warning that never blocks a commit — a data format left behind the registry (`lib/validator.js:74`) |
+| `context-pocket-quan verify --drift --dir <root>` | Add the two tree-scanning drift checks: cognition drift (paths in recent T-blocks vs working tree) + code-newer-than-log (files modified after the last record; works without git). Add `--drift-last-n <N>` to tune lookback |
+| `context-pocket-quan status --dir <root>` | One-line summary (T-range, reqs, ADRs, ❓, archive status) |
+| `context-pocket-quan recall <T-id> --dir <root>` | View full details of one T-block |
+| `context-pocket-quan recall --dir <root> --since <T> [--until <T>] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit N] [--offset N]` | **Window mode**: no T-id, at least one window flag — list turns when you have no keyword to search for. Same window semantics as `search` (see "Time windows" below). Oldest first, archived turns included and marked; `--limit 0` = all. A T-id and a window cannot be combined. MCP: `context_pocket_recall` without `tId`, with `sinceT` / `untilT` / `fromDate` / `toDate` |
+| `context-pocket-quan diff <Ta> <Tb> --dir <root>` | Compare two turns: req changes, ADR additions, file changes |
+| `context-pocket-quan search <keyword> --dir <root> [--limit N] [--offset N] [--no-index]` | Keyword search over the whole history: T-blocks (gist, tags, every section, archived turns included), ADRs, requirements and preferences. Auto-uses the `assets/search-index.json` index; `--no-index` scans the markdown instead — both paths match and order identically, so `--limit`/`--offset` page the same list (`--limit 0` = all). Matching: latin words split on separators, Chinese is indexed as adjacent two-character pairs, and **every** query term must hit. A phrase inside a longer Chinese run therefore works (`时间分页` finds 「给搜索加时间分页」) and a reordered one does not (`分页时间`); one lone Chinese character only matches where that character stands alone |
+| `context-pocket-quan why <file-path> --dir <root>` | Reverse lookup: which T-blocks mention this file, split by evidence — `[changed]` (path in that turn's Action section) vs `[mentioned only]` (elsewhere: Uncertain / Attachments / Conflicts / Pitfalls …). Changed turns are listed first, so `--limit` drops the weak ones, never the real edits (Inspired by ThoughtDAG) |
+| `context-pocket-quan check-conflicts --dir <root>` | 6-dimension conflict scan with severity (critical / warning / info) |
+| `context-pocket-quan graph --dir <root> [--type <t>] [--limit <N>]` | View the derived link graph (T ↔ file ↔ ADR ↔ tag ↔ requirement; edges: modifies / mentions / references / decided-in / supersedes / last-changed / tagged / opened-in / completed-in / implements, each citing source + T-id). `graph rebuild` rewrites the `assets/graph.jsonl` cache byte-identically from the markdown; `graph verify` reports cache-vs-source drift |
+| `context-pocket-quan log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | Append one T-block to log.md (pass `--user "<what the user asked>"` — a block without it fails verify and blocks commits). `--when` is optional: the block is stamped with the moment you record it, and `--when` only overrides that when the turn actually happened at another time. `--author "<who is recording>"` signs the turn in a `### Author` section — use it when several agents share one pocket; omit it and the block simply has no author, the tool never guesses one. Every append also compares this turn against what the pocket already says and writes what it **newly** collides with into the block's `### Conflicts` section prefixed `[auto]` (`--no-conflict-check` opts out and the tool says so). The scan reports, it never blocks the record |
+| `context-pocket-quan log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | Fill in sections **missing** from an existing T-block. Never overwrites existing content — `--when` will add a missing time line or sharpen a day-only one, but refuses to rewrite a moment that was already recorded, and `--author` only adds a missing `### Author` section |
+| `context-pocket-quan absolute add --dir <root> --text "..." [--gist "..."]` | Append a 🔒 red-line entry to absolute.md (verbatim, never compressed) |
+| `context-pocket-quan req add --dir <root> --text "..."` | Add a requirement (auto-assigns next R-id) |
+| `context-pocket-quan decision add --dir <root> --title "..."` | Add an ADR |
+| `context-pocket-quan handoff --dir <root> [--max-tokens <N>]` | Generate handoff.md summary. `--max-tokens` trims the optional 1 · On demand subsections and Pointers to an approximate budget; section 0 (red lines / must-confirm / next) is never trimmed, and the file records what was dropped |
+| `context-pocket-quan state update --dir <root> --summary "..."` | Update current state |
+| `context-pocket-quan preferences update --dir <root> --key "..." --value "..."` | Update a preference |
+| `context-pocket-quan code-map update --dir <root>` | Rescan project directory, update code-map.md |
+| `context-pocket-quan archive --dir <root> [--keep-last N] [--dry-run]` | Archive old T-blocks (you trigger it; it is never automatic) with verify → archive → verify → rollback. `--keep-last` defaults to `recent_keep` in `config.md` (30) |
+| `context-pocket-quan migrate --dir <root> [--to v<N>\|latest] [--dry-run] [--list]` | Format migration along the registered hop chain (`v1 → v2 → v3` in one call; `--to` accepts `v2` / `2` / `latest`). Backs up first, verifies before each hop, restores the backup if any hop or the post-check fails. Two hops are registered: `v1 → v1` (a no-op format self-check) and **`v1 → v2`**, which really rewrites content — every T-block in `log.md` / `log-archive.md` gets a `--- WHEN: <date> (day) ---` line from the SESSION date above it, a block with no date above it is left untouched, and blocks that already have a line are skipped so re-running changes nothing. A v1 folder shows one `format-upgrade` WARNING in `verify` until you run it — a warning, so the commit hook never blocks on it |
+| `context-pocket-quan repair --dir <root> [--dry-run] [--apply-refs] [--author "..."]` | Renumber T-ids that collide after two agents wrote the same turn number (the write lock is per-machine — see "Will multiple users/agents conflict?"). The colliding block **and every block after it** shift up one, so ids keep increasing with file order, because `log.md` is append-only. Prose is never rewritten: every line still naming an old number is *listed* (that number can point at either of the two colliding blocks — only a reader knows which), and `--apply-refs` is what actually substitutes them, in one simultaneous pass so a `T3→T4` + `T4→T5` cascade cannot move one reference twice. Only a **standalone** `T<n>` is a reference — `GPT4` / `RTX4090` / `UTF8` are words that contain the shape, not ids — and attachment file names (`T04-diagram.png`, `assets/T04-diagram.png`) are never rewritten even under `--apply-refs`: renaming a file is two halves (`mv`, then edit the text) and doing only the second leaves a broken link plus lost zero-padding, so those are listed in `fileNames` with the exact `mv` command to run. Derived counters (the `· T<n>` header of state/requirements/decisions/preferences/code-map/handoff, and `index.md`) are realigned automatically; `log-archive.md` is reported but never touched (it declares itself read-only). The move itself becomes an `[auto]` T-block, and if `verify` comes out worse the whole repair rolls back |
+| `context-pocket-quan sync --dir <root> [--auto] [--dry-run] [--last-n <N>] [--quiet]` | Git safety net: detect staged changes unrecorded in recent T-blocks (hook uses `--auto`). Coverage needs strong evidence — the path in a turn's **Action** section; a file only named in Uncertain / Attachments / Conflicts still counts as unrecorded, and the report says which turn mentioned it so you can `log amend` instead of getting a fresh `[auto]` block |
+| `context-pocket-quan install-hook --dir <root>` | Install Git pre-commit hook (v3: skip when no pocket → auto-fill missed → verify) |
+| `context-pocket-quan uninstall-hook --dir <root>` | Remove our pre-commit hook, preserve other hooks |
+| `context-pocket-quan index --dir <root> [--rebuild]` | Build / refresh the search index (`assets/search-index.json`). Markdown files are always the source of truth; the index is a derived cache |
+| `context-pocket-quan distill --dir <root> [--dry-run]` | Distill old turns: emit a `digest-<date>.md` report listing decisions / pitfalls / preferences worth merging back into the living docs (inspired by Basic Memory) |
+| `context-pocket-quan import --dir <root> --file <session.jsonl> [--source auto\|claude-code\|codex]` | Import a past agent session as `[imported]` T-blocks so a mid-stream adoption doesn't lose history |
+| `context-pocket-quan merge --dir <root> --from <other>/ContextPocket [--dry-run] [--include-archive]` | Merge another pocket (another machine / clone / agent): turns renumbered, plus ADRs, requirements, 🔒 red lines and non-conflicting preferences. state/code-map/conflicts go to `merge-<date>.md`. The report lists source code-map descriptions for files that exist in the target (missing / different), still applied manually. `merge report [--json] [--file <name>] [--apply <id>]` lists, prints or applies the review sidecars (requirement status / preference conflicts / source state; code-map stays manual) |
+| `context-pocket-quan hub [list\|search\|pref\|remove\|merge] --dir <root>` | User-level hub: list registered projects / read-only search across registered projects / read+write global prefs / unregister this project / `hub merge <project-name>` (CLI or MCP `action: "merge"`) to merge a registered project by name instead of typing its path |
+| `context-pocket-quan help [--json]` | Show all commands. With `--json` the same table comes back as one line of `{groups:[{group,commands:[{command,summary}]}]}`, so an agent can discover the command surface without parsing colored text |
 
 > 💡 In MCP mode, each CLI command has an equivalent MCP tool (e.g. `context_pocket_bootstrap`).
 >
 > 💡 Every command accepts `--json`: stdout becomes exactly one parseable line (`{"ok":true,…}`, or `{"ok":false,"error":"…"}` with a non-zero exit) instead of formatted text — that is what the agent/hook side should read.
 >
-> 💡 One concept, one name on both sides: MCP `tId` ⇄ CLI `--t-id` (`diff` uses `tA`/`tB` ⇄ `--t-a`/`--t-b`, MCP `filePath` ⇄ CLI `--file-path`). The positional form (`context-pocket recall 3`) is the canonical way to write it; `--t`, `--id`, `--file`, `-f` stay accepted as aliases, so a plausible guess never comes back as "T-id is required".
+> 💡 One concept, one name on both sides: MCP `tId` ⇄ CLI `--t-id` (`diff` uses `tA`/`tB` ⇄ `--t-a`/`--t-b`, MCP `filePath` ⇄ CLI `--file-path`). The positional form (`context-pocket-quan recall 3`) is the canonical way to write it; `--t`, `--id`, `--file`, `-f` stay accepted as aliases, so a plausible guess never comes back as "T-id is required".
 >
-> 💡 A flag with no value counts as **not given**. `context-pocket state update --summary --json` writes nothing and exits 1 instead of storing the word `true` in `state.md` — the same rule the writer applies to `--gist`, now shared by both entry points (`lib/fields.js` `textOption`).
+> 💡 A flag with no value counts as **not given**. `context-pocket-quan state update --summary --json` writes nothing and exits 1 instead of storing the word `true` in `state.md` — the same rule the writer applies to `--gist`, now shared by both entry points (`lib/fields.js` `textOption`).
 >
 > 💡 `--no-index` sits on both ends of the cache and is safe on both: on `search` it means "ignore the cache for this query", on `log append` / `log amend` it means "don't refresh the cache after this write". Markdown stays the source of truth either way, so the next search rebuilds the cache and returns the very same hits — including archived turns, measured to come back in the same order on both paths. Bulk loops use it to skip a refresh per turn, and the size of that saving depends on scale: ≈15 ms/turn at 30 turns (a bare CLI call already costs ≈112 ms of Node startup), ≈0.18 s/turn at 800 turns — so it pays off mainly in the resident MCP server or a long append loop, not in one-shot CLI use (`log append --help`).
 >
-> 💡 `context-pocket --version` (also accepted: `-v`, `context-pocket version`) prints the number straight out of `package.json` — it needs no `ContextPocket/` folder and writes nothing. An MCP client reads the same number from `initialize`'s `serverInfo.version`; both entry points go through `lib/version.js`, so `package.json` is the only place a version is written.
+> 💡 `context-pocket-quan --version` (also accepted: `-v`, `context-pocket-quan version`) prints the number straight out of `package.json` — it needs no `ContextPocket/` folder and writes nothing. An MCP client reads the same number from `initialize`'s `serverInfo.version`; both entry points go through `lib/version.js`, so `package.json` is the only place a version is written.
 
 ### ⏱ Time windows
 
@@ -338,8 +348,8 @@ Both are **closed intervals**, can be mixed, and a junk value (`--since abc`, `-
 `search` still needs a keyword. Use `recall` window mode when the question is "what happened between X and Y" and there is nothing to search *for*. Both commands apply `--limit` / `--offset` **after** filtering, so `total` is the real number of matching turns (`--limit 0` = all).
 
 ```
-context-pocket search 登录 --since 12 --until 40 --json
-context-pocket recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
+context-pocket-quan search 登录 --since 12 --until 40 --json
+context-pocket-quan recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
 ```
 
 ---
@@ -465,7 +475,7 @@ Create `ContextPocket/config.md` to customize behavior:
 - tags_default: [requirement-change, code-logic, arch-decision, bug, preference, dependency, test, ui, api, deploy, docs, pitfall, conflict, correction]
 ```
 
-**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone ContextPocket Lite 2.13 package, which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
+**Lite mode in the full package**: For scripts/small projects — creates only the 5 core files; others are created on demand. For the standalone **xi 3.0** package (`context-pocket-xi`), which shares the temporal graph schema and simplifies read/write for small projects and daily conversation memory, see [`lite/`](lite/).
 
 ---
 
@@ -475,7 +485,7 @@ When you are testing a project in a folder, running a one-off experiment, or eva
 
 | Switch | How to enable | Effect |
 |---|---|---|
-| Env var | `CONTEXTPOCKET_ISOLATED=1 context-pocket ...` | One command / CI only; nothing written to disk |
+| Env var | `CONTEXTPOCKET_ISOLATED=1 context-pocket-quan ...` | One command / CI only; nothing written to disk |
 | Marker file | `touch .contextpocket-isolate` in the project root | Applies to every CLI and MCP call in that project; delete the file to lift it |
 | Physical | `mv ContextPocket ContextPocket.isolated` | History is no longer at the normal path; the tools detect this too |
 
@@ -503,7 +513,7 @@ Each project has its own `ContextPocket/`, but you probably want one place that 
 - **Two ways to share across machines**:
   1. **Env var**: `export CONTEXTPOCKET_HOME=/path/to/synced/folder` (point it at a cloud drive / Dropbox / iCloud / git bare repo). All machines share one `hub.json`.
   2. **Git into the repo**: at `bootstrap` add `--gitignore: false` (or the MCP equivalent `gitignore: false`) to commit the entire `ContextPocket/` directory, including project-local preferences.
-- **Commands**: `context-pocket hub list` · `context-pocket hub search "token refresh"` · `context-pocket hub pref --key <k> --value <v>` · `context-pocket hub remove`
+- **Commands**: `context-pocket-quan hub list` · `context-pocket-quan hub search "token refresh"` · `context-pocket-quan hub pref --key <k> --value <v>` · `context-pocket-quan hub remove`
 - **Opting out of the registry**: `bootstrap --no-hub` (MCP `noHub: true`) creates the pocket and writes nothing under `CONTEXTPOCKET_HOME`. Use it for throwaway projects, CI jobs and scripted one-shot bootstraps, so the hub keeps only the projects you actually work in. The pocket itself is complete and fully usable; `hub list` just won't show it. Register it later by running the same command without `--no-hub` (bootstrap is idempotent — it re-registers and leaves your recorded history untouched).
 
 ---
@@ -513,8 +523,8 @@ Each project has its own `ContextPocket/`, but you probably want one place that 
 When the same project was recorded on two machines, two clones, or by two agents, merge the other pocket into this one:
 
 ```bash
-context-pocket merge --from /path/to/other/ContextPocket --dry-run
-context-pocket merge --from /path/to/other/ContextPocket
+context-pocket-quan merge --from /path/to/other/ContextPocket --dry-run
+context-pocket-quan merge --from /path/to/other/ContextPocket
 ```
 
 - One-way and read-only on the source; turns get new T ids after the target's latest.
@@ -551,7 +561,7 @@ Fully compatible. The first activation (`bootstrap`) scans the existing project,
 Yes. Find the session file (`~/.claude/projects/<project>/<session>.jsonl` or `~/.codex/sessions/<id>.jsonl`) and ask the agent to import it — it runs:
 
 ```bash
-context-pocket import --file ~/.claude/projects/<project>/<session>.jsonl --dir <root>
+context-pocket-quan import --file ~/.claude/projects/<project>/<session>.jsonl --dir <root>
 ```
 
 It continues numbering from your current latest T, tags every imported block `[imported]`, and writes them into `log.md`. Tool noise is skipped automatically. Source type is auto-detected; force a specific source with `--source claude-code` or `--source codex`. `--limit N` caps how many turns get imported (default 100), `--truncate N` caps each field (default 400).
@@ -568,7 +578,7 @@ Two different situations, and the answer is different for each:
   handoff**: one agent works → commits → the next pulls. Two clones writing at the same moment
   each compute `latestT + 1` from their own copy and both write, say, `T9`; after the merge
   `log.md` contains two `## T9` blocks. `verify` flags that as an error and names the fix, and
-  `context-pocket repair --dry-run` → `context-pocket repair` renumbers the colliding block (and
+  `context-pocket-quan repair --dry-run` → `context-pocket-quan repair` renumbers the colliding block (and
   everything after it) back into a legal sequence, lists the prose that still names the old
   numbers, and records the move as an `[auto]` T-block. Two things it deliberately never rewrites:
   a reference has to be a standalone `T<n>`, so words that merely contain the shape (`GPT4`,
@@ -602,7 +612,7 @@ PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 ```bash
 git clone https://github.com/Wink305/ContextPocket.git
 cd context-pocket
-npm link                 # gives you the `context-pocket` command from this checkout
+npm link                 # gives you the `context-pocket-quan` command from this checkout
 # edit templates/ or SKILL.md
 # when submitting a PR, include project type + size you tested with
 ```

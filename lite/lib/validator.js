@@ -231,7 +231,7 @@ function checkTBlockFormat(logData) {
         severity: SEVERITY.ERROR,
         category: 'tblock-format',
         message: `T${block.id} missing User section`,
-        fix: `context-pocket-lite log append 下一次写全 --user；这一轮手补 "### User" 小节也可以`,
+        fix: `context-pocket-xi log append 下一次写全 --user；这一轮手补 "### User" 小节也可以`,
       });
     }
 

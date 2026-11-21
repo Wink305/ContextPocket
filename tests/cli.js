@@ -505,7 +505,7 @@ test('cli: help --json lists every command, and the docs list them too', () => {
     const text = fs.readFileSync(path.join(ROOT, readme), 'utf-8');
     for (const c of commands) {
       const name = c.replace(/<[^>]*>/g, '').trim();
-      assert.ok(text.includes('context-pocket ' + name + ' '), `${readme} 的 CLI 表里没有 "${name}"`);
+      assert.ok(text.includes('context-pocket-quan ' + name + ' '), `${readme} 的 CLI 表里没有 "${name}"`);
     }
   }
 });
@@ -1367,4 +1367,127 @@ test('cli: hub search with an empty hub is a normal empty result', () => {
   } finally {
     process.env.CONTEXTPOCKET_HOME = prevHome;
   }
+});
+
+test('cli: handoff --max-tokens trims only optional sections and reports the budget', () => {
+  const { pocketDir } = makePocket('cli-handoff-budget');
+  for (let i = 1; i <= 6; i++) {
+    runCli(['log', 'append', '--gist', 'budget turn ' + i, '--user', '原话', '--action', '新增 a' + i + '.js', '--json'], pocketDir);
+  }
+
+  const plain = parseJsonLine(runCli(['handoff', '--json'], pocketDir));
+  assert.strictEqual(plain.handoff.maxTokens, null, '不传预算时保持原样');
+  const full = fs.readFileSync(path.join(pocketDir, 'handoff.md'), 'utf-8');
+  assert.ok(full.includes('### Code Map'), '默认视图必须保留可选小节');
+  assert.ok(!full.includes('token budget:'), '默认视图不该出现预算注记');
+
+  const budgeted = parseJsonLine(runCli(['handoff', '--max-tokens', '60', '--json'], pocketDir));
+  assert.strictEqual(budgeted.handoff.maxTokens, 60, JSON.stringify(budgeted));
+  assert.ok(budgeted.handoff.trimmed.length > 0, '预算足够小时必须裁掉可选小节：' + JSON.stringify(budgeted.handoff));
+  const trimmed = fs.readFileSync(path.join(pocketDir, 'handoff.md'), 'utf-8');
+  assert.match(trimmed, /## 0 · Start here/, 'section 0 永不裁');
+  assert.match(trimmed, /🔒 Red lines/, '红线区永不裁');
+  assert.ok(!trimmed.includes('### Code Map'), 'Code Map 是最先被裁的可选小节：\n' + trimmed);
+  assert.match(trimmed, /token budget: ~\d+ \/ 60 tokens/);
+});
+
+test('cli: merge report lists and prints the generated reports', () => {
+  const target = makePocket('cli-merge-report-target');
+  const source = makePocket('cli-merge-report-source');
+  runCli(['log', 'append', '--gist', 'report source turn', '--user', 'u', '--action', 'a', '--json'], source.pocketDir);
+
+  const merged = parseJsonLine(runCli(['merge', '--from', source.pocketDir, '--json'], target.pocketDir));
+  assert.strictEqual(merged.ok, true, JSON.stringify(merged));
+
+  const list = parseJsonLine(runCli(['merge', 'report', '--json'], target.pocketDir));
+  assert.strictEqual(list.ok, true);
+  assert.ok(list.count >= 1, JSON.stringify(list));
+  assert.ok(list.reports[0].file.startsWith('merge-'));
+
+  const one = parseJsonLine(runCli(['merge', 'report', '--file', list.reports[0].file, '--json'], target.pocketDir));
+  assert.match(one.content, /MERGE REPORT/);
+
+  const missing = runCli(['merge', 'report', '--file', 'merge-nope.md', '--json'], target.pocketDir);
+  assert.strictEqual(missing.code, 1);
+  assert.strictEqual(parseJsonLine(missing).ok, false);
+});
+
+test('cli: merge report --apply replays state, preference and requirement suggestions', () => {
+  const target = makePocket('cli-merge-apply-target');
+  const source = makePocket('cli-merge-apply-source');
+
+  runCli(['req', 'add', 'shared requirement', '--json'], target.pocketDir);
+  runCli(['preferences', 'update', '--key', 'language', '--value', 'zh', '--json'], target.pocketDir);
+  runCli(['state', 'update', '--summary', 'target baseline', '--json'], target.pocketDir);
+
+  runCli(['req', 'add', 'shared requirement', '--status', 'Done', '--json'], source.pocketDir);
+  runCli(['preferences', 'update', '--key', 'language', '--value', 'en', '--json'], source.pocketDir);
+  runCli(['state', 'update', '--summary', 'source-only state', '--json'], source.pocketDir);
+
+  const merged = parseJsonLine(runCli(['merge', '--from', source.pocketDir, '--json'], target.pocketDir));
+  assert.strictEqual(merged.ok, true, JSON.stringify(merged));
+  assert.ok(merged.reviewId, '有冲突时 merge 必须落一份可复核记录：' + JSON.stringify(merged));
+  assert.strictEqual(merged.docs.reqStatusConflicts.length, 1);
+  assert.strictEqual(merged.docs.prefConflicts.length, 1);
+
+  const listed = parseJsonLine(runCli(['merge', 'report', '--json'], target.pocketDir));
+  const review = listed.reviews.find((r) => r.id === merged.reviewId);
+  assert.ok(review, 'merge report 必须列出 sidecar 复核记录：' + JSON.stringify(listed));
+  assert.ok(review.pending >= 3, 'pending 至少包含需求 / 偏好 / state 三项：' + JSON.stringify(review));
+
+  const applied = parseJsonLine(runCli(['merge', 'report', '--apply', merged.reviewId, '--json'], target.pocketDir));
+  assert.strictEqual(applied.ok, true, JSON.stringify(applied));
+  assert.strictEqual(applied.alreadyApplied, false);
+  assert.ok(applied.applied.length >= 3, JSON.stringify(applied));
+
+  const requirements = fs.readFileSync(path.join(target.pocketDir, 'requirements.md'), 'utf-8');
+  assert.match(requirements, /## Done[\s\S]*- \[x\] R\d+ shared requirement/, requirements);
+  const preferences = fs.readFileSync(path.join(target.pocketDir, 'preferences.md'), 'utf-8');
+  assert.match(preferences, /- language: en/, preferences);
+  const state = fs.readFileSync(path.join(target.pocketDir, 'state.md'), 'utf-8');
+  assert.ok(state.includes('source-only state'), state);
+  const verified = runCli(['verify', '--json'], target.pocketDir);
+  assert.strictEqual(verified.code, 0, verified.stdout + verified.stderr);
+
+  const again = parseJsonLine(runCli(['merge', 'report', '--apply', merged.reviewId, '--json'], target.pocketDir));
+  assert.strictEqual(again.ok, true);
+  assert.strictEqual(again.alreadyApplied, true, '重复 apply 必须是无害的 no-op');
+});
+
+test('cli: --edition-mode validates the mode, strips colors and refuses prompts', () => {
+  const { pocketDir } = makePocket('cli-edition-mode');
+
+  const agent = runCli(['status', '--edition-mode', 'agent'], pocketDir);
+  assert.strictEqual(agent.code, 0, agent.stderr);
+  assert.ok(agent.stdout.includes('ContextPocket'), agent.stdout);
+  assert.ok(!/\x1b\[/.test(agent.stdout), 'agent 模式不能输出 ANSI 颜色：' + JSON.stringify(agent.stdout.slice(0, 120)));
+
+  const bad = runCli(['status', '--edition-mode', 'turbo', '--json'], pocketDir);
+  assert.strictEqual(bad.code, 1);
+  const badJson = parseJsonLine(bad);
+  assert.strictEqual(badJson.ok, false);
+  assert.match(badJson.error, /unknown edition mode/);
+
+  const prompt = runCli(['code-map', 'update', '--interactive', '--edition-mode', 'agent'], pocketDir);
+  assert.strictEqual(prompt.code, 1, 'agent 模式不能停在交互提问上');
+  assert.match(prompt.stdout + prompt.stderr, /agent/);
+});
+
+test('cli: hub merge resolves a registered project by name', () => {
+  const target = makePocket('cli-hub-merge-target');
+  const source = makePocket('cli-hub-merge-source');
+  runCli(['log', 'append', '--gist', 'hub merge source', '--user', 'u', '--action', 'a', '--json'], source.pocketDir);
+
+  const hub = parseJsonLine(runCli(['hub', 'list', '--json'], target.pocketDir));
+  const entry = hub.projects.find((p) => p.key === hubKey(source.projectDir));
+  assert.ok(entry && entry.name, '源项目必须先注册进 hub：' + JSON.stringify(hub.projects));
+
+  const r = parseJsonLine(runCli(['hub', 'merge', entry.name, '--dry-run', '--json'], target.pocketDir));
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  assert.strictEqual(r.dryRun, true);
+  assert.strictEqual(path.resolve(r.source.pocketDir), path.resolve(source.pocketDir));
+
+  const missing = runCli(['hub', 'merge', 'no-such-project-xyz', '--json'], target.pocketDir);
+  assert.strictEqual(missing.code, 1);
+  assert.strictEqual(parseJsonLine(missing).ok, false);
 });

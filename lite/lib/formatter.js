@@ -23,6 +23,7 @@ const COLORS = {
 };
 
 function colorize(text, color) {
+  if (process.env.NO_COLOR) return text;
   if (!color || !COLORS[color]) return text;
   return COLORS[color] + text + COLORS.reset;
 }

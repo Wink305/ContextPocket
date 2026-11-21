@@ -1,0 +1,29 @@
+{
+  "name": "context-pocket-hai",
+  "version": "3.0",
+  "private": true,
+  "description": "ContextPocket Hai (海) — planned collaboration edition: shared hubs, conflict queues, review, RBAC and audit trails. No installable command yet.",
+  "keywords": [
+    "context",
+    "memory",
+    "handoff",
+    "mcp",
+    "ai-agent",
+    "markdown",
+    "team"
+  ],
+  "license": "MIT",
+  "author": "ContextPocket Contributors",
+  "homepage": "https://github.com/Wink305/ContextPocket/tree/main/hai#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wink305/ContextPocket.git",
+    "directory": "hai"
+  },
+  "bugs": {
+    "url": "https://github.com/Wink305/ContextPocket/issues"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

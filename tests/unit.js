@@ -984,9 +984,9 @@ test('every copy of the skill version says the same number as package.json', () 
   // 稳定版只显示前两位。这条锁盯的是「规则」而不是某个具体号——升版本时不用改用例。
   const expectedDisplay = pkg.version.includes('-')
     ? pkg.version
-    : pkg.version.split('.').slice(0, 2).join('.');
+    : pkg.version.split('.').slice(0, 2).join('.') + '-quan';
   assert.strictEqual(DISPLAY_VERSION, expectedDisplay,
-    'DISPLAY_VERSION 违反展示规则：hotfix/预发布显示完整串，稳定版两位（ ROADMAP §12）');
+    'DISPLAY_VERSION 违反展示规则：稳定版是 major.minor + 版本名（如 3.0-quan），预发布显示完整串');
 
   const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf-8');
   assert.ok(changelog.includes('## [' + pkg.version + '] - '),
@@ -1028,7 +1028,7 @@ test('npm package metadata and file whitelist are ready for a public first publi
 
   // files 白名单：漏掉任何一项，用户拿到的包就会缺运行时真要读的文件
   const mustHave = [
-    'bin/', 'lib/', 'templates/', 'assets/', 'docs/', 'scripts/',
+    'bin/', 'lib/', 'templates/', 'assets/', 'docs/', 'scripts/', 'edition.json',
     'mcp-server.js', 'SKILL*.md', 'README.md', 'README.zh-CN.md', 'CHANGELOG.md', 'LICENSE',
   ];
   for (const entry of mustHave) {
@@ -1075,7 +1075,7 @@ test('CI workflow gates release tags with the same four checks as main', () => {
     assert.ok(/tags:\s*\[\s*'\[0-9\]\*'\s*,\s*'v\*'\s*\]/.test(text),
       rel + " 的 on.push 必须含 tags: ['[0-9]*', 'v*']：2.0.1-hotfix1 起 tag 去 v 前缀，"
       + '裸版本号由 [0-9]* 触发、历史 v* 继续兼容，否则发版 tag 推上去不会跑任何门禁');
-    for (const cmd of ['npm run lint', 'node tests/run.js', 'npm run smoke', 'npm run smoke-live']) {
+    for (const cmd of ['node scripts/sync-core.js', 'npm run lint', 'node tests/run.js', 'npm run smoke', 'npm run smoke-live']) {
       assert.ok(text.includes(cmd), rel + ' 缺 ' + cmd + '：tag 触发了却少跑一道门禁');
     }
   };

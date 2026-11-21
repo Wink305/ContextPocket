@@ -1,0 +1,19 @@
+{
+  "edition": "xi",
+  "package": "context-pocket-xi",
+  "family": "3.0",
+  "status": "stable",
+  "dataFormat": "v2",
+  "coreFiles": 5,
+  "commands": 11,
+  "tools": 11,
+  "modes": [
+    "brief",
+    "full"
+  ],
+  "outputTiers": [
+    "brief",
+    "full"
+  ],
+  "derivedCaches": []
+}
