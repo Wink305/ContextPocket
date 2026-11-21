@@ -2,7 +2,7 @@ name: CI
 
 # 发版门禁与本地完全一致（零依赖，不需要 npm install）：
 #   lint        全部 .js 过 node --check（语法）
-#   sync-core   quan / xi 的共享核心与 shared/ 逐字一致
+#   sync-core   xi / quan / yuan 的共享核心与 shared/ 逐字一致
 #   tests       单元 + 集成回归（tests/run.js）
 #   smoke       MCP 协议冒烟（mcp-smoke.js）
 #   smoke-live  真实 CLI 子进程整链路活测（tests/smoke-live.js，全程临时目录，不碰 ~/.contextpocket）
@@ -15,7 +15,7 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['[0-9]*', 'v*']
+    tags: ['[0-9]*', 'v*', 'ContextPocket-*']
   pull_request:
 
 jobs:
