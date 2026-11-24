@@ -20,6 +20,10 @@ const fs = require('fs');
 const { findPocketDir, readConfig, stripPlaceholders, toTId, intOption } = require('./lib/core');
 const { POCKET_DIR_NAME } = require('./lib/constants');
 const { parseAll } = require('./lib/parser');
+
+// MCP 是常驻进程：同一个口袋的 parseAll 结果按源文件签名缓存，减少大口袋重复解析。
+// CLI 不加这行，短命进程不做额外工作。
+require('./lib/parser').enableParseCache();
 const { verify } = require('./lib/validator');
 const {
   appendLogBlock,
@@ -34,7 +38,7 @@ const {
   updateCodeMap,
 } = require('./lib/writer');
 const { bootstrap } = require('./lib/bootstrap');
-const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('./lib/query');
+const { recall, recallWindow, diff, searchAny, why, checkConflicts, resolveRankMode } = require('./lib/query');
 const {
   buildContext,
   formatContextLines,
@@ -75,125 +79,14 @@ const {
 
 // package.json 是版本的唯一来源（lib/version.js），CLI 的 --version 读同一处。
 const { pkgVersion } = require('./lib/version');
+const { startServer } = require('./lib/mcp-runtime');
 const SERVER_VERSION = pkgVersion().version;
 
 // ============================================================
 // MCP stdio transport
-// ============================================================//
-// MCP 的 stdio 传输是"换行分隔的 JSON-RPC"：每条消息一行、内部不得有裸换行，
-// 行与行之间没有 Content-Length 头（那是 LSP 的 base protocol）。
-// 规范原文：「Messages are delimited by newlines, and MUST NOT contain
-// embedded newlines.」之前这里按 Content-Length 解析，真实客户端（Claude
-// Desktop / Cursor / Qoder 等）发来的 initialize 行永远匹配不到头部，
-// 于是握手无响应、工具列表为空 —— MCP 模式整体不可用。
-
-let pending = '';
-
-process.stdin.setEncoding('utf-8');
-process.stdin.on('data', (chunk) => {
-  pending += chunk;
-  let idx;
-  while ((idx = pending.indexOf('\n')) !== -1) {
-    const line = pending.slice(0, idx);
-    pending = pending.slice(idx + 1);
-    handleLine(line);
-  }
-});
-
-process.stdin.on('end', () => {
-  // 处理最后没有换行符的一行
-  if (pending.trim()) handleLine(pending);
-  pending = '';
-});
-
-function handleLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-
-  let message;
-  try {
-    message = JSON.parse(trimmed);
-  } catch (e) {
-    sendError(null, -32700, 'Parse error: ' + e.message);
-    return;
-  }
-
-  // JSON-RPC 批量：规范允许数组，逐个处理
-  if (Array.isArray(message)) {
-    for (const m of message) handleMessage(m);
-    return;
-  }
-  handleMessage(message);
-}
-
-function sendMessage(message) {
-  // 单行写出：JSON.stringify 不会产出裸换行，天然满足分帧要求
-  process.stdout.write(JSON.stringify(message) + '\n');
-}
-
-function sendResponse(id, result) {
-  sendMessage({ jsonrpc: '2.0', id, result });
-}
-
-function sendError(id, code, message) {
-  sendMessage({ jsonrpc: '2.0', id, error: { code, message } });
-}
-
 // ============================================================
-// 消息处理
-// ============================================================
-
-// 从新到老：客户端协商时优先落在它请求的版本上
-const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
-const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
-
-function handleMessage(msg) {
-  if (!msg || typeof msg !== 'object' || msg.jsonrpc !== '2.0') {
-    sendError((msg && msg.id) || null, -32600, 'Invalid Request: jsonrpc version mismatch');
-    return;
-  }
-
-  // 通知（无 id）不应有回应
-  if (msg.id === undefined || msg.id === null) {
-    return;
-  }
-
-  switch (msg.method) {
-    case 'initialize':
-      handleInitialize(msg.id, msg.params || {});
-      break;
-    case 'ping':
-      sendResponse(msg.id, {});
-      break;
-    case 'tools/list':
-      handleToolsList(msg.id);
-      break;
-    case 'tools/call':
-      handleToolsCall(msg.id, msg.params || {});
-      break;
-    default:
-      sendError(msg.id, -32601, `Method not found: ${msg.method}`);
-  }
-}
-
-function handleInitialize(id, params) {
-  const requested = params.protocolVersion;
-  const negotiated = SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
-    ? requested
-    : LATEST_PROTOCOL_VERSION;
-
-  sendResponse(id, {
-    protocolVersion: negotiated,
-    capabilities: {
-      tools: { listChanged: false },
-    },
-    serverInfo: {
-      name: 'context-pocket-quan',
-      version: SERVER_VERSION,
-    },
-    instructions: SERVER_INSTRUCTIONS,
-  });
-}
+// 换行分隔 JSON-RPC、initialize / ping / tools/list / tools/call、批量与错误封套
+// 统一由 lib/mcp-runtime.js 提供；本文件只保留 quan 的工具 schema 与 dispatch。
 
 // ============================================================
 // 工具定义
@@ -395,8 +288,8 @@ const TOOLS = [
           description: 'Filter graph context to facts valid at this T-id; requires expand (CLI equivalent: --as-of)',
         },
         rank: {
-          type: 'boolean',
-          description: 'With expand: order graph context by relevance (personalized PageRank from the matches) instead of hop distance; requires expand (CLI equivalent: --rank)',
+          type: ['boolean', 'string'],
+          description: 'Default: field-weight order (unchanged). "bm25" orders the matches by BM25. true / "graph" orders expanded graph context by relevance and requires expand (CLI equivalent: --rank [bm25|graph]).',
           default: false,
         },
       },
@@ -1048,32 +941,24 @@ const TOOLS = [
   },
 ];
 
-function handleToolsList(id) {
-  sendResponse(id, { tools: TOOLS });
-}
-
 // ============================================================
 // 工具调用
 // ============================================================
 
-function handleToolsCall(id, params) {
-  const { name, arguments: args } = params;
-
+function handleToolCall(name, args) {
   // 隔离开关：统一在工具分发之前拦下，任何工具都拿不到历史内容。
   const isolate = require('./lib/isolate');
   const isoState = isolate.detectIsolation({ cwd: process.cwd() });
   if (isoState.isolated) {
     if (name === 'context_pocket_status') {
-      sendResponse(id, {
+      return {
         content: [{ type: 'text', text: JSON.stringify(isolate.isolatedStatusPayload(isoState)) }],
-      });
-      return;
+      };
     }
-    sendResponse(id, {
+    return {
       content: [{ type: 'text', text: JSON.stringify(isolate.isolatedPayload(isoState, name)) }],
       isError: true,
-    });
-    return;
+    };
   }
 
   try {
@@ -1181,19 +1066,18 @@ function handleToolsCall(id, params) {
         break;
 
       default:
-        sendResponse(id, {
+        return {
           content: [{ type: 'text', text: `Unknown tool: ${name}` }],
           isError: true,
-        });
-        return;
+        };
     }
 
-    sendResponse(id, result);
+    return result;
   } catch (e) {
-    sendResponse(id, {
+    return {
       content: [{ type: 'text', text: `Error: ${e.message}` }],
       isError: true,
-    });
+    };
   }
 }
 
@@ -1618,9 +1502,19 @@ function toolSearch(args) {
       isError: true,
     };
   }
-  if (args.rank === true && graphOptions.depth === 0) {
+
+  let rankMode;
+  try {
+    rankMode = resolveRankMode(args.rank);
+  } catch (e) {
     return {
-      content: [{ type: 'text', text: '❌ Error: rank orders expand graph context; pass expand too.' }],
+      content: [{ type: 'text', text: `❌ Error: ${e.message}` }],
+      isError: true,
+    };
+  }
+  if (rankMode === 'graph' && graphOptions.depth === 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: rank orders expand graph context; pass expand too. For search-result ranking use rank: "bm25".' }],
       isError: true,
     };
   }
@@ -1638,13 +1532,14 @@ function toolSearch(args) {
     untilT: typeof args.untilT === 'number' && args.untilT > 0 ? args.untilT : null,
     fromDate: typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null,
     toDate: typeof args.toDate === 'string' && args.toDate ? args.toDate : null,
+    rank: rankMode === 'bm25' ? 'bm25' : undefined,
   });
   const resultNodeIds = searchNodeIds(results);
   const graphContext = graphOptions.depth > 0
     ? expandGraph(readGraph(pocketDir).graph, resultNodeIds, graphOptions.depth, {
       asOf: graphOptions.asOf,
       exclude: resultNodeIds,
-      rank: args.rank === true,
+      rank: rankMode === 'graph',
     })
     : null;
 
@@ -1652,7 +1547,7 @@ function toolSearch(args) {
   const shown = limit !== null && results.length < total
     ? ` · showing ${offset + 1}–${offset + results.length}`
     : '';
-  lines.push(`## Search: "${keyword}"`);
+  lines.push(`## Search: "${keyword}"${rankMode === 'bm25' ? ' · rank bm25' : ''}`);
   lines.push(`${total} match${total !== 1 ? 'es' : ''} found${shown}`);
   lines.push('');
 
@@ -2971,6 +2866,14 @@ function toolHub(args) {
     content: [{ type: 'text', text: lines.join('\n') }],
   };
 }
+
+startServer({
+  name: 'context-pocket-quan',
+  version: SERVER_VERSION,
+  instructions: SERVER_INSTRUCTIONS,
+  tools: TOOLS,
+  callTool: handleToolCall,
+});
 
 // 错误输出到 stderr，不干扰 stdio 协议
 process.stderr.write('ContextPocket MCP server started\n');

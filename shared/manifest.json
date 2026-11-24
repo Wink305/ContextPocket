@@ -6,6 +6,7 @@
     "edition.js",
     "fields.js",
     "files.js",
+    "graph-core.js",
     "handoff-path.js",
     "indexer.js",
     "io.js",
@@ -13,11 +14,13 @@
     "lifecycle.js",
     "links-core.js",
     "links.js",
+    "mcp-runtime.js",
     "merge-review.js",
     "merge.js",
     "migrate.js",
     "parser.js",
     "query.js",
+    "rank.js",
     "repair.js",
     "secrets.js",
     "userhub.js",
@@ -44,6 +47,15 @@
       "lib",
       "lang/lib"
     ],
+    "files.js": [
+      "lib",
+      "lite/lib",
+      "lang/lib"
+    ],
+    "graph-core.js": [
+      "lib",
+      "lang/lib"
+    ],
     "indexer.js": [
       "lib",
       "lang/lib"
@@ -60,6 +72,10 @@
       "lib",
       "lang/lib"
     ],
+    "mcp-runtime.js": [
+      "lib",
+      "lang/lib"
+    ],
     "merge-review.js": [
       "lib",
       "lang/lib"
@@ -73,6 +89,10 @@
       "lang/lib"
     ],
     "query.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "rank.js": [
       "lib",
       "lang/lib"
     ],

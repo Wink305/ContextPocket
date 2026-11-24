@@ -1,8 +1,8 @@
 # ContextPocket Hsi（溪）
 
-> ContextPocket 3.0 家族的轻量版：面向小型项目与日常对话记忆，让读写更快、更简单。零依赖、零缓存、11 条命令、11 个 MCP 工具。
+> ContextPocket 3.1 家族的轻量版：面向小型项目与日常对话记忆，让读写更快、更简单。零依赖、零缓存、11 条命令、11 个 MCP 工具。
 
-`context-pocket-xi` builds on the ContextPocket 3.0 family's node-based context design. It reads and writes the **exact same `ContextPocket/` folder of plain Markdown** — same T-block format, same file names, same Node schema v2 — with a smaller command surface and no derived caches. It is optimized for small projects and everyday conversation memory; the quan package keeps the broader maintenance and indexing tools for larger, longer-lived pockets.
+`context-pocket-xi` builds on the ContextPocket 3.1 family's node-based context design. It reads and writes the **exact same `ContextPocket/` folder of plain Markdown** — same T-block format, same file names, same Node schema v2 — with a smaller command surface and no derived caches. It is optimized for small projects and everyday conversation memory; the quan package keeps the broader maintenance and indexing tools for larger, longer-lived pockets.
 
 The old package / command name `context-pocket-lite` remains an alias through 3.0 and 3.1 and is removed in 3.2.
 
@@ -31,10 +31,10 @@ The MCP server exposes the same 11 operations as tools (`context_pocket_bootstra
 * **No caches.** Search always scans (`viaIndex: false`); graph is derived at call time and writes nothing. An xi pocket is 5 Markdown files, plus `handoff.md` if you run `handoff`.
 * **No write-time conflict gate.** `log append` reports `conflictCheckSkipped: true` honestly instead of pretending to have checked.
 * **No maintenance plane.** Archive, migrate, repair, sync, hub registration — those live in the quan package. A pocket outgrown by xi is a valid quan pocket; run `context-pocket-quan` against it whenever you want.
-* **Version line is independent.** xi shares the 3.0 family release line but keeps its own display version (`3.0-xi`). Stable releases display two parts plus the edition suffix (`3.0-xi`); hotfix prereleases display the full string — the suffix carries meaning.
+* **Version line is independent.** xi shares the 3.1 family release line but keeps its own display version (`3.1-xi`). Stable releases display two parts plus the edition suffix (`3.1-xi`); hotfix prereleases display the full string — the suffix carries meaning.
 * **`log amend` only fills gaps.** It adds sections that are missing; it never overwrites content already on the block (including a recorded timestamp).
 
-Download the [ContextPocket-3.0-xi release archive](https://github.com/Wink305/ContextPocket/releases). The ZIP contains the package files and does not involve an npm registry release.
+Download the [ContextPocket-3.1-xi release archive](https://github.com/Wink305/ContextPocket/releases). The ZIP contains the package files and does not involve an npm registry release.
 
 ## Install
 
@@ -79,6 +79,49 @@ Every command supports `--json` (single JSON line, no colors) and `--dir <path>`
 ```
 
 Stdio transport, newline-delimited JSON-RPC, protocol versions `2025-06-18` / `2025-03-26` / `2024-11-05`. The server resolves the pocket from `process.cwd()`; run it from your project root.
+
+## When to upgrade to quan（泉）
+
+xi is deliberately the 5-file, 11-command, zero-cache edition. Upgrade when at least
+one of these becomes true:
+
+- **You need maintenance, not just reading.** `archive`, `migrate`, `repair`, `sync`,
+  `distill`, `import`, `merge`, `hub search` live in quan.
+- **The pocket is outgrowing full scans.** xi scans on every search and derives the
+  graph on every call. quan keeps a search index and a graph cache for large pockets.
+- **You want write-time conflict checks.** quan's `log append` runs the six-dimension
+  conflict scan as part of the write; xi honestly reports `conflictCheckSkipped: true`.
+- **One pocket is no longer enough.** If the project is a monorepo or several services,
+  jump to **yuan** (`context-pocket-yuan`), which adds a workspace of multiple pockets,
+  a repo map and budgeted context assembly on top of the same format.
+
+### How to upgrade
+
+1. Get the quan package (the `ContextPocket-*-quan.zip` release, or `npm link` from the
+   repository root). Nothing has been published to the npm registry yet.
+2. Run it against the **existing project root**:
+
+   ```bash
+   context-pocket-quan status --dir /path/to/project
+   ```
+
+3. Keep using the same command names. The old `context-pocket` alias still forwards to
+   quan through 3.1 and is removed in 3.2.
+4. Stop using `context-pocket-xi` in that project. There is **no migration command** and
+   no data conversion step.
+
+### What does not change
+
+- Folder name `ContextPocket/`, every file name, the T-block schema, `format: v2`.
+- Existing T / ADR / R ids, `pocket:Tn` style references, `--json` shapes.
+- Nothing is copied, renamed or rewritten. quan reads an xi pocket directly.
+
+### The one caveat
+
+xi only reads `log.md`. If you later run quan's `archive`, those turns move to
+`log-archive.md`: quan and yuan still read them, xi will not. That is a visibility
+difference, not a data migration. Until you need archiving, you can move between xi
+and quan freely in both directions.
 
 ## Compatibility guarantee
 

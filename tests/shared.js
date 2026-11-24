@@ -48,6 +48,10 @@ test('shared core: pure links and budget stay free of cache and edition modules'
   assert.ok(!/require\(/.test(budget), 'budget 必须是零依赖纯函数');
   const files = fs.readFileSync(path.join(ROOT, 'shared', 'files.js'), 'utf8');
   assert.ok(!/require\(/.test(files), 'files 必须是零依赖纯函数');
+  const rank = fs.readFileSync(path.join(ROOT, 'shared', 'rank.js'), 'utf8');
+  assert.ok(!/require\(/.test(rank), 'rank 必须是零依赖纯函数，quan / yuan 才能共用同一份公式');
+  const runtime = fs.readFileSync(path.join(ROOT, 'shared', 'mcp-runtime.js'), 'utf8');
+  assert.ok(!/require\(/.test(runtime), 'mcp-runtime 必须只依赖 Node 内建能力，保持零 require');
 });
 
 test('shared core: the sync script stays wired to the same manifest', () => {
@@ -57,18 +61,18 @@ test('shared core: the sync script stays wired to the same manifest', () => {
   assert.ok(script.includes('manifest.targets'), 'sync-core.js 必须按 manifest 同步，不能写死版本目录');
 });
 
-test('3.0 family: package names, version lines and installability are declared', () => {
+test('3.1 family: package names, version lines and installability are declared', () => {
   const editions = [
     ['package.json', 'context-pocket-quan', 'stable'],
     ['lite/package.json', 'context-pocket-xi', 'stable'],
-    ['lang/package.json', 'context-pocket-yuan', 'preview'],
+    ['lang/package.json', 'context-pocket-yuan', 'stable'],
     ['hai/package.json', 'context-pocket-hai', 'planned'],
   ];
 
   for (const [rel, name, state] of editions) {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
     assert.strictEqual(pkg.name, name, rel + ' 的包名必须是 ' + name);
-    assert.strictEqual(pkg.version, '3.0', rel + ' 必须跟 3.0 家族版本线');
+    assert.strictEqual(pkg.version, '3.1', rel + ' 必须跟 3.1 家族版本线');
     if (state === 'stable') {
       assert.ok(pkg.bin && pkg.bin[name], rel + ' 必须暴露 ' + name + ' 命令');
       assert.ok(Object.keys(pkg.bin).length >= 2, rel + ' 必须同时暴露 CLI 与 MCP 入口');
@@ -93,7 +97,7 @@ test('3.0 family: package names, version lines and installability are declared',
       encoding: 'utf8', env: process.env,
     }));
     assert.strictEqual(info.edition, edition, bin + ' 的 version --json 必须带 edition=' + edition);
-    assert.strictEqual(info.display, '3.0-' + edition, bin + ' 的展示版本漂开');
+    assert.strictEqual(info.display, '3.1-' + edition, bin + ' 的展示版本漂开');
   }
 });
 
@@ -111,6 +115,8 @@ test('edition manifests match the commands, files and modes each package ships',
   const stable = [
     ['edition.json', 'package.json', 'bin/context-pocket.js', 'quan', constants.CORE_FILES.length, 29],
     ['lite/edition.json', 'lite/package.json', 'lite/bin/context-pocket-lite.js', 'xi', liteConstants.LITE_CORE_FILES.length, 11],
+    // yuan 复用 shared/ 核心，没有自己的一套 constants 清单；coreFiles 传 null 表示跳过该断言
+    ['lang/edition.json', 'lang/package.json', 'lang/bin/context-pocket-yuan.js', 'yuan', null, 10],
   ];
 
   for (const [editionRel, pkgRel, binRel, name, coreFiles, commands] of stable) {
@@ -121,33 +127,19 @@ test('edition manifests match the commands, files and modes each package ships',
     assert.strictEqual(edition.family, pkg.version, editionRel + ' 与 ' + pkgRel + ' 的版本线漂开');
     assert.strictEqual(edition.status, 'stable', editionRel + ' 应是 stable');
     assert.strictEqual(edition.dataFormat, 'v2', editionRel + ' 必须声明数据格式 v2');
-    assert.strictEqual(edition.coreFiles, coreFiles, editionRel + ' 的 coreFiles 与 constants 不一致');
+    if (coreFiles !== null) {
+      assert.strictEqual(edition.coreFiles, coreFiles, editionRel + ' 的 coreFiles 与 constants 不一致');
+    }
     assert.strictEqual(edition.commands, commands, editionRel + ' 的 commands 与契约不一致');
     assert.strictEqual(edition.tools, edition.commands, editionRel + ' 的 tools 必须与 commands 对齐');
     assert.ok(Array.isArray(edition.modes) && edition.modes.length > 0, editionRel + ' 必须声明版本内模式');
+    assert.strictEqual(edition.plannedCommands, undefined,
+      editionRel + ' 转 stable 后不能再保留 plannedCommands（API 已冻结）');
+    assert.strictEqual(edition.plannedTools, undefined,
+      editionRel + ' 转 stable 后不能再保留 plannedTools（API 已冻结）');
 
     const bin = path.join(ROOT, binRel);
     const help = JSON.parse(execFileSync(process.execPath, [bin, 'help', '--json'], {
-      encoding: 'utf8', env: process.env,
-    }));
-    const count = help.groups.reduce((sum, group) => sum + group.commands.length, 0);
-    assert.strictEqual(edition.commands, count, editionRel + ' 的 commands 与 help --json 实际数量漂开');
-  }
-
-  const preview = [
-    ['lang/edition.json', 'lang/package.json', 'lang/bin/context-pocket-yuan.js', 'yuan', 10, 38],
-  ];
-  for (const [editionRel, pkgRel, binRel, name, commands, plannedCommands] of preview) {
-    const edition = JSON.parse(fs.readFileSync(path.join(ROOT, editionRel), 'utf8'));
-    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, pkgRel), 'utf8'));
-    assert.strictEqual(edition.edition, name, editionRel + ' 的 edition 必须是 ' + name);
-    assert.strictEqual(edition.package, pkg.name, editionRel + ' 与 ' + pkgRel + ' 的包名漂开');
-    assert.strictEqual(edition.status, 'preview', editionRel + ' 应是 preview');
-    assert.strictEqual(edition.commands, commands, editionRel + ' 的 commands 与预览契约不一致');
-    assert.strictEqual(edition.tools, edition.commands, editionRel + ' 的 tools 必须与 commands 对齐');
-    assert.strictEqual(edition.plannedCommands, plannedCommands, editionRel + ' 的目标命令数漂开');
-    assert.ok(Array.isArray(edition.modes) && edition.modes.length > 0, editionRel + ' 必须声明版本内模式');
-    const help = JSON.parse(execFileSync(process.execPath, [path.join(ROOT, binRel), 'help', '--json'], {
       encoding: 'utf8', env: process.env,
     }));
     const count = help.groups.reduce((sum, group) => sum + group.commands.length, 0);

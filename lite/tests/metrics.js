@@ -79,7 +79,7 @@ function bestStatusMs(bin, cwd) {
   return Math.min(...samples);
 }
 
-function medianExactIdMs(search, pocketDir) {
+function bestExactIdMs(search, pocketDir) {
   search(pocketDir, 'T1');
   const samples = [];
   for (let i = 0; i < 5; i++) {
@@ -87,8 +87,9 @@ function medianExactIdMs(search, pocketDir) {
     search(pocketDir, 'T1');
     samples.push(performance.now() - start);
   }
-  samples.sort((a, b) => a - b);
-  return samples[2];
+  // 取最小值而不是中位数：这个量级只有 1–3 ms，中位数容易被一次调度抖动抬高，
+  // 把「完整包不得慢过 Lite 2×」的回归锁变成随机红。最小值测的是固有成本。
+  return Math.min(...samples);
 }
 
 test('Lite metrics stay below the full package and exact T-id search skips unrelated metadata', () => {
@@ -128,18 +129,19 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     '# Preferences · T1\n' + Array.from({ length: 5000 }, (_, i) => '- preference entry ' + i + ' with descriptive words').join('\n') + '\n',
     'utf8'
   );
-  const liteExactIdMs = medianExactIdMs(liteQuery.searchAny, pocketDir);
-  const mainExactIdMs = medianExactIdMs((dir, keyword) => mainQuery.searchAny(dir, keyword, { useIndex: false }), pocketDir);
+  const liteExactIdMs = bestExactIdMs(liteQuery.searchAny, pocketDir);
+  const mainExactIdMs = bestExactIdMs((dir, keyword) => mainQuery.searchAny(dir, keyword, { useIndex: false }), pocketDir);
 
   const measured = [
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
     ['CLI commands', liteCommands, mainCommands, 11, 29],
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 29],
-    ['package files', litePack.files, mainPack.files, 33, 77],
+    ['package files', litePack.files, mainPack.files, 33, 82],
     ['cold-start module count', liteModules, mainModules, 19, null],
-    // 479.5 / 77：shared v2 把 links 拆成 links-core + 缓存外壳，并新增 budget/files；
-    // Lite 新增 shared/files.js（33 / 135.1）。总量几乎不变，是把同一份逻辑重新分层。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 135.1, 479.5],
+    // 475.4 / 82：README 收缩后是 453.9 / 77；新增 scripts/release.js（发版自动化）、
+    // 3.0 转正文档、benchmark 脚本、shared/rank.js、shared/mcp-runtime.js 与
+    // shared/graph-core.js 后按实测回填。
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 135.1, 475.4],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);
@@ -176,6 +178,6 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
   // 改锁单向带宽：完整包不得慢过 Lite 的 2×。谁把捷径退回 collectDocs 之后，
   // 5000 行偏好会让完整包慢到 Lite 的 ~6×，当场红；完整包正常比 Lite 快不会误报。
   assert.ok(mainExactIdMs < liteExactIdMs * 2,
-    `exact T-id search (median-of-5): full scan ${mainExactIdMs.toFixed(1)} ms must stay below 2x Lite ${liteExactIdMs.toFixed(1)} ms (both skip unrelated metadata)`);
-  console.log(`  metrics: modules Lite ${liteModules} / full ${mainModules}; cold status best-of-5 Lite ${liteColdMs.toFixed(1)} ms / full ${mainColdMs.toFixed(1)} ms; exact T-id median Lite ${liteExactIdMs.toFixed(1)} ms / full scan ${mainExactIdMs.toFixed(1)} ms`);
+    `exact T-id search (best-of-5): full scan ${mainExactIdMs.toFixed(1)} ms must stay below 2x Lite ${liteExactIdMs.toFixed(1)} ms (both skip unrelated metadata)`);
+  console.log(`  metrics: modules Lite ${liteModules} / full ${mainModules}; cold status best-of-5 Lite ${liteColdMs.toFixed(1)} ms / full ${mainColdMs.toFixed(1)} ms; exact T-id best-of-5 Lite ${liteExactIdMs.toFixed(1)} ms / full scan ${mainExactIdMs.toFixed(1)} ms`);
 });

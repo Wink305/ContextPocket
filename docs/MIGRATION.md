@@ -10,7 +10,7 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `3.0` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `3.1` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
 
 ### 3.0 家族：包名与命令名迁移
@@ -21,10 +21,12 @@ ContextPocket 存在两套独立的版本号，各司其职：
 |------|---------------|---------------|------|
 | 通用版 | `context-pocket-quan` | `context-pocket` | 3.0 / 3.1 保留旧名作为转发入口，3.2 移除 |
 | 轻量版 | `context-pocket-xi` | `context-pocket-lite` | 同上 |
-| 专业攻坚版 | `context-pocket-yuan` | — | 尚未发布 |
+| 专业攻坚版 | `context-pocket-yuan` | — | 3.0 起稳定；尚未发布 npm，安装走 Release 归档或 git clone |
 | 协作强化版 | `context-pocket-hai` | — | 尚未发布 |
 
 MCP 入口同名：`context-pocket-quan-mcp` / `context-pocket-xi-mcp`；旧的 `context-pocket-mcp` / `context-pocket-lite-mcp` 同样保留到 3.1。**数据格式与口袋目录不变**（仍为 `ContextPocket/` + format v2），换包不需要迁移数据；只是命令名和 npm 包名换了。已安装旧包的机器可以继续用旧命令，也可以改装新包后按新命令调用。
+
+> **xi → quan 何时升级、怎么升**：见 [`lite/README.md`](../lite/README.md) 的 “When to upgrade to quan” 一节。结论是无需迁移：同一个 `ContextPocket/`、同一套文件与 format v2，只换可执行入口。
 
 ### 兼容性原则
 

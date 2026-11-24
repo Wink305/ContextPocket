@@ -209,7 +209,7 @@ function cmdWorkspace(options) {
   }
 
   if (action === 'status') {
-    const result = statusWorkspace(root);
+    const result = statusWorkspace(root, { health: true });
     if (options.json) { emitJson(Object.assign({ ok: true }, result)); return; }
     process.stdout.write('\n  Workspace ' + result.name + '\n');
     for (const pocket of result.pockets) {
@@ -221,6 +221,20 @@ function cmdWorkspace(options) {
         + ' · ' + pocket.blocks + ' block(s) · ' + pocket.openRequirements + ' open req · '
         + pocket.adrs + ' ADR\n');
     }
+    const index = result.health.index;
+    const map = result.health.repoMap;
+    process.stdout.write('    Health\n');
+    process.stdout.write('      index: ' + (index.present
+      ? (index.fresh ? 'fresh' : 'stale') + ' · ' + index.docsCount + ' doc(s)'
+      : 'missing') + (index.present ? '' : ' (run "workspace index")') + '\n');
+    process.stdout.write('      repo map: ' + (map.present
+      ? map.files + ' file(s) · ' + map.symbols + ' symbol(s)'
+      : 'missing') + (map.present ? '' : ' (run "map update")') + '\n');
+    const graph = result.health.graph;
+    process.stdout.write('      graph: ' + (graph.present
+      ? (graph.fresh ? 'fresh' : 'stale') + ' · ' + graph.nodes + ' node(s) · '
+        + graph.crossPocketEdges + ' cross-pocket edge(s)'
+      : 'missing') + (graph.present ? '' : ' (run "context build --expand 1")') + '\n');
     process.stdout.write('\n');
     return;
   }
@@ -312,6 +326,7 @@ function cmdMap(options) {
     const result = updateMap(root);
     if (options.json) emitJson(Object.assign({ ok: true }, result, { map: undefined }));
     else process.stdout.write('\n  Repo map updated: ' + result.count + ' file(s)'
+      + ' · ' + result.reused + ' reused · ' + result.rescanned + ' rescanned'
       + (result.truncated ? ' (truncated at maxFiles)' : '') + '\n     ' + result.path + '\n\n');
     return;
   }
@@ -351,6 +366,10 @@ function cmdContext(options) {
     includeRepoMap: options['no-repo-map']
       ? false
       : (mode.profile.includeRepoMap !== undefined ? mode.profile.includeRepoMap : true),
+    expand: options.expand,
+    asOf: options['as-of'],
+    graphEdges: options['graph-edges'],
+    graphNearDays: options['graph-near-days'],
   };
   if (action === 'build') {
     const result = buildContext(root, params);
@@ -409,6 +428,7 @@ function cmdDecay(options) {
     minTurns: options['min-turns'],
     pockets: options.pockets,
     today: options.today,
+    apply: !!options.apply,
   });
   if (options.json) { emitJson(result, result.ok ? 0 : 1); return; }
   process.stdout.write('\n' + result.content + '\n');
@@ -420,6 +440,9 @@ function cmdCapture(options) {
   const file = options.action || (options.positional || [])[0];
   const result = captureWorkspace(root, {
     file,
+    pr: options.pr,
+    run: options.run,
+    repo: options.repo,
     pocket: options.pocket,
     kind: options.kind,
     gist: options.gist,
@@ -503,6 +526,33 @@ function printConsolidatePocket(pocket) {
   }
 }
 
+function printConsolidateCross(cross) {
+  const adrs = cross.adrs.groups;
+  const requirements = cross.requirements.groups;
+  const preferences = cross.preferences.duplicates.concat(cross.preferences.conflicts);
+  if (adrs.length === 0 && requirements.length === 0 && preferences.length === 0) return;
+
+  process.stdout.write('    Cross-pocket (manual)\n');
+  for (const group of adrs) {
+    const items = group.items.map((item) => item.pocket + ' ' + item.id).join(', ');
+    process.stdout.write('      ↳ ADR "' + group.key + '": ' + items
+      + (group.conflict ? ' · conflicting decisions' : '') + '\n');
+  }
+  for (const group of requirements) {
+    const items = group.items.map((item) => item.pocket + ' ' + item.id).join(', ');
+    process.stdout.write('      ↳ req "' + group.key + '": ' + items
+      + (group.conflict ? ' · status differs' : '') + '\n');
+  }
+  for (const group of cross.preferences.duplicates) {
+    const items = group.items.map((item) => item.pocket + ' L' + item.line).join(', ');
+    process.stdout.write('      ↳ pref "' + group.key + '": ' + items + ' · same value\n');
+  }
+  for (const group of cross.preferences.conflicts) {
+    const items = group.items.map((item) => item.pocket + ' L' + item.line).join(', ');
+    process.stdout.write('      ↳ pref conflict "' + group.key + '": ' + items + '\n');
+  }
+}
+
 function cmdConsolidate(options) {
   const root = workspaceRootFor(options);
   const result = consolidateWorkspace(root, {
@@ -519,12 +569,16 @@ function cmdConsolidate(options) {
     }
     printConsolidatePocket(pocket);
   }
+  printConsolidateCross(result.crossPocket);
   const totals = result.totals;
+  const crossGroups = totals.crossPocketAdrGroups + totals.crossPocketRequirementGroups
+    + totals.crossPocketPreferenceDuplicates + totals.crossPocketPreferenceConflicts;
   process.stdout.write('    Total: ' + totals.duplicateAdrs + ' ADR duplicate(s) · '
     + totals.duplicateRequirements + ' requirement duplicate(s) · '
     + totals.preferenceDuplicates + ' pref duplicate(s) · '
     + totals.preferenceConflicts + ' pref conflict(s) · '
-    + totals.removedPreferences + ' removed'
+    + totals.removedPreferences + ' removed · '
+    + crossGroups + ' cross-pocket group(s)'
     + (result.mode === 'plan' ? ' (run with --apply to remove exact preference duplicates)' : '') + '\n\n');
   if (!result.ok) process.exitCode = 1;
 }

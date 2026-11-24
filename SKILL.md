@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 3.0
+version: 3.1
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -77,7 +77,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Check whether changed code went unrecorded | `verify` with `drift: true` (`--drift`) | warning naming the files whose mtime is later than the last record (works without git; never blocks a commit) |
 | Fill in a missing turn | `log amend` | `✅ T7 filled: User` |
 | Find who changed a file | `why <path>` (`--expand <1–3>` for graph context; `--as-of <T>` for a historical slice) | matching turns split by evidence, plus related graph nodes when requested |
-| Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`; `--expand <1–3>` for graph context) | matching T-blocks, window applied before paging; optional graph context never changes match order |
+| Find an earlier turn by keyword or window | `search <kw>` (`--since/--until/--from/--to`, MCP: `sinceT/untilT/fromDate/toDate`; `--rank bm25` / MCP `rank: "bm25"` for BM25 ordering; `--expand <1–3>` for graph context) | matching T-blocks, window applied before paging; optional graph context never changes match order |
 | Find how another project solved X | `hub search <kw>` (MCP: `context_pocket_hub` with `action=search`) | matches grouped by project, read-only; skips isolated projects and never writes indexes |
 | Recall one turn | `recall T<n>` | the full T-block |
 | Recall one turn **with its surroundings** | `recall T<n> --with-context` (MCP: `withContext`) | the T-block plus its inbound context: who referenced it, later changes to the same files, related ADRs |
@@ -89,7 +89,7 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Repair duplicated or stale T-numbers | `repair` (`--dry-run` first, MCP: `context_pocket_repair`) | the renumber plan + the list of prose still naming an old id. Never hand-edit the numbering and never `git commit --no-verify` around it — see SKILL-advanced.md「并发与撞号（多 Agent）」 |
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | "补了 N 个" |
 | Import an earlier session | `import` | "导入了 N 轮" |
-| Merge another machine/agent's pocket | `merge --from <other>/ContextPocket` (MCP: `context_pocket_merge`) | counts + report path; source is read-only, conflicts go to `merge-<date>.md` |
+| Merge another machine/agent's pocket | `merge --from <other>/ContextPocket` (MCP: `context_pocket_merge`); `merge report --apply <id>` for safe review items | counts + report path; source is read-only, conflicts go to `merge-<date>.md`; apply replays requirement/preference/state and **missing** code-map descriptions only |
 | Distill older turns | `distill` | report written; **agent then judges + merges by hand** |
 | Export a snapshot for a teammate | agent writes the snapshot file itself (no tool) | the file path |
 | Archive and start over | `archive --keep-last N`, then rebuild | **confirm with the user first** |

@@ -224,15 +224,22 @@ context-pocket/
    （整天区间 `--when` 落盘、坏行被 verify/archive 拦住、`stated:` 原话不误报、删行后 amend 补回、
    缺必填小节当场警告且 `--json` 的 `missingSections` 准、`distill --json` 报告的窗口数字与实际一致），
    全部走真实 CLI 子进程 + 临时 hub，退出即删。它比日常套件慢，所以不进 `npm test`，只做发版前的最后一道闸。
+
+   > **3.0 起优先用发版脚本**：`node scripts/release.js <xi|quan|yuan>`（或 `npm run release -- <edition>`）。
+   > 它把下面第 5–7 步串成一条流水线：五道门禁 → `npm pack` → 解包生成 `<tag>/` 目录的 zip →
+   > 从 CHANGELOG / `edition.json` 生成 notes → `gh release create`。**默认 dry run**，只打包不发布；
+   > 核对产物后加 `--yes` 才创建 Release。手动步骤保留作为脚本失败时的对照。
+   >
+   > 大工作区性能回归用 `npm run bench`（默认 10 口袋 × 1000 轮，报告 search / context / audit 的 cold / warm 延迟）。
 5. 新增过文件就跑一次 `npm pack --dry-run`，核对 `package.json` 的 `files` 白名单真的把它带上了。
    落在 `bin/` `lib/` `templates/` `assets/` `docs/` `scripts/` 里的会自动带上；白名单外的目录要显式加，
    否则发布出去的包缺文件，用户拿到的就是"读不到 package.json、只能报兜底版本"那种安装。
 6. 创建 Git tag: `git tag X.Y.Z`（2.0.1-hotfix1 起改为「以后不要v了」，tag 不再带 v 前缀；
    历史 tag 全是 lightweight，别用 `-a` 另外造出 annotated tag 让口径分叉），
    再 `git push origin X.Y.Z`。`.github/workflows/ci.yml` 的
-   `on.push.tags: ['[0-9]*', 'v*']` 会让这次 tag 推送自己也跑一遍四道门禁
-   （`[0-9]*` 认新命名、`v*` 兼容历史 tag）；`tests/unit.js` 有一条用例盯着这个触发条件
-   和四条命令，别误删。
+   `on.push.tags: ['[0-9]*', 'v*', 'ContextPocket-*']` 会让这次 tag 推送自己也跑一遍五道门禁
+   （`[0-9]*` 认裸版本、`v*` 兼容历史 tag、`ContextPocket-*` 认 3.0 家族），矩阵覆盖 Node 18 / 20 / 22；
+   `tests/unit.js` 有一条用例盯着这个触发条件、五条命令、矩阵与 actions 版本，别误删。
 7. 等 tag 那条 run 也 `completed · success` 再创建 GitHub Release，粘贴 CHANGELOG 摘要。
    `gh run list --limit 5` 里应能同时看到 main 与 tag 两条 run，任一红都先回去修，别发 Release。
    1.5.1 的教训：那时只有 `push main` 触发 CI，tag 发完才发现挂的是一条红 run。

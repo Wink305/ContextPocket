@@ -136,6 +136,37 @@ test('cli: index vs --no-index search return the same hits in the same order', (
   assert.ok(viaIndex.results.some((r) => r.type === 'R'), '需求应可被搜到');
 });
 
+test('cli: search --rank bm25 reorders matches without changing the hit set', () => {
+  const { pocketDir } = makePocket('cli-search-bm25');
+  runCli(['log', 'append', '--gist', 'alpha short', '--user', 'u', '--action', 'a', '--json'], pocketDir);
+  const filler = Array.from({ length: 80 }, (_, i) => 'filler' + i).join(' ');
+  runCli(['log', 'append', '--gist', 'alpha long', '--user', 'u',
+    '--action', 'touched ' + filler + ' files', '--json'], pocketDir);
+
+  const plain = parseJsonLine(runCli(['search', 'alpha', '--json'], pocketDir));
+  const bm25 = parseJsonLine(runCli(['search', 'alpha', '--rank', 'bm25', '--json'], pocketDir));
+
+  assert.strictEqual(plain.rank, undefined, '默认排序不应新增 rank 字段');
+  assert.strictEqual(bm25.rank, 'bm25');
+  assert.strictEqual(bm25.total, plain.total, 'BM25 只换顺序，不换命中集合');
+  assert.deepStrictEqual(
+    bm25.results.map(rowKey).slice().sort(),
+    plain.results.map(rowKey).slice().sort(),
+    '两条排序的命中集合必须相同'
+  );
+  assert.notDeepStrictEqual(plain.results.map(rowKey), bm25.results.map(rowKey),
+    'BM25 必须真的重排：' + JSON.stringify({ plain: plain.results, bm25: bm25.results }));
+  assert.strictEqual(bm25.results[0].gist, 'alpha short', '短文档在 BM25 下应排前');
+
+  const scanned = parseJsonLine(runCli(['search', 'alpha', '--rank', 'bm25', '--no-index', '--json'], pocketDir));
+  assert.deepStrictEqual(scanned.results.map(rowKey), bm25.results.map(rowKey),
+    'BM25 在索引与现场扫描两条路径上必须同序');
+
+  const bad = runCli(['search', 'alpha', '--rank', 'nope', '--json'], pocketDir);
+  assert.strictEqual(bad.code, 1);
+  assert.match(parseJsonLine(bad).error, /--rank must be bm25/);
+});
+
 test('cli: search --limit/--offset page without hiding the total', () => {
   const { pocketDir } = makePocket('cli-search-page');
   for (let i = 1; i <= 5; i++) {

@@ -42,6 +42,7 @@ const {
   toPlausibleId,
   MAX_PLAUSIBLE_ID,
 } = require('./parser');
+const { termStats, bm25Score } = require('./rank');
 
 // v3：T 文档不再重复存整段 text（内容由 gist/tags/sections 承载），
 // 检索语义也统一到"分词 AND + 同一份命中整形"，旧缓存必须整体作废重建
@@ -51,7 +52,8 @@ const {
 // v6：T 文档和 FIX 文档带上 when（结构等价于 parseWhenLine 的返回值）——
 //     T 文档直接带本块 when，FIX 文档带它更正的那轮（targetId）的 when。
 //     文档结构变了，旧缓存作废。
-const INDEX_VERSION = 6;
+// v7：文档带上 length、索引带上 avgLength（可选 BM25 排序用）；结构变了，旧缓存作废。
+const INDEX_VERSION = 7;
 const MAX_DOC_TEXT = 4000; // 非 T 文档存进索引的最大字符数（用于命中后校验/高亮）
 const CJK_RUN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]+/g;
 const CJK_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
@@ -372,15 +374,19 @@ function docFields(doc) {
   }
 }
 
-/** 把一篇文档的词元并进入 postings（同一 term 命中多字段时取最大权重） */
+/** 把一篇文档的词元并进入 postings（同一 term 命中多字段时取最大权重），返回文档长度 */
 function addPostings(postings, key, doc) {
+  let length = 0;
   for (const [text, weight] of docFields(doc)) {
     if (!text) continue;
-    for (const term of tokenize(text)) {
+    const terms = tokenize(text);
+    length += terms.length;
+    for (const term of terms) {
       const cell = postings[term] || (postings[term] = {});
       if (!cell[key] || cell[key] < weight) cell[key] = weight;
     }
   }
+  return length;
 }
 
 /**
@@ -430,7 +436,7 @@ function buildIndex(pocketDir, opts = {}) {
   for (const [key, doc] of docs) {
     const withHash = { ...doc, hash: docHash(doc) };
     const prev = old && old.docs[key];
-    if (prev && prev.hash === withHash.hash) {
+    if (prev && prev.hash === withHash.hash && Number.isInteger(prev.length)) {
       finalDocs[key] = prev;
       reused++;
       continue;
@@ -476,16 +482,27 @@ function buildIndex(pocketDir, opts = {}) {
   let postings;
   if (old && old.postings) {
     postings = dropPostings(old.postings, stale);
-    for (const f of fresh) addPostings(postings, f.key, f.doc);
   } else {
     postings = {};
-    for (const [key, doc] of Object.entries(finalDocs)) addPostings(postings, key, doc);
   }
+  // fresh 在 old 为空时就是全部文档；addPostings 顺手返回文档长度，供 BM25 用
+  for (const f of fresh) {
+    f.doc.length = addPostings(postings, f.key, f.doc);
+  }
+
+  let totalLength = 0;
+  for (const doc of Object.values(finalDocs)) {
+    totalLength += Number.isInteger(doc.length) ? doc.length : 0;
+  }
+  const avgLength = Object.keys(finalDocs).length > 0
+    ? totalLength / Object.keys(finalDocs).length
+    : 0;
 
   const index = {
     version: INDEX_VERSION,
     builtAt: new Date().toISOString(),
     latestT,
+    avgLength,
     sources: sourceSignature(pocketDir),
     docs: finalDocs,
     postings,
@@ -544,6 +561,19 @@ function sameSig(a, b) {
 
 function normText(s) {
   return String(s || '').toLowerCase().replace(/\\/g, '/');
+}
+
+/**
+ * 文档的 BM25 统计：查询词元的词频 + 全文字词长度。
+ * 只对候选文档调用时，`wanted` 可以限制词频只数查询词，长度仍然按全文字算。
+ */
+function docStats(doc, wanted) {
+  const tokenLists = [];
+  for (const [text] of docFields(doc)) {
+    if (!text) continue;
+    tokenLists.push(tokenize(text));
+  }
+  return termStats(tokenLists, wanted);
 }
 
 /**
@@ -657,14 +687,19 @@ function shapeHits(docs, candidates, tokens) {
 /**
  * 用倒排索引搜索（分词 AND + 子串校验）
  *
+ * 默认排序是"字段权重累加"（历史行为，确定性回归锁盯着它）；
+ * `opts.rank === 'bm25'` 时只把候选文档按 BM25 重排，命中集合不变。
+ *
  * 不在这里截断结果：截断会让"命中多少条"变成"至少这么多"的猜测，
  * 而分页与 --json 都需要真实总数。limit / offset 由 lib/query.js 的 searchAny 统一施加。
  *
  * @param {string} pocketDir
  * @param {string} keyword
+ * @param {object} [opts]
+ * @param {'bm25'} [opts.rank] - 可选排序；默认权重累加保持不变
  * @returns {object[]|null} null = 索引或查询不可用（调用方回退全量扫描）
  */
-function searchWithIndex(pocketDir, keyword) {
+function searchWithIndex(pocketDir, keyword, opts = {}) {
   const index = ensureFreshIndex(pocketDir);
   if (!index) return null;
 
@@ -689,9 +724,35 @@ function searchWithIndex(pocketDir, keyword) {
     }
   }
 
-  const candidates = Object.keys(scores)
-    .filter(key => hits[key] === tokens.length)
-    .map(key => ({ key, score: scores[key] }));
+  const keys = Object.keys(scores).filter((key) => hits[key] === tokens.length);
+
+  let candidates;
+  if (opts.rank === 'bm25') {
+    const totalDocs = Object.keys(index.docs).length;
+    const avgLength = index.avgLength || 1;
+    const wanted = new Set(tokens);
+    const df = {};
+    for (const term of tokens) {
+      df[term] = index.postings[term] ? Object.keys(index.postings[term]).length : 0;
+    }
+    candidates = keys.map((key) => {
+      const doc = index.docs[key];
+      const stats = docStats(doc, wanted);
+      return {
+        key,
+        score: bm25Score({
+          tf: stats.counts,
+          length: stats.length,
+          avgLength,
+          terms: tokens,
+          df,
+          totalDocs,
+        }),
+      };
+    });
+  } else {
+    candidates = keys.map((key) => ({ key, score: scores[key] }));
+  }
 
   return shapeHits(index.docs, candidates, tokens);
 }
@@ -701,13 +762,15 @@ function searchWithIndex(pocketDir, keyword) {
  *
  * 与 searchWithIndex 严格同一套语义（同一个 tokenize、同样的分词 AND、
  * 同一份 shapeHits 与排序），所以 `--no-index` 与走索引必然给出数量、顺序、
- * 形状都相同的结果。旧实现这里是另一套"子串包含"匹配，多词查询会与索引路径互相矛盾。
+ * 形状都相同的结果。可选 BM25 排序也在两条路径上使用同一个打分公式。
  *
  * @param {string} pocketDir
  * @param {string} keyword
+ * @param {object} [opts]
+ * @param {'bm25'} [opts.rank]
  * @returns {object[]}
  */
-function scanAll(pocketDir, keyword) {
+function scanAll(pocketDir, keyword, opts = {}) {
   const kw = String(keyword || '').trim();
   if (!kw) return [];
 
@@ -720,6 +783,39 @@ function scanAll(pocketDir, keyword) {
 
   const tokens = tokenize(kw);
   if (tokens.length === 0) return [];
+
+  if (opts.rank === 'bm25') {
+    const totalDocs = docs.size;
+    const wanted = new Set(tokens);
+    const all = [];
+    const df = {};
+    let totalLength = 0;
+    for (const [key, doc] of docs) {
+      const stats = docStats(doc, wanted);
+      all.push({ key, counts: stats.counts, length: stats.length });
+      totalLength += stats.length;
+      for (const term of Object.keys(stats.counts)) {
+        df[term] = (df[term] || 0) + 1;
+      }
+    }
+    const avgLength = totalDocs > 0 ? totalLength / totalDocs : 0;
+    const candidates = [];
+    for (const entry of all) {
+      if (!tokens.every((term) => (entry.counts[term] || 0) > 0)) continue;
+      candidates.push({
+        key: entry.key,
+        score: bm25Score({
+          tf: entry.counts,
+          length: entry.length,
+          avgLength,
+          terms: tokens,
+          df,
+          totalDocs,
+        }),
+      });
+    }
+    return shapeHits(byKey, candidates, tokens);
+  }
 
   const candidates = [];
   for (const [key, doc] of docs) {

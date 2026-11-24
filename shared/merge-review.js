@@ -6,11 +6,13 @@
  * merge 会把无法自动合并的内容写进 merge-<date>.md；这个模块把同样的建议
  * 以结构化 JSON 落到 merge-<date>.json，供 `merge report --apply <id>` 逐项应用。
  *
- * 只处理三类可以安全重放的项：
+ * 只处理四类可以安全重放的项：
  *   - 需求状态冲突：目标需求按源状态迁移，前提是目标仍停在合并时记录的状态
  *   - 偏好冲突：把目标值改成源值，前提是目标值仍等于合并时记录的目标值
  *   - 源 state 建议：summary / next steps / pitfalls 中目标尚未出现的行
- * code-map 与附件冲突仍留在 Markdown 报告里，保持人工复核。
+ *   - code-map "目标缺失"：只给目标树里存在、但没有真实描述的文件补上源描述；
+ *     "目标已有不同描述"（different）仍留在 Markdown 报告里人工复核
+ * 附件冲突仍留在 Markdown 报告里，保持人工复核。
  *
  * 幂等：应用前逐项比对当前值；重复 --apply 不会写第二遍。
  */
@@ -18,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { writeAtomic, readTextOr, withPocketLock } = require('./io');
+const { writeAtomic, readTextOr, withPocketLock, sanitizeInline } = require('./io');
 const { fileExists, isPlaceholderLine } = require('./core');
 const { parseLog, parseRequirements } = require('./parser');
 const writer = require('./writer');
@@ -71,11 +73,20 @@ function codeMapCount(suggestions) {
   return codeMap ? 1 : 0; // 旧 sidecar 只有 boolean
 }
 
+/**
+ * 应用后仍未处理的 code-map 项：missing 已补的从 pending 里消失，
+ * different / 目标树里没有路径 / 已被别人补过 的仍算人工待办。
+ */
+function pendingCodeMap(review) {
+  if (!review.appliedAt) return codeMapCount(review.suggestions || {});
+  return (review.skipped || []).filter((item) => item.type === 'code-map').length;
+}
+
 function reviewPending(review) {
   const s = review.suggestions || {};
   const state = stateLines(s.state);
   return (s.reqStatus || []).length + (s.pref || []).length
-    + codeMapCount(s)
+    + pendingCodeMap(review)
     + state.summary.length + state.nextSteps.length + state.pitfalls.length;
 }
 
@@ -86,7 +97,7 @@ function summarize(review) {
     source: review.source,
     target: review.target,
     pending: reviewPending(review),
-    manual: codeMapCount(review.suggestions || {}),
+    manual: pendingCodeMap(review),
     appliedAt: review.appliedAt || null,
     appliedCount: (review.applied || []).length,
     skippedCount: (review.skipped || []).length,
@@ -242,6 +253,100 @@ function applyStateSuggestions(pocketDir, state, applied, skipped) {
   }
 }
 
+const CODE_MAP_TODO = '⚠️ TODO: add description';
+
+/**
+ * 只给"目标 code-map 树里已经存在、但没有真实描述"的文件补描述。
+ *
+ * 安全边界：
+ *   - 不重扫目录、不重建树、不改文件清单，只在现有行尾追加 `→ 描述`；
+ *   - reason="different"（目标已有不同描述）永远跳过，交给人工；
+ *   - 目标树里没有这个路径也跳过，不替人新增节点；
+ *   - 描述先 sanitizeInline，且只取第一行，不能伪造结构行。
+ */
+function applyCodeMapSuggestions(pocketDir, suggestions, applied, skipped) {
+  if (suggestions && !Array.isArray(suggestions)) {
+    skipped.push({ type: 'code-map', count: 1, reason: 'manual review (legacy boolean suggestion)' });
+    return;
+  }
+  const entries = Array.isArray(suggestions) ? suggestions : [];
+  const missing = new Map();
+  for (const item of entries) {
+    if (!item || !item.path) continue;
+    if (item.reason === 'different') {
+      skipped.push({ type: 'code-map', path: item.path, reason: 'manual review (target description differs)' });
+      continue;
+    }
+    if (item.reason === 'missing' && item.description) missing.set(item.path, item);
+  }
+  if (missing.size === 0) return;
+
+  const file = path.join(pocketDir, 'code-map.md');
+  const content = readTextOr(file, '');
+  const block = /(## Structure\n+(?:[^\n]*\n)*?```\n)([\s\S]*?)(```)/.exec(content);
+  if (!block) {
+    for (const item of missing.values()) {
+      skipped.push({ type: 'code-map', path: item.path, reason: 'target code-map has no Structure block' });
+    }
+    return;
+  }
+
+  const lines = block[2].split('\n');
+  const dirsAtDepth = [];
+  let changed = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const connIdx = raw.search(/[├└]/);
+    const depth = connIdx === -1 ? 0 : Math.floor(connIdx / 4);
+    const bodyStart = connIdx === -1 ? 0 : connIdx + 4;
+    const body = raw.slice(bodyStart).trim();
+    if (!body) continue;
+
+    const entryMatch = body.match(/^(.+?)\s*→\s*(.+)$/);
+    const name = (entryMatch ? entryMatch[1] : body).trim();
+    const desc = entryMatch ? entryMatch[2].trim().split('\n')[0] : '';
+    const isDir = name.endsWith('/');
+    const fullPath = dirsAtDepth.slice(0, depth).join('') + name;
+
+    if (isDir) {
+      dirsAtDepth[depth] = name;
+      dirsAtDepth.length = depth + 1;
+      continue;
+    }
+
+    const item = missing.get(fullPath);
+    if (!item) continue;
+    missing.delete(fullPath);
+
+    if (desc && desc !== CODE_MAP_TODO) {
+      skipped.push({ type: 'code-map', path: fullPath, reason: 'already described' });
+      continue;
+    }
+
+    const clean = sanitizeInline(String(item.description || '').split('\n')[0]).trim();
+    if (!clean) {
+      skipped.push({ type: 'code-map', path: fullPath, reason: 'empty description' });
+      continue;
+    }
+
+    lines[i] = raw.slice(0, bodyStart) + name + ' → ' + clean;
+    applied.push({ type: 'code-map', path: fullPath, description: clean });
+    changed += 1;
+  }
+
+  for (const item of missing.values()) {
+    skipped.push({ type: 'code-map', path: item.path, reason: 'not in target code-map tree' });
+  }
+
+  if (changed > 0) {
+    const next = content.slice(0, block.index)
+      + block[1] + lines.join('\n') + block[3]
+      + content.slice(block.index + block[0].length);
+    writeAtomic(file, next);
+  }
+}
+
 /**
  * 应用一份复核记录。
  * @returns {object} { ok, alreadyApplied?, error?, review?, applied?, skipped? }
@@ -320,14 +425,7 @@ function applyReview(pocketDir, id) {
     }
 
     applyStateSuggestions(pocketDir, stateLines(review.suggestions.state), applied, skipped);
-
-    if (codeMapCount(review.suggestions || {}) > 0) {
-      skipped.push({
-        type: 'code-map',
-        count: codeMapCount(review.suggestions || {}),
-        reason: 'manual review (source code-map was not merged)',
-      });
-    }
+    applyCodeMapSuggestions(pocketDir, review.suggestions.codeMap, applied, skipped);
 
     review.appliedAt = new Date().toISOString();
     review.applied = applied;

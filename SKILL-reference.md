@@ -243,6 +243,8 @@ Append to the **end**. Never rewrite existing blocks.
 
 **"上午/下午"这类修饰语没有结构位。** 认得出日期时（`--when "<日期> 上午"`）落盘的是 `<日期> (day)`，修饰语不进去；要把这句话说全，就别带日期、让它整句走 `stated:`。
 
+**WHEN 不带时区字段。** 时刻按记录方本地时间理解；跨时区合并只按文本比较，不做 UTC 换算。这是 format v2 的既定语义，不是缺陷——只有跨时区合并成为真实痛点时才评估 v3，不提前加字段。
+
 **看到 `has a broken time line` 这条 ERROR 别去解释它。** 1.1.0 把整天区间的端点取成了 `undefined`，写出来是 `--- WHEN: undefined → undefined ---` 或 `--- WHEN: <日期> <时刻> → undefined ---`（`lib/when.js:140` 的 `pointValue` 修掉了写入侧，这一条只负责照出历史里的坏行）。那一行没有 `stated: ` 前缀，而工具写原话一定要带前缀，所以它不是用户原话行。处理：删掉那一行 → `context-pocket log amend <T> --when "<日期> → <日期>"`（amend 从不覆盖已记下的时间，必须先删）。带前缀的原话行永远不报，因为 ERROR 会拦住 `archive`/`migrate`/pre-commit，用户逐字说过 "undefined" 不该变成挡门的理由。
 
 v1 的 pocket 里没有这一行，也不会被偷偷加：先 `context-pocket migrate --to latest` 才会开始写（`verify` 会用一条 WARNING 提醒有升级可走，绝不拦提交）。在 v1 里传了 `--when`，块照记、这一行不写，工具会把原因回给你（CLI/MCP 文本里一行 `⚠️ pocket 还是 v1 格式…`，`--json` 里是 `whenSkipped`），别当成已经记下了。旧版解析器会忽略标题与第一个 `###` 之间的行，所以这一行对它们是安全的加法。

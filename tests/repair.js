@@ -672,6 +672,64 @@ test('merge: source code-map descriptions are reported for existing target files
   assert.ok(reviews.some((review) => review.manual >= 1), JSON.stringify(reviews));
 });
 
+test('merge report --apply fills only missing code-map descriptions, never overwrites different ones', () => {
+  const target = makePocket('merge-codemap-apply-target');
+  const source = makePocket('merge-codemap-apply-source');
+  addTurn(target.pocketDir, 'target base');
+  addTurn(source.pocketDir, 'source first');
+  fs.writeFileSync(path.join(target.projectDir, 'pinned.js'), '// pinned\n', 'utf-8');
+
+  writePocketFile(source.pocketDir, 'code-map.md', [
+    '# Code Map',
+    '',
+    '## Structure',
+    '',
+    '```',
+    'app.js → 源描述',
+    'pinned.js → 源 pinned',
+    '```',
+    '',
+  ].join('\n'));
+  writePocketFile(target.pocketDir, 'code-map.md', [
+    '# Code Map',
+    '',
+    '## Structure',
+    '',
+    '```',
+    'app.js',
+    'pinned.js → 目标 pinned',
+    '```',
+    '',
+  ].join('\n'));
+
+  const merged = merge.mergePocket(target.pocketDir, { from: source.pocketDir });
+  assert.strictEqual(merged.ok, true, JSON.stringify(merged));
+  const reviewId = merged.reviewId;
+  assert.ok(reviewId, 'code-map 建议必须落一份可复核记录：' + JSON.stringify(merged));
+
+  const before = mergeReview.listReviews(target.pocketDir).find((r) => r.id === reviewId);
+  assert.ok(before.manual >= 2, JSON.stringify(before));
+
+  const applied = mergeReview.applyReview(target.pocketDir, reviewId);
+  assert.strictEqual(applied.ok, true, JSON.stringify(applied));
+  assert.ok(applied.applied.some((item) => item.type === 'code-map' && item.path === 'app.js'),
+    JSON.stringify(applied.applied));
+  assert.ok(applied.skipped.some((item) => item.type === 'code-map' && item.path === 'pinned.js'
+    && /differs/.test(item.reason)), JSON.stringify(applied.skipped));
+
+  const map = readPocketFile(target.pocketDir, 'code-map.md');
+  assert.match(map, /app\.js → 源描述/, map);
+  assert.match(map, /pinned\.js → 目标 pinned/, 'different 描述绝不能被覆盖：\n' + map);
+  assert.ok(!/app\.js → ⚠️ TODO/.test(map), map);
+
+  const after = mergeReview.listReviews(target.pocketDir).find((r) => r.id === reviewId);
+  assert.strictEqual(after.manual, 1, '只有 different 那一条还应留在人工待办：' + JSON.stringify(after));
+
+  const again = mergeReview.applyReview(target.pocketDir, reviewId);
+  assert.strictEqual(again.ok, true);
+  assert.strictEqual(again.alreadyApplied, true);
+});
+
 test('merge: archive is skipped by default and merged with --include-archive', () => {
   const target = makePocket('merge-archive-target');
   const source = makePocket('merge-archive-source');

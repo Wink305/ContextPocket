@@ -14,6 +14,7 @@
 const { readManifest, resolvePocket, parsePocketAll } = require('./workspace');
 const { verifyWorkspace, pendingMergeReviews } = require('./diagnostics');
 const { inspectIndex } = require('./workspace-index');
+const { inspectWorkspaceGraph } = require('./workspace-graph');
 const { whenDate } = require('./recap');
 
 function positiveInt(value) {
@@ -144,15 +145,24 @@ function render(result) {
 
   const repo = result.health.repoMap;
   if (repo) {
-    lines.push('- repo map: ' + (repo.ok
-      ? (repo.missing ? 'missing (run "context-pocket-yuan map update")' : 'in sync')
-      : 'drift · added ' + repo.added.length + ', removed ' + repo.removed.length + ', changed ' + repo.changed.length));
+    lines.push('- repo map: ' + (!repo.ok && repo.missing
+      ? 'missing (run "context-pocket-yuan map update")'
+      : (repo.ok
+        ? 'in sync'
+        : 'drift · added ' + repo.added.length + ', removed ' + repo.removed.length + ', changed ' + repo.changed.length)));
   }
 
   const index = result.health.index;
   lines.push('- index: ' + (index.present
     ? (index.fresh ? 'fresh' : 'stale (run "context-pocket-yuan workspace index")') + ' · ' + index.docsCount + ' doc(s)'
     : 'missing (run "context-pocket-yuan workspace index")'));
+
+  const graph = result.health.graph;
+  lines.push('- graph: ' + (graph.present
+    ? (graph.fresh
+      ? 'fresh · ' + graph.nodes + ' node(s) · ' + graph.crossPocketEdges + ' cross-pocket edge(s)'
+      : 'stale (run "context build --expand 1" to rebuild)')
+    : 'missing (run "context build --expand 1")'));
   lines.push('- pending merge reviews: ' + result.totals.pendingReviews);
 
   for (const warning of result.health.warnings) lines.push('- ⚠️ ' + warning);
@@ -222,6 +232,7 @@ function auditWorkspace(root, options = {}) {
   const window = buildWindow(options);
   const verify = verifyWorkspace(root, { deep: true });
   const index = inspectIndex(root);
+  const graph = inspectWorkspaceGraph(root);
 
   let entries = manifest.pockets;
   if (options.pockets) {
@@ -248,6 +259,7 @@ function auditWorkspace(root, options = {}) {
     adrsInRange: sum('adrsInRange'),
     closed: sum('closed'),
     pendingReviews: sum('reviews'),
+    crossPocketEdges: graph.present ? graph.crossPocketEdges : 0,
   };
 
   const result = {
@@ -262,6 +274,7 @@ function auditWorkspace(root, options = {}) {
       missingPockets: verify.checks.missingPockets,
       repoMap: verify.checks.repoMap,
       index,
+      graph,
       pendingReviews: totals.pendingReviews,
     },
     totals,

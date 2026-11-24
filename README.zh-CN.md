@@ -1,190 +1,119 @@
 # ContextPocket
 
-> **[English](README.md)** · [文档目录](docs/) · [更新日志](CHANGELOG.md)
+> **给 AI 编码 Agent 的项目级持久记忆。** ContextPocket 把一次开发里“明天仍然有用”的部分，以纯 Markdown 写回你的仓库；下一次会话、换一个模型，或换一个 Agent，都能从同一条时间线继续。
+
+**[English](README.md)** · [文档](docs/) · [更新日志](CHANGELOG.md) · [安全](SECURITY.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 3.0](https://img.shields.io/badge/version-3.0-blueviolet.svg)](CHANGELOG.md)
-[![Skill Format: v1](https://img.shields.io/badge/format-v1-blue.svg)](SKILL.md)
+[![Version: 3.1 family](https://img.shields.io/badge/version-3.1%20family-blueviolet.svg)](CHANGELOG.md)
+[![Pocket format: v2](https://img.shields.io/badge/format-v2-blue.svg)](docs/format-spec.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-
-> **SKILL 文档拆成 3 份**：[SKILL.md](SKILL.md)（日常必读主体） · [SKILL-advanced.md](SKILL-advanced.md)（模板 / 归档 / 边界情况） · [SKILL-reference.md](SKILL-reference.md)（Layout + 各文件模板 + log.md T-block 完整规范）。
-
-📌 **适用场景**
-
-- 切换 Agent 或模型后，新会话可能拿不到之前的上下文。
-- 长会话达到 token 上限后，早期内容可能被压缩或丢失。
-- 接手 AI 辅助开发的项目时，很难快速了解之前做过什么。
-
-✨ **ContextPocket 能做什么**
-
-- 配置好兼容的 Agent 后，将开发过程中的对话记录到项目的 `ContextPocket/` 文件夹。
-- 为后续会话提供简明的项目记录，方便接续工作。
-- 用纯 Markdown 保存需求、代码变更、决策、踩坑和偏好。
-- 关联轮次、文件与决策，让 `recall --with-context` 不只回答「这一轮说了什么」，也能展示「前后发生了什么」。
-
-> **辅助上下文记忆。** ContextPocket 把每一轮开发对话里值得留的部分写进项目本地的纯 Markdown：下一次对话、或换一个 Agent，都能读回同一份时间线。天然支持跨对话、跨 Agent——不依赖服务、不依赖数据库、不绑定厂商。
-
-## ContextPocket 3.0 家族：xi / quan / yuan / hai
-
-3.0 起，ContextPocket 按使用场景拆成四个**独立包**（各自版本线、各自归档），对外统一使用四个名字：
-
-| 版本 | 定位 | 适合谁 | 规模 |
-|---|---|---|---|
-| **xi 溪** | 轻量版：一个项目、一个 Agent，开箱即记 | 小项目、脚本、快速试用 | 5 个核心文件 · 11 条命令 / 工具 |
-| **quan 泉** | 通用版：个人跨会话、跨 Agent 的默认记忆 | 独立开发者、长期项目 | 10 个核心文件 · 29 条命令 / 工具 |
-| **yuan 渊** | 专业攻坚版：多口袋工作区与深度审计 | 复杂仓库、长期攻坚 | 预览：10 条命令 · workspace / merge / map / context / recap / audit / decay / forget / consolidate |
-| **hai 海** | 协作强化版：团队共享、评审与审计 | 团队、多写者 | 规划中 |
-
-- **quan**（包名 / 命令 `context-pocket-quan`）就是原来的完整包：保留带来源的多跳图上下文与历史有效期筛选（`search <关键词> --expand 2`、`why <文件> --expand 2`、`--as-of <T>`），并与 xi 派生逐字一致的关联图（6 类节点 / 10 类边）。29 条 CLI / MCP 工具覆盖跨机合并、跨项目只读检索、隔离、三段式交接与索引。3.0 以家族改名与迁移为主，并做一轮收尾：`merge report --apply`、按 hub 名称合并（CLI + MCP）、`handoff --max-tokens`、四版能力清单，以及 quan 的 `solo` / `agent` 模式层。
-- **xi**（包名 / 命令 `context-pocket-xi`）就是原来的 Lite：共用同一份口袋格式，5 个核心 Markdown 文件、11 条命令 / 工具，搜索始终现场扫描，关联图运行时派生——不建索引、不建图缓存。
-- **yuan**（包名 / 命令 `context-pocket-yuan`）已进入预览：`workspace` 用 `contextpocket.workspace.json` 管多个口袋，`map` 扫描 JS/TS/Python 生成 repo map，`context build/explain` 按预算组装红线、事实与相关材料，`recap` / `audit` / `decay` / `forget` / `consolidate` / `merge` / `capture` 覆盖长周期记忆治理。跨口袋 id 必须限定为 `api:T12`。
-- **hai** 目前处于规划阶段，仓库中只保留 private 骨架，不提供可安装的命令。
-
-**旧名兼容**：`context-pocket` / `context-pocket-mcp` 继续指向 quan，`context-pocket-lite` / `context-pocket-lite-mcp` 继续指向 xi，3.0 / 3.1 保留，3.2 移除。四个版本读写**同一份** `ContextPocket/` 与 format v2 数据，换版本不需要迁移口袋。
-
-### 我该下哪个版本？
-
-当前 `main` 是 3.0 家族线。发布归档如下：
-
-| 版本 | 展示版本 | 归档 |
-|---|---|---|
-| **quan 泉** | `3.0-quan` | `ContextPocket-3.0-quan.zip` |
-| **xi 溪** | `3.0-xi` | `ContextPocket-3.0-xi.zip` |
-| **yuan 渊** | `3.0-yuan`（预览） | `ContextPocket-3.0-yuan-preview.zip` |
-| **hai 海** | 规划中 | — |
-
-每个压缩包都包含各自的 `package.json`、README 和许可证；不涉及 npm registry 发布。上一稳定版（[`2.13`](https://github.com/Wink305/ContextPocket/releases/tag/2.13) / [`2.13-lite`](https://github.com/Wink305/ContextPocket/releases/tag/2.13-lite)）仍可从 Releases 下载。
-
-🚀 **开始使用**
-
-1. **安装** — 在[快速开始](#1-安装)里选择一种方式：安装 CLI 命令、直接用 Node.js 调用脚本，或复制到 Agent 的 skill 目录。
-2. **激活** — 兼容的 Agent 可以在首次使用时初始化口袋；无需在对话中输入初始化命令。
-3. **正常工作** — 已配置的 Agent 会记录工作内容，后续会话可以从同一份项目文件继续。
 
 ---
 
-## 跨对话 / 跨 Agent 记忆
+## 它解决什么问题
 
-ContextPocket 是**辅助上下文记忆**，不是聊天记录。它把每一轮开发里值得留的部分写进项目本地的纯 Markdown：下一次对话、甚至换一个 Agent（Claude Code / Codex / Cursor），读回的都是同一份时间线。交接只是这份记忆的一种用法，不是另一款产品。
+AI 编码会话越来越长，记忆却仍然很短：
 
-| 记忆载体 | 位置 | 回答什么 |
+- **换 Agent / 换模型**：新会话不知道上一个会话做过什么。
+- **会话顶到上下文上限**：早先的决定、约束和坑点被压缩掉。
+- **接手别人的 AI 项目**：很难判断哪些已经做过、为什么这样做。
+- **问“这个文件为什么是这样”**：答案埋在别人的聊天记录里。
+
+内置记忆通常按厂商隔离、不可读、存在服务端。ContextPocket 反过来：**项目自己拥有记忆，纯文本，和代码放在一起。**
+
+## ContextPocket 做什么
+
+- 把每一轮开发记成一个 `T<n>` 块：你要求了什么、Agent 做了什么、改了哪些文件、决定了什么、还有什么没确认。
+- 把“时间线”和“仍然成立的事实”分开：当前状态、需求、ADR、偏好、🔒 红线。
+- 为下一次会话或另一个 Agent 生成 **handoff**。
+- 连接轮次 ↔ 文件 ↔ 决定，可以问“这一轮前后发生了什么”“哪些决定碰过这个文件”。
+- 不依赖工具也能读：全部是 Markdown，编号稳定，历史只追加不覆盖。
+
+```text
+一次 Agent 轮次
+   │
+   ├── ContextPocket/log.md             T12 · 发生了什么（只追加）
+   ├── ContextPocket/state.md           现在什么是真的
+   ├── ContextPocket/requirements.md    还有什么没做完
+   ├── ContextPocket/decisions.md       为什么是这样
+   ├── ContextPocket/absolute.md        🔒 绝不能丢的红线
+   └── ContextPocket/handoff.md         下一次会话从这里开始
+```
+
+没有服务端，没有数据库，没有厂商锁定。
+
+---
+
+## 选择版本
+
+3.1 是四个独立包组成的家族。它们共用同一个 `ContextPocket/` 目录和 **v2 数据格式**，换版本不需要迁移口袋。
+
+| 版本 | 包名 / 命令 | 定位 | 适合 | 体量 |
+|---|---|---|---|---|
+| **xi 溪** | `context-pocket-xi` | 轻量：一个项目、一个 Agent，开箱即记 | 小项目、脚本、快速试用 | 5 个核心文件 · 11 命令 / 工具 |
+| **quan 泉** | `context-pocket-quan` | 通用：跨会话、跨 Agent 的默认个人记忆 | 独立开发者、长期项目 | 10 个核心文件 · 29 命令 / 工具 |
+| **yuan 渊** | `context-pocket-yuan` | 攻坚：多口袋工作区与长周期审计 | 复杂仓库、长期攻坚 | 稳定 · 10 命令 / 工具 · workspace / repo map / 检索索引 |
+| **hai 海** | — | 协作：共享记忆、评审与审计 | 团队、多写入者 | 规划中 |
+
+**默认从 `quan` 开始，除非：**
+
+- 只想要一个零缓存的小日志 → **xi**；
+- 同时维护多个仓库、需要生命周期工具 → **yuan**；
+- 需要团队评审和共享写入 → 等 **hai**。
+
+**旧名兼容**：`context-pocket` / `context-pocket-mcp` 仍指向 **quan**，`context-pocket-lite` / `context-pocket-lite-mcp` 仍指向 **xi**。旧名保留到 3.1，3.2 移除。
+
+### 下载
+
+`main` 是 3.1 家族线。每个归档都带自己的 `package.json`、README 和 LICENSE；**不经过 npm registry**，从 GitHub Release 归档或 git clone 安装。
+
+| 版本 | 展示版本 | Release / 归档 |
 |---|---|---|
-| T-block 时间线 | `log.md` / `log-archive.md` | 按稳定 `T<n>` 编号记下「先后发生了什么」 |
-| 需求、决策、偏好、红线 | `requirements.md`、`decisions.md`、`preferences.md`、`absolute.md` | 「定过什么、什么不能违反」 |
-| 带来源的关联图 | 读取时现场派生 | 「哪一轮动了哪个文件 / 决策」，以及某事实到什么时候失效（`--as-of`） |
-| 交接视图 | `handoff.md` | 给下一次会话或下一个 Agent 的三段式接手卡片 |
+| **quan 泉** | `3.1-quan` | [ContextPocket-3.1-quan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-quan) · `ContextPocket-3.1-quan.zip` |
+| **xi 溪** | `3.1-xi` | [ContextPocket-3.1-xi](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-xi) · `ContextPocket-3.1-xi.zip` |
+| **yuan 渊** | `3.1-yuan` | [ContextPocket-3.1-yuan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-yuan) · `ContextPocket-3.1-yuan.zip` |
+| **hai 海** | 规划中 | — |
 
-- **跨对话**：T 编号只增不减，块只追加。后面的更正走 `T<n>-fix` / `corrects` 引用，绝不静默覆盖——历史始终可读。
-- **跨 Agent**：口袋是纯文本，不依赖运行时、模型或厂商，任何能读文件的 Agent 都能接上。`handoff.md` 的 `0 · Start here` 写明 STOP CONDITION；`repair` 把并发写造成的 T 号撞号摆到台面上，而不是偷偷覆盖。
-- **只留仍然成立的**：`supersedes` 让旧决策退役，生成的交接摘要只列当前有效的 ADR。
+上一个稳定版：[`2.13`](https://github.com/Wink305/ContextPocket/releases/tag/2.13) · [`2.13-lite`](https://github.com/Wink305/ContextPocket/releases/tag/2.13-lite)。
 
-可复现的跨 Agent 剧本见 [docs/handoff-scenario.md](docs/handoff-scenario.md)，T-block 格式见 [docs/format-spec.md](docs/format-spec.md)。
+---
 
-## 🚀 快速开始
+## 快速开始
 
-### 1. 安装
-
-三种运行模式，自动检测，无需额外配置。
-
-| 模式 | 依赖要求 | 可靠性 | 适合场景 |
-|------|---------|--------|----------|
-| **MCP 模式** | 支持 MCP 的 Agent（Trae、Claude Desktop 等） | ⭐⭐⭐⭐⭐ 10/10 | 体验最好 |
-| **CLI 模式** | Node.js 14+（零额外依赖） | ⭐⭐⭐⭐ 9.5/10 | 绝大多数开发者 |
-| **纯 Skill 模式** | 无，只需要文件夹 | ⭐⭐⭐⭐ 8/10 | 兼容兜底 |
-
-先把代码拉到本地 —— 方式 (b) 也可以直接指向任意装有这些文件的目录：
+### 1. 获取代码
 
 ```bash
 git clone https://github.com/Wink305/ContextPocket.git
 cd ContextPocket
 ```
 
-然后从下面三种安装方式里**选一种**。
+或下载所选版本的归档并解压。
 
-#### (a) 装成真正的命令 —— 让 `context-pocket-quan` 进入 PATH
+### 2. 安装一个入口
 
-只有这个方式能让本 README 里到处出现的 `context-pocket-quan <cmd>` 真的可用。
-
-**从本地仓库安装 —— 现在就能用**（仓库里已经有 `package.json`，`npm link` 会把 CLI 全局注册到你当前这个目录）：
+**CLI（开发者推荐）** —— 在克隆/解压目录内：
 
 ```bash
-# macOS / Linux / Windows（PowerShell 或 cmd）— 在克隆下来的仓库目录里执行
 npm link
-```
-
-或者改用「从本地目录全局安装」：
-
-```bash
-npm install -g .
-```
-
-**从 registry 安装 —— 尚未发布**。`npm install -g context-pocket-quan` 是最终形态，但这个包**一次都没有发布到 npm registry**：到目前为止每个版本都只通过 GitHub Release 或 git clone 分发，所以 `npm view context-pocket-quan` 现在返回 404 是正常的。首发落地之前请用上面的本地安装方式。首发的完整清单（登录 + 2FA → `npm publish` → 把本段替换成 registry 命令）写在 `CONTRIBUTING.md` 的「发布流程（维护者）」。
-
-`package.json` 里声明了四个 bin，link 之后会装上正式命令与旧名别名：
-
-| 命令 | 入口文件 | 是什么 |
-|------|---------|--------|
-| `context-pocket-quan` | `bin/context-pocket.js` | CLI 本体 |
-| `context-pocket-quan-mcp` | `mcp-server.js` | MCP stdio 服务端 |
-| `context-pocket` / `context-pocket-mcp` | 同一份文件 | 旧名别名，保留到 3.1，3.2 移除 |
-
-验证一下：
-
-```bash
 context-pocket-quan help
 ```
 
-Windows 说明：`npm link` 会自动生成 `context-pocket-quan.cmd` / `context-pocket-quan-mcp.cmd` 垫片（同时保留旧名 `context-pocket*` 别名），所以在 PowerShell 和 cmd 里命令写法完全一致。卸载用 `npm uninstall -g context-pocket-quan`。
+`npm link` 会注册正式命令和旧名别名。这个包**一次都没有发布到 npm registry**；`npm install -g context-pocket-quan` 现在还不可用，请使用 clone 或 Release 归档。
 
-#### (b) 完全不安装 —— 用 `node` 直接跑脚本
-
-什么都不注册到全局；只要机器上有 Node.js 14+、文件在磁盘上就能用。把下面的路径换成你实际放的位置：
+**不安装** —— 直接调用脚本：
 
 ```bash
-# POSIX（bash / zsh）
 node /path/to/ContextPocket/bin/context-pocket.js status --dir /path/to/your/project
 ```
 
-```powershell
-# Windows / PowerShell
-node C:\Users\<你>\ContextPocket\bin\context-pocket.js status --dir C:\path\to\your\project
-```
-
-本 README 和 [docs/FAQ.md](docs/FAQ.md) 里每一条 `context-pocket-quan <cmd>`，都可以把前缀换成 `node <路径>/bin/context-pocket.js` 来执行。
-
-#### (c) 复制到 skill 目录 —— 连 Node.js 都不需要
-
-如果你的 Agent 从某个目录加载 skill（MiniMax Code、Claude Code、Cursor、Continue 等），把这个文件夹复制进去就够了：Agent 会读 SKILL 文档并替你调用同样的子命令，上面的「纯 Skill 模式」即使在没装 Node.js 的机器上也能工作。
-
-POSIX（bash / zsh）：
+**只放 Skill 目录**：
 
 ```bash
-# MiniMax Code / Claude Code / 类似工具的 skills 目录
-cp -r . ~/.minimax/skills/context-pocket-quan/
-
-# Cursor / Continue 等 IDE 插件目录
 cp -r . ~/.cursor/skills/context-pocket-quan/
 ```
 
-Windows / PowerShell：
-
-```powershell
-# MiniMax Code / Claude Code / 类似工具的 skills 目录
-Copy-Item -Recurse -Force . "$env:USERPROFILE\.minimax\skills\context-pocket"
-
-# Cursor / Continue 等 IDE 插件目录
-Copy-Item -Recurse -Force . "$env:USERPROFILE\.cursor\skills\context-pocket"
-```
-
-Windows / cmd.exe：
-
-```bat
-xcopy . "%USERPROFILE%\.cursor\skills\context-pocket-quan\" /E /I /Y
-```
-
-> ⚠️ 只做方式 (c) **不会**把 `context-pocket-quan` 加进 PATH。想自己敲 CLI 的话，请再配合方式 (a) 或 (b)。
-
-**MCP 模式配置**：在你的 MCP 配置文件里添加（三种安装方式都适用 —— `args` 指向 `mcp-server.js` 的绝对路径）：
+**MCP** —— 指向 stdio server：
 
 ```json
 {
@@ -197,432 +126,305 @@ xcopy . "%USERPROFILE%\.cursor\skills\context-pocket-quan\" /E /I /Y
 }
 ```
 
-Windows 下请用正斜杠，或者把 JSON 字符串里的反斜杠转义掉：
+如果已经 `npm link`，也可以写 `"command": "context-pocket-quan-mcp"`、`"args": []`。
 
-```json
-{
-  "mcpServers": {
-    "context-pocket-quan": {
-      "command": "node",
-      "args": ["C:\\Users\\<你>\\ContextPocket\\mcp-server.js"]
-    }
-  }
-}
+### 3. 激活
+
+项目里没有 `ContextPocket/` 时，配置好的 Agent 会在第一次实质开发时询问并初始化；也可以直接跑：
+
+```bash
+context-pocket-quan bootstrap --dir /path/to/your/project
 ```
 
-完成方式 (a) 之后，也可以直接用装好的 bin：`"command": "context-pocket-quan-mcp"`，`"args": []`。
+`bootstrap` 会自动识别项目类型、扫描目录、复制模板，并预填 `code-map.md` / `state.md`。它是幂等的，重复执行只会重新注册，不会碰历史。
 
-完整支持的 Agent 列表见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)。
+### 4. 正常工作
 
-### 2. 激活
+Agent 会自动记录每一轮，不需要斜杠命令，也不需要额外步骤。
 
-激活是**自动的**，不需要在对话中输入命令。项目里还没有 `ContextPocket/` 时，Agent 会在第一轮实质对话时提出初始化；已经有了就先读 `index.md` 和 `state.md`，再继续记录。
+换 Agent 或模型时，让新会话读：
 
-Agent 会自动：
-- 在项目根创建 `ContextPocket/` 文件夹
-- 从 CLI/MCP 模式运行 `bootstrap`：自动检测项目类型，扫描目录树，复制所有模板，预填 `code-map.md` 和 `state.md`
-- 启动自动记录
-
-### 3. 正常工作
-
-配置好 ContextPocket 后，Agent 会为每轮需要记录的开发对话**自动**向 `log.md` 追加一个 `T<n>` 块，记录：
-- 你说了什么（User）
-- Agent 做了什么（Action，具体到文件路径）
-- 改了哪些代码 / 做了哪些决定
-
-日常使用时无需额外操作。
-
-### 4. 切换/交接
-
-换 Agent 或换模型时，让新会话读一下记录：
-
-```
-读 ContextPocket/index.md
+```text
+ContextPocket/index.md
 ```
 
-新 Agent 读取口袋后即可接续工作和记录。
+或重新生成 handoff：
 
----
-
-## ⚡ 快速响应
-
-**没有斜杠命令要背。** 直接用大白话说你要什么，Agent 判断意图、去调对应的 `context-pocket-quan` 子命令（或 MCP 工具），然后一行回复。完整的「意图 → 动作」映射见 [SKILL.md](SKILL.md)。
-
-| 意图 | Agent 执行 | Agent 回复 |
-|------|------|------|
-| 第一次进这个项目 | `bootstrap`（幂等） | `✅ ContextPocket ready, auto-recording on` |
-| 当前状态 | `status` | 一行摘要 |
-| 标记为绝对红线 | `absolute add` | 写入 absolute.md，永不压缩 |
-| 交接给另一个 Agent 或模型 | `handoff` | 生成 handoff.md |
-| 检查漏记与格式缺陷 | `verify` | 通过；有问题则每条给出可执行的修复命令 |
-| 检查代码改动是否漏记 | `verify --drift` | 列出 mtime 晚于最近记录的文件（不需要 git，也不拦提交） |
-| 补齐某一轮 | `log amend` | T7 补齐 |
-| 给某一轮记明确时间 | `log append --when` / `log amend <Tn> --when` | 这一轮的时间行，回话时念成 `⏱ <日期> 09:00 → <日期> 11:30`；只知道是哪天的就写成 `(day)`，原话逐字保留 |
-| 查某个文件是谁改的 | `why <path>`（`--expand <1–3>` 展开关联图；`--as-of <T>` 回看历史切片） | 按证据标注命中轮次；可选追加关联图节点 |
-| 按关键词或窗口找历史 | `search <关键词>`（`--expand <1–3>` 展开关联图） | 命中的 T-block；图上下文不改变文本命中顺序 |
-| 回看某一轮 | `recall T<n>` | 完整 T-block |
-| 回看某一轮**连同它的上下文** | `recall T<n> --with-context` | 这一轮 + 入向上下文：谁引用过它、同一文件后来被谁改过、关联到哪些 ADR |
-| 按窗口列轮次 | `recall --from … --to …` / `recall --since T5 --until T9` | 这个窗口里的轮次，按 T 号从早到晚 |
-| 对比两轮 | `diff Ta Tb` | 差异 |
-| 列出待确认项 | 直接读 `❓` 行（无工具） | 列出清单，然后问"逐条确认吗？" |
-| 检查前后矛盾 | `check-conflicts` | 按严重度分级的结果 |
-| 看项目的**关系形状** | `graph [--type <type>] [--json]` | 从口袋里派生出的节点与边：轮次 ↔ 文件 ↔ ADR ↔ 标签 ↔ 需求，每条边都标出来源 |
-| 修复重复或错位的 T 号 | 先 `repair --dry-run` | 改号方案 + 仍在指旧号的文字 |
-| 检查 git 漏记 | `sync`（加 `--auto` 才写入） | 补记了几轮 |
-| 导入旧会话 | `import` | 导入了几轮 |
-| 提炼旧记录 | `distill` | 报告已生成；由 Agent 自行判断并手工合并 |
-| 导出快照给同事 | Agent 自己写快照文件 | 文件路径 |
-| 归档并重新开始 | `archive --keep-last N` | 先跟用户确认 |
-| 说明这个工具怎么用 | 内联回答——**绝不**回"见 README.md" | 内联答案 |
-
-> 💡 用大白话比记命令名更顺；如果你想要零歧义，直接把子命令名说出来也行（`context-pocket-quan verify`）。
-
-**关联图层。** `recall --with-context` 与 `graph` 读取由口袋源文件派生的关联图——轮次 ↔ 文件 ↔ ADR ↔ 标签 ↔ 需求。`search <关键词> --expand 2` 和 `why <文件> --expand 2` 可追加最多两跳、带来源的图上下文，不改变原有文本命中顺序；`--as-of <T>` 可按历史 T 号筛选当时有效的事实。显式的 `Corrects T<n>` 和 ADR `Supersedes` 关系会关闭旧事实的有效区间，每条边仍保留来源。问题落在**关系**上时用它（「这轮前后发生了什么」「哪些决策碰过这个文件」）；问题落在**内容**上时别用（「T7 当时说了什么」），普通 `recall` / `search` 更快且答案完整。
-
----
-
-## 💻 CLI 命令（需要 Node.js）
-
-所有命令在 Node.js 14+ 环境下可通过 CLI 调用。用过安装方式 **(a)** 就直接写 `context-pocket-quan …`；否则请加 `node <路径>/ContextPocket/bin/context-pocket.js` 前缀 —— 即安装方式 **(b)**。通过 `--dir <项目根目录>` 指定目标项目。
-
-| 命令 | 作用 |
-|------|------|
-| `context-pocket-quan bootstrap --dir <root>` | 自动检测项目类型，扫描目录树，复制模板，预填代码地图和状态；默认会在 `~/.contextpocket/hub.json` 里注册本项目，加 `--no-hub`（MCP `noHub: true`）就只建 pocket、不碰 hub |
-| `context-pocket-quan verify --dir <root>` | 15 项体检：文件完整性、编号连续、引用、索引一致性、🔒 区、`log.md` 行数 vs `archive_at`、pocket 里的密钥 / PII 形状（带厂商前缀的密钥报 ERROR，也就是会拦住 pre-commit；身份证号、卡号、手机号这类只报 WARNING，永不拦提交）、**附件是否真的在磁盘上**（`### Attachments` 声明了却找不到 = ERROR，磁盘上没有那条记录；模板占位、URL、绝对路径、已经标了 `[missing: …]` 的那一条都不算），外加一条“格式版本落后”的 WARNING（`lib/validator.js:74`，只提醒、不拦提交） |
-| `context-pocket-quan verify --drift --dir <root>` | 增加两项扫目录的漂移检查：认知漂移（最近 T-block 提到的路径 vs 工作树）+ 代码比记录新（上次记录之后又被改的文件，不依赖 git）。可加 `--drift-last-n <N>` 调节回看窗口 |
-| `context-pocket-quan status --dir <root>` | 一行摘要（T 范围、需求数、ADR 数、❓ 数、归档状态） |
-| `context-pocket-quan recall <T-id> --dir <root>` | 查看某一轮的完整详情 |
-| `context-pocket-quan recall --dir <root> --since <T> [--until <T>] [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit N] [--offset N]` | **窗口模式**：不给 T 号、至少给一个窗口旗标——没有关键词可搜、只想按时间/轮号列一段历史时用。窗口语义与 `search` 完全一致（见下文「时间窗口」）。按 T 号从早到晚，归档轮次也列并标注；`--limit 0` 取全量。T 号与窗口不能同时给。MCP 侧：`context_pocket_recall` 不传 `tId`，改传 `sinceT` / `untilT` / `fromDate` / `toDate` |
-| `context-pocket-quan diff <Ta> <Tb> --dir <root>` | 对比两轮：需求变化、ADR 新增、文件变化 |
-| `context-pocket-quan search <关键词> --dir <root> [--limit N] [--offset N] [--no-index]` | 在全量历史上做关键词搜索：T-block（gist、标签、每一个小节，含已归档轮次）、ADR、需求与偏好。自动走 `assets/search-index.json` 索引，加 `--no-index` 直接扫 Markdown —— 两条路径的匹配与排序完全相同，所以 `--limit`/`--offset` 翻的是同一份结果（`--limit 0` 为全部）。匹配规则：拉丁词按分隔符拆开，中文按**相邻两字组合**建索引，且查询词必须**全部**命中。所以长中文串里的短语能搜到（`时间分页` 能找到「给搜索加时间分页」），换个顺序就不行（`分页时间` 搜不到）；单独一个汉字只能命中那个字独立出现的地方 |
-| `context-pocket-quan why <文件路径> --dir <root>` | 反向检索：哪些 T-block 提到过这个文件，并按证据强弱分开 —— `[changed]`（该轮 Action 小节里有这个路径）与 `[mentioned only]`（只在 Uncertain / Attachments / Conflicts / Pitfalls 里出现）。改过它的那几轮排前面，所以 `--limit` 截掉的是弱证据，不会把真实改动挤掉（借鉴 ThoughtDAG） |
-| `context-pocket-quan check-conflicts --dir <root>` | 6 维冲突扫描，三级严重度（critical / warning / info） |
-| `context-pocket-quan graph --dir <root> [--type <t>] [--limit <N>]` | 查看派生关联图（T ↔ 文件 ↔ ADR ↔ 标签 ↔ 需求；边：modifies / mentions / references / decided-in / supersedes / last-changed / tagged / opened-in / completed-in / implements，每条带来源与 T 号）。`graph rebuild` 从 Markdown 逐字重建 `assets/graph.jsonl` 缓存；`graph verify` 只报缓存与源是否一致 |
-| `context-pocket-quan log append --dir <root> --gist "..." --tags "..." [--when "..."] [--author "..."]` | 追加一轮 T-block 到 log.md（务必带 `--user "<用户原话>"`，否则 verify 报错并被 hook 拦下提交）。`--when` 可省略：默认盖成“你记录它的那一刻”，只有当这一轮实际发生在别的时间才用它覆盖。`--author "<谁在记>"` 把写入者写进这一块的 `### Author` 小节——多个 Agent 共用一份 pocket 时该带上；不传就没有这一小节，工具绝不会替你猜一个名字。每一次追加还会拿这一轮去比对 pocket 里已经写着的东西，把**新撞上的**那些以 `[auto]` 前缀写进这一块的 `### Conflicts` 小节（`--no-conflict-check` 可以跳过，跳过也会明说一句）。比对只做通报，永远不拦这次记录 |
-| `context-pocket-quan log amend <Tn> --dir <root> --user "..." [--when "..."] [--author "..."]` | 补齐**已写入** T-block 中缺失的小节；绝不覆盖已有内容——`--when` 可以补一条缺失的时间行、或把只知道天的精确到时刻，但会拒绝改写一个已经记下过的时间点；`--author` 只补缺失的 `### Author` 小节，不覆盖块上已有的署名 |
-| `context-pocket-quan absolute add --dir <root> --text "..." [--gist "..."]` | 追加一条🔒绝对保留到 absolute.md（原样保存，永不压缩） |
-| `context-pocket-quan req add --dir <root> --text "..."` | 新增需求（自动分配下一个 R-id） |
-| `context-pocket-quan decision add --dir <root> --title "..."` | 新增架构决策 ADR |
-| `context-pocket-quan handoff --dir <root> [--max-tokens <N>]` | 生成交接摘要 handoff.md。`--max-tokens` 把可选的 1 · On demand 小节与 Pointers 裁到近似预算；0 · Start here（红线 / 待确认 / 下一步）永不裁，文件里写明裁掉了什么 |
-| `context-pocket-quan state update --dir <root> --summary "..."` | 更新当前状态 |
-| `context-pocket-quan preferences update --dir <root> --key "..." --value "..."` | 更新偏好 |
-| `context-pocket-quan code-map update --dir <root>` | 重扫项目目录，更新代码地图 |
-| `context-pocket-quan archive --dir <root> [--keep-last N] [--dry-run]` | 归档旧轮次（必须有人触发，永不自动发生），含归档前/后验证 + 失败回滚。`--keep-last` 缺省取 `config.md` 的 `recent_keep`（30） |
-| `context-pocket-quan migrate --dir <root> [--to v<N>\|latest] [--dry-run] [--list]` | 按登记表里的版本链做格式迁移，一条命令能走完 `v1 → v2 → v3`（`--to` 接受 `v2` / `2` / `latest`）。先备份、每跳之前体检，任何一跳失败或跳完体检不过就整体恢复备份。登记表里现有两跳：`v1 → v1`（noop 自检）和 **`v1 → v2`**——后者是真的改内容：`log.md` / `log-archive.md` 里每个 T-block 都按它上方那条 `--- SESSION: <日期> ---` 补一行 `--- WHEN: <date> (day) ---`，上方没有日期的孤块原样不动，已经有时间行的块直接跳过，所以重跑第二遍什么都不改。停在 v1 的 pocket 只会在 `verify` 里多一条 `format-upgrade` WARNING，提醒你升级——是 warning，hook 不会因此拦提交 |
-| `context-pocket-quan repair --dir <root> [--dry-run] [--apply-refs] [--author "..."]` | 把两个 Agent 写出同一个轮次号之后的 T 编号收回来（写入锁只在单机内有效，见 FAQ「多人协作会冲突吗？」）。撞号的那一块**以及它之后的每一块**整体后移一格，让编号继续随文件顺序递增——`log.md` 是只追加的。正文一个字都不改：所有还写着旧编号的行会被**列出来**（那个号在历史上同时指过两块，只有读的人知道每一处指的是哪一块），加了 `--apply-refs` 才真的替换，而且是同时替换，所以 `T3→T4` 与 `T4→T5` 这种级联不会把同一处引用挪两次。而且替换只认**独立的 `T<n>`**——`GPT4` / `RTX4090` / `UTF8` 是含了这个形状的词，不是编号；附件文件名（`T04-diagram.png`、`assets/T04-diagram.png`）连 `--apply-refs` 也不会改，因为改名是两半（先 `mv` 文件、再改文本），只做第二半就是断链，还会丢掉零填充，所以它们单独列在 `fileNames` 里并附上现成的 `mv` 命令。派生值自己跟上（state/requirements/decisions/preferences/code-map/handoff 头行的 `· T<n>`、以及整份重算的 `index.md`）；`log-archive.md` 只报不改（它自己声明只读）。改号这件事本身会写成一个 `[auto]` T-block，而改完之后体检更差就整份回滚（含 `index.md`） |
-| `context-pocket-quan sync --dir <root> [--auto] [--dry-run] [--last-n <N>] [--quiet]` | Git 漏记兜底：检测 staged 变更中未被最近 T-block 记录的文件（hook 用 `--auto` 自动补录）。覆盖只认强证据——路径要出现在某轮的 **Action** 小节里；只在 Uncertain / Attachments / Conflicts 里被点名的文件仍算漏记，但报告会写明它在哪一轮哪个小节被谈到过，好让你用 `log amend` 补那一轮，而不是又生成一个 `[auto]` 块 |
-| `context-pocket-quan install-hook --dir <root>` | 安装 Git pre-commit 钩子（v3：无 pocket 就跳过 → 自动补录漏记 → 健康检查） |
-| `context-pocket-quan uninstall-hook --dir <root>` | 移除我们的钩子，保留其他 hook 内容 |
-| `context-pocket-quan index --dir <root> [--rebuild]` | 构建 / 刷新检索索引（`assets/search-index.json`）。Markdown 文件始终是真相源，索引是派生缓存 |
-| `context-pocket-quan distill --dir <root> [--dry-run]` | 蒸馏旧轮次：生成 `digest-<date>.md` 报告，列出值得回写到活文档的决策 / 坑点 / 偏好（借鉴 Basic Memory） |
-| `context-pocket-quan import --dir <root> --file <session.jsonl> [--source auto\|claude-code\|codex]` | 导入历史会话为 `[imported]` T-block，让中途启用的项目不丢历史 |
-| `context-pocket-quan merge --dir <root> --from <other>/ContextPocket [--dry-run] [--include-archive]` | 合并另一个口袋（另一台机器 / clone / Agent）：轮次重编号，并合入 ADR、需求、🔒 红线与非冲突偏好。state/code-map/冲突写入 `merge-<date>.md`；报告会列出源 code-map 中目标已存在但缺失/不同的文件描述，仍由人工确认后应用。`merge report [--json] [--file <名称>] [--apply <id>]` 列出、查看或应用复核记录（需求状态 / 偏好冲突 / 源 state；code-map 仍人工处理） |
-| `context-pocket-quan hub [list\|search\|pref\|remove\|merge] --dir <root>` | 用户级 hub：列出已注册项目 / 只读跨项目检索 / 读写全局偏好 / 注销当前项目 / `hub merge <项目名>`（CLI 或 MCP `action: "merge"`）按注册名合并，省去手敲路径 |
-| `context-pocket-quan help [--json]` | 显示全部命令。加 `--json` 时同一张表以一行 JSON 返回，Agent 不必解析带颜色的文本就能发现命令全集 |
-
-> 💡 在 MCP 模式下，每个 CLI 命令都有对应的 MCP 工具（如 `context_pocket_bootstrap`）。
->
-> 💡 所有命令都接受 `--json`：stdout 变成恰好一行可解析的 JSON（`{"ok":true,…}`，出错则是 `{"ok":false,"error":"…"}` 且退出码非 0）——agent 与 hook 那一侧就该读这个。
->
-> 💡 T 号在两边只有一个名字：MCP `tId` ⇄ CLI `--t-id`（`diff` 是 `tA`/`tB` ⇄ `--t-a`/`--t-b`，MCP `filePath` ⇄ CLI `--file-path`）。规范写法是位置参数（`context-pocket-quan recall 3`），`--t`、`--id`、`--file`、`-f` 作为同义别名继续可用——这样"猜错拼写"不会再被回一句"你没传"。
->
-> 💡 只写 flag 不给值 = **没传**。`context-pocket-quan state update --summary --json` 现在什么都不写、退出码 1，而不是往 `state.md` 里存一个字面量 `true` —— 这条判据原本只管 `--gist`，现在由两个入口共用（`lib/fields.js` 的 `textOption`）。
->
-> 💡 `--no-index` 在缓存的两端都出现，两端都动不到数据：`search` 上是"这一次不信缓存"，`log append` / `log amend` 上是"这次写完不刷缓存"。Markdown 永远是真相源，所以下一轮 search 会发现源文件变了、自己重建，命中的轮次一条不少（连着 append 几十轮再归档一轮也不会漏）。但它省多少要看规模：30 轮的项目里每轮约 15 ms，800 轮时才是 0.18 秒；而一次空转的 CLI 调用本身要 112 ms（Node 启动占大头）——所以真正划算的是常驻的 MCP server 和长循环，一次一条的 CLI 用法不必为它改习惯。
->
-> 💡 `context-pocket-quan --version`（`-v`、`context-pocket-quan version` 三种写法同解）直接把 `package.json` 里的版本号打出来——不需要项目里有 `ContextPocket/`，也不写任何东西。MCP 客户端在 `initialize` 回包的 `serverInfo.version` 里看到的是同一个数字，两个入口都经 `lib/version.js` 读它，所以版本号只有 `package.json` 一处需要改。
-
-### ⏱ 时间窗口
-
-`search` 与 `recall` 共用同一套窗口判据（`lib/query.js` 的 `filterByTime`），同一轮在两边进出窗口的结果必然一致：
-
-| 旗标 | MCP 参数 | 保留 |
-|------|----------|------|
-| `--since <T>` | `sinceT` | T 号 >= `<T>` |
-| `--until <T>` | `untilT` | T 号 <= `<T>` |
-| `--from <YYYY-MM-DD>` | `fromDate` | WHEN 日期 >= 这天 |
-| `--to <YYYY-MM-DD>` | `toDate` | WHEN 日期 <= 这天 |
-
-都是**闭区间**，可以混用；垃圾值（`--since abc`、`--from oops`）按"没传"处理而不是报错。**日期窗口会排除没有 `--- WHEN: …` 结构行的轮次**（v1 口袋、手写块）；T 号窗口仍然收录它们——时间没记，编号还在。`search` 里的 FIX / ADR / R / 偏好条目也走同一规则（FIX 沿用被更正那轮的时间）；`recall` 窗口只列 T-block，更正内容在 `recall T<n>` 里读。
-
-`search` 始终要关键词；问的是"某段时间发生了什么"、根本没词可搜时，用 `recall` 的窗口模式。两个命令都是**过滤之后**再套 `--limit` / `--offset`，所以 `total` 是过滤后的真实条数（`--limit 0` 取全量）。
-
-```
-context-pocket-quan search 登录 --since 12 --until 40 --json
-context-pocket-quan recall --from 2026-11-01 --to 2026-11-07 --limit 0 --json
+```bash
+context-pocket-quan handoff --dir .
 ```
 
 ---
 
-## 📋 适用场景
+## 一个典型的工作日
 
-| 场景 | 痛点 | ContextPocket 怎么解决 |
-|------|------|------------------------|
-| 切换 Agent 平台 | 新 Agent 一无所知 | 读 `ContextPocket/` 即接续 |
-| 切换模型版本 | 对话窗口消失 | 同上，数据是模型无关的 |
-| 长会话 token 爆掉 | 历史被压缩丢失 | 关键内容已落到磁盘 |
-| 多人协作同一项目 | 各 Agent 状态不一致 | 共享同一个 `ContextPocket/`：同一台机器上的并发写入由写入锁排队，跨机器合并后撞到的 T 号用 `repair` 收回来，`log append --author` 写下每一轮是谁记的 |
-| 接手他人/AI 的项目 | 不知道前面做了什么 | 读 `handoff.md` 5 分钟上手 |
-| 追一个决定的时间线 | 「那次改动之后谁又动过这个文件？」 | `recall --with-context` 与 `graph` 沿着轮次 ↔ 文件 ↔ 决策连起来 |
-
----
-
-## 📁 文件结构
-
-```
-project-root/
-└── ContextPocket/
-    ├── readme.md          # 项目名片 + 格式版本
-    ├── index.md           # 轻量索引 (~20 行)
-    ├── state.md           # 当前状态 + 下一步 + 运行命令 + 坑点
-    ├── requirements.md    # 需求清单（R 编号，带 impl 引用）
-    ├── preferences.md     # 开发偏好
-    ├── decisions.md       # 架构决策 ADR
-    ├── code-map.md        # 详细代码/模块地图
-    ├── log.md             # 对话时间线（每轮一个 T 块）
-    ├── log-archive.md     # 归档区（log.md > archive_at 行时创建）
-    ├── absolute.md        # 🔒 永不压缩的绝对保留区
-    ├── handoff.md         # 交接摘要（交接时生成）
-    ├── config.md          # 可选：自定义配置
-    ├── pocket-snapshot-*.md  # 快照文件（最多保留 3 份）
-    └── assets/
-        ├── search-index.json   # 检索索引（自动生成、可删除重建）
-        ├── graph.jsonl         # 关联图缓存（派生品；`graph rebuild` 能逐字节重建）
-        └── archive/            # 归档附件（archive 时把旧附件搬到这里）
-```
-
-### T 编号格式
-
-T-block 的标准形状。所有 `<…>` 都是占位符——工具不会替你编内容。标了「无则省略」的小节
-只在真有内容时才写；`verify` 会把缺 `### User` / `### Action` 的块报成 ERROR，其余小节算可选项。
-
-```markdown
-## T<n> · <一句话概述> · [tag1] [tag2]
---- WHEN: <YYYY-MM-DD HH:mm> ---
-
-### Author
-- <这一轮是谁记的>                    （无署名则省略）
-
-### User
-- <用户请求，含全部条件>
-
-### Action
-- <操作类型> <文件路径> — <改了什么>
-
-### Decisions & Constraints
-- <为什么这么做>                     （非平凡的决策同时登记到 decisions.md）
-
-### Uncertain
-- ❓ <推断、尚未确认>
-```
-
-完整字段说明（含本例省略掉的小节）见 [SKILL-reference.md](SKILL-reference.md)。
-
-标题下面那行 `--- WHEN: … ---`（格式 v2）就是这一轮实际发生的时间。`log append` 默认写你记录它的那一刻；明确给了另一个时间才用 `--when`——一段区间写 `--when "09:00 → 11:30"`，只知道哪天写 `--when "<YYYY-MM-DD>"`（存成 `(day)`，绝不编一个零点出来），要原样留下就写 `--when "<用户原话>"`，怎么说的就怎么存。`recall` 会把它念出来；还停在 v1 的文件夹里根本没有这一行，跑一次 `migrate --to latest` 才有——在 v1 里传 `--when`，块照记（`log.md` 永远是 P0），但工具会说明时间为什么没落盘（`--json` 里是 `whenSkipped`），不会把它悄悄吞掉。
-
-`### Author` 只在有人被告知这一轮是谁记的时候才出现（`log append --author`）。它和其它小节一样是**小节**，不是结构性行，所以不涉及格式版本：v1 的 pocket 里同样可以合法地有一条 `### Author`，而没有它也不算缺——工具不会替你补一个没被给过的名字。
-
----
-
-## 🎯 设计原则
-
-| 原则 | 含义 |
-|------|------|
-| **Completeness > Brevity** | 宁可多记不要漏记——漏掉一轮就是断了的交接链 |
-| **永远 P0 记录 log.md** | 即使 token 不够，对话时间线也不能停 |
-| **T 编号永久递增** | T1、T2、T3……绝不重置，便于追溯 |
-| **🔒 强需求必须确认** | 用户强调「必须」时，Agent 会主动问"要不要标🔒" |
-| **冲突可见不静默覆盖** | 发现矛盾时同时保留新旧，标 superseded |
-| **Agent-agnostic** | 所有文件是纯文本 Markdown，任何 Agent 都能读 |
-
----
-
-## 🗂 项目类型模板
-
-首次激活时会询问项目类型（或自动检测），不同类型预填不同字段：
-
-| 类型 | 关注点 |
-|------|--------|
-| **frontend** | bundler、framework、状态管理、设计 tokens、构建配置 |
-| **backend** | API 风格、鉴权方案、DB + 迁移目录、缓存、队列 |
-| **fullstack** | 上面两者 + API 边界、共享类型位置、proxy 配置 |
-| **data** | 数据源、pipeline 步骤、调度、notebook 环境、输出存储 |
-| **mobile** | 平台、最小 SDK、build target、商店/CDN、deep links |
-
----
-
-## 🔧 高级配置（可选）
-
-创建 `ContextPocket/config.md` 自定义行为：
-
-```markdown
-# Config
-- project_type: fullstack
-- mode: full                  # full = 10 个核心文件（另有 2 个按需创建）；lite = 只建核心 5 个
-- archive_at: 800             # log.md 达到多少行时 status/verify 提示"该归档了"（归档本身永远不会自动发生）
-- recent_keep: 30             # 归档时保留最近多少个完整 T 块（单次可用 --keep-last 覆盖）
-- language: zh                # 记录语言（zh / en / follow user）
-- quiet: true                 # true = 每轮最多一行确认
-- secret_scan: true           # verify 是否扫描 pocket 里的密钥 / PII 形状（sk-ant-…、AKIA…、私钥块、JWT、
-                              # 身份证号、卡号、`password: xxxx`）。带厂商前缀的那批报 ERROR——也就是会拦住
-                              # pre-commit；PII 与手写赋值只报 WARNING，绝不拦提交。确实要在记录里保留这些串
-                              # （例如在写密钥轮换手册）才改成 false
-- gitignore: true             # 初始化时采用的取值（`bootstrap --gitignore false` 会记成 false 并不把
-                              # ContextPocket/ 写进 .gitignore）。事后改这一行不会重写 .gitignore——请直接改 .gitignore
-- tags_default: [需求变更, 代码逻辑, 架构决策, Bug, 偏好, 依赖, 测试, UI, API, 部署, 文档, 坑点, 冲突, correction]
-```
-
-**主包内的 Lite 模式**：适合脚本/小项目，只建 5 个核心文件，其余用到才建。另有独立的 **xi 3.0 轻量包**（`context-pocket-xi`），建立在共用的图时间字段与口袋格式之上，面向小项目和日常对话记忆，进一步简化读写；见 [`lite/`](lite/)。
-
----
-
-## 隔离运行（完全不读之前的上下文）
-
-测试文件夹里的项目、跑一次性实验、或在 CI 里评测时，之前的 `ContextPocket/` 历史不该进入本轮。三个互不依赖的开关，强度依次递增：
-
-| 开关 | 怎么开 | 效果 |
+| 你想…… | Agent 运行 | 你得到 |
 |---|---|---|
-| 环境变量 | `CONTEXTPOCKET_ISOLATED=1 context-pocket-quan ...` | 只对这一条命令 / 这次 CI 生效，不落盘 |
-| 标记文件 | 在项目根 `touch .contextpocket-isolate` | 该项目里所有 CLI 与 MCP 调用都生效；删掉文件即解除 |
-| 物理隔离 | `mv ContextPocket ContextPocket.isolated` | 常规路径下已经没有历史文件，工具也会自动识别 |
+| 在新项目开始 | `bootstrap` | 口袋就绪，自动记录开启 |
+| 看现在到哪了 | `status` | T 范围、未关需求、ADR、❓、归档状态 |
+| 换一个 Agent 继续 | `handoff` | 含红线、待确认、下一步的 `handoff.md` |
+| 找之前的一轮 | `search <关键词>` | 匹配的 T 块 / ADR / 需求 / 偏好 |
+| 查谁改过这个文件 | `why <路径>` | 先列“改过”的轮次，再列“只提到”的轮次 |
+| 看一轮 **及其上下文** | `recall T<n> --with-context` | 这一轮、引用它的地方、同文件后续变化 |
+| 检查口袋健康 | `verify` | 15 项检查；凭据形状阻断提交，PII 只警告 |
+| 补一个缺失小节 | `log amend <Tn>` | 只补缺失内容，绝不覆盖已有内容 |
+| 标记绝不能丢的规则 | `absolute add` | 一条永不被压缩的 🔒 |
+| 合并另一台机器的口袋 | `merge --from <路径> --dry-run` | 先看可复核的合并报告，再决定是否写 |
 
-隔离期间，**所有** CLI 命令与 MCP 工具在打开任何口袋文件之前就被拒绝 —— 读、写都不放行，测试轮次不会污染真实历史。唯一例外是 `status`，它只回 `{ ok: true, isolated: true, source }`，一个字节的历史都不读；`--version` / `help` 照常可用。解除方式：删掉标记 / 取消环境变量，并把改名后的目录改回 `ContextPocket/`。
-
-> 口袋是纯文本，任何开关都挡不住一个主动翻目录的 Agent。需要物理级保证时用第三个开关（或把目录移出项目）。
-
-## 🛡 隐私与安全
-
-- `ContextPocket/` 是**纯文本 Markdown**，没有可执行代码
-- 默认在 `.gitignore` 里**自动忽略**（项目本地数据，按需手动 push）
-- 不上传、不联网——所有内容留在你的项目目录
-- `absolute.md`（🔒区）是本机加密存储的选项的替代——靠**纪律**而非技术保证不被压缩
-- 支持版本、漏洞私下报告渠道与安全模型见 [SECURITY.md](SECURITY.md)。
+完整的意图 → 命令映射见 [SKILL.md](SKILL.md)。
 
 ---
 
-## 🌐 用户级 Hub（跨项目注册表 + 检索）
+## 四个版本
 
-每个项目都有自己的 `ContextPocket/`，但你可能想在多机之间共享一份「我都在哪些项目里用过 ContextPocket」+ 一份跨项目生效的全局偏好。
+### xi 溪 —— 先记录，保持小
 
-- **存储位置**：`~/.contextpocket/hub.json`（一份小 JSON，按项目路径索引）
-- **内容**：注册过的项目（路径 → 名称 / 类型 / 最新 T / 最近活跃时间）+ 用户级全局偏好
-- **设计原则**：hub 是**注册表 + 只读检索入口**。**项目数据永远在各项目的 `ContextPocket/` 里**；检索不复制、不合并、不写入。它强制走全文扫描（不建 / 不刷新索引），跳过隔离项目，缺失 pocket 只报告不中断。hub 故障（磁盘满、权限不够）不会影响正常记录
-- **跨设备共享两条路径**：
-  1. **环境变量**：`export CONTEXTPOCKET_HOME=/path/to/synced/folder`（指向网盘 / Dropbox / iCloud / git bare repo），所有机器共用同一份 `hub.json`
-  2. **Git 进仓**：在 `bootstrap` 时加 `--gitignore: false`（或 MCP `gitignore: false`），把整份 `ContextPocket/` 进 git，连项目里的偏好一起同步
-- **命令**：`context-pocket-quan hub list`（看注册项目）· `context-pocket-quan hub search "token refresh"`（只读跨项目检索）· `context-pocket-quan hub pref --key <k> --value <v>`（写全局偏好）· `context-pocket-quan hub remove`（注销当前项目）
-- **不想进注册表**：`bootstrap --no-hub`（MCP `noHub: true`）只建 pocket，`CONTEXTPOCKET_HOME` 下一个字节都不写。适合一次性目录、脚本试跑、CI 里跑一遍——hub 里就只留你真正在用的项目。pocket 本身完整可用，只是 `hub list` 看不到它。之后想补登记，跑同一条命令去掉 `--no-hub` 即可（bootstrap 幂等，不会动已有记录）
+- 5 个核心 Markdown 文件，11 条命令 / MCP 工具。
+- 搜索始终扫描 Markdown；图和索引只在读取时派生，没有缓存要维护。
+- 适合希望口袋极小、只需要可靠时间线的小项目。
+
+更多：[lite/README.md](lite/README.md)。
+
+### quan 泉 —— 默认的个人记忆
+
+- 10 个核心文件，29 条命令 / MCP 工具。
+- 有来源的多跳图：`search <kw> --expand 2`、`why <file> --expand 2`、`--as-of <T>` 历史切片。
+- 搜索索引、图缓存、handoff 预算、merge 复核、hub 注册、隔离模式、Git 安全网。
+- `--edition-mode solo|agent` 只改变交互方式，不改变数据。
+
+更多：[SKILL.md](SKILL.md) · [SKILL-advanced.md](SKILL-advanced.md) · [SKILL-reference.md](SKILL-reference.md)。
+
+### yuan 渊 —— 长周期工作区（稳定）
+
+- 用 `contextpocket.workspace.json` 注册多个口袋，跨口袋 id 必须限定（`api:T12`）。
+- `workspace status` 直接给出索引、repo map 与工作区图的健康摘要，不用先跑 `audit`。
+- `map` 扫描 JS/JSX/TS/TSX/Python 生成 repo map；未变化文件按 size + mtime 复用旧符号，`map verify` 只比 metadata。
+- `context build` / `explain` 按预算组装红线、事实与相关材料；每条事实标注来源（`api:T5`、`api:R3`、`[api] src/login.js`）。
+- `context build --expand 1|2` 沿显式 `pocket:Tn` 引用增加跨口袋图邻居（`Path: api:T5 → x-ref → web:T9`）；`--as-of <日期|pocket:Tn>` 按 WHEN 日期切片。派生图缓存在 `.contextpocket/workspace-graph.json`，只重建变化的口袋。
+- `--graph-edges duplicate|shared-file|tag|near|all` 显式开启派生跨口袋边（相同 ADR/需求/偏好、同路径、同标签或时间接近的轮次）；全部 weak、有界、默认关闭。
+- 生命周期：`recap`、`audit`、`decay`（`--apply` 归档报告出的前缀）、`forget`、`consolidate`（口袋内 + 跨口袋）、`merge`、`capture`（本地文件或本机 `gh pr view` / `gh run view`）。
+- `--edition-mode focus|audit|migrate` 提供预算预设，显式参数优先。
+- API 已冻结：10 命令 / 10 MCP 工具，`edition.json` 转 stable。仍未发布 npm，用 Release 归档或 git clone。
+
+更多：[lang/README.md](lang/README.md) · [lang/SKILL.md](lang/SKILL.md)。
+
+### hai 海 —— 团队共享记忆（规划中）
+
+仓库目前只有私有骨架，还没有可安装命令。目标是在同一套 v2 格式上做共享写入、评审与审计。
 
 ---
 
-## 🔀 合并两台机器 / 两个 Agent 的口袋
+## 核心工作流
 
-同一个项目在两台机器、两个 clone 或两个 Agent 上各自记录后，把另一份口袋并进来：
+### Handoff
+
+`handoff` 生成三层恢复卡：
+
+- **0 · Start here** —— 红线、待确认、下一步，永不裁剪。
+- **1 · On demand** —— 决定、坑点、未关需求。
+- **2 · Pointers** —— 去哪里读更多。
+
+`handoff --max-tokens <N>` 只裁可选部分，并在文件里写明裁掉了什么。
+
+### 校验、漂移与修复
+
+```bash
+context-pocket-quan verify            # 文件、编号、引用、索引、🔒、凭据、附件
+context-pocket-quan verify --drift    # 追加认知漂移 / 代码比最后一次记录更新
+context-pocket-quan repair --dry-run  # 先看编号冲突，再决定是否重排
+```
+
+`verify` 不猜。凭据形状是 error，会阻断提交钩子；个人数据只是 warning。`repair` 重排冲突的 T 编号，列出仍写着旧编号的正文，只有 `--apply-refs` 才会真正替换引用。
+
+### 搜索与关系
+
+```bash
+context-pocket-quan search token --expand 2 --as-of T40
+context-pocket-quan search token --rank bm25
+context-pocket-quan why src/auth.js --expand 2
+context-pocket-quan recall T12 --with-context
+context-pocket-quan graph --type file
+```
+
+- `search` / `recall` 共用时间窗：`--since` / `--until` / `--from` / `--to`。
+- `search --rank bm25` 是可选排序：命中集合不变，只把顺序换成 BM25 打分；默认字段权重顺序逐字不变。
+- `why` 区分 **改过** 和 **只提到**，`--limit` 会先丢弱证据。
+- 图上下文有来源、可重建；Markdown 始终是唯一真相。
+
+### 合并两台机器 / 两个 Agent
 
 ```bash
 context-pocket-quan merge --from /path/to/other/ContextPocket --dry-run
 context-pocket-quan merge --from /path/to/other/ContextPocket
 ```
 
-- 单向合并，源口袋只读；轮次接在目标最新 T 之后重新编号。
-- 合入 ADR、需求、🔒 红线与非冲突偏好；`state.md`、`code-map.md` 和冲突项写入 `ContextPocket/merge-<date>.md` 供复核。
-- 默认跳过 `log-archive.md`，加 `--include-archive` 才把归档轮次合入 live log。
-- 重复合并是增量的：内容指纹忽略 T/ADR/R 编号，只追加真正的新轮次 / 新条目。
+单向合并，源口袋只读。轮次重新编号；ADR、需求、🔒 红线与非冲突偏好会合入。`state.md`、`code-map.md` 与冲突写入 `merge-<date>.md`；code-map 建议会列出目标中真实存在但描述不同的文件。`merge report --apply <id>` 重放安全项：需求状态、偏好、源 state 独有行，以及**目标缺失**的 code-map 描述（文件已在目标树里、但没有真实描述）；已有不同描述仍留人工复核。
 
----
-
-## 🆚 与同类工具的对比
-
-| 工具 | 特点 | ContextPocket 优势 |
-|------|------|-------------------|
-| Agent 内置 memory | 跨模型失效 | ✅ 模型无关 |
-| 手动写笔记 | 容易遗漏 | ✅ 自动捕获 |
-| Git commit message | 只记代码 | ✅ 记意图+决策+踩坑 |
-| Obsidian/Notion | 外部工具不同步 | ✅ 跟随项目走 |
-| 自定义脚本 | 维护成本高 | ✅ 开箱即用 |
-
----
-
-## ❓ FAQ
-
-**Q: 必须用 MiniMax Code 吗？**
-
-不需要。任何支持 skill 加载的 Agent 都行（Claude Code / Cursor / Continue 等）。所有文件是纯文本 Markdown，自己用编辑器读也能读懂。具体支持的列表见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)。
-
-**Q: 项目已经进行中，中途启用会怎样？**
-
-完美兼容。首次激活（`bootstrap`）会扫描已有项目，自动建立代码地图，并从 T1 开始记录。之前的对话不会"补录"（Agent 也没记忆了），但代码状态会接续。
-
-**Q: 中途启用，之前用 Claude Code / Codex 留下的对话能找回吗？**
-
-可以。把 `~/.claude/projects/<项目>/<session>.jsonl`（或 `~/.codex/sessions/<id>.jsonl`）找出来，让 Agent 导入——它会执行：
+### 长周期治理（yuan）
 
 ```bash
-context-pocket-quan import --file ~/.claude/projects/<项目>/<session>.jsonl --dir <root>
+context-pocket-yuan workspace init
+context-pocket-yuan workspace add api ../api
+context-pocket-yuan context build --query "token refresh"
+context-pocket-yuan context build --query "token refresh" --expand 1 --as-of 2026-11-02
+context-pocket-yuan context build --query "token refresh" --expand 2 --graph-edges all
+context-pocket-yuan recap --since T40
+context-pocket-yuan audit
+context-pocket-yuan decay --max-age-days 180
+context-pocket-yuan forget --before T20 --apply
 ```
 
-会从当前最新 T 继续编号，统一打 `[imported]` 标签写入 `log.md`。自动跳过工具调用噪音。源类型会自动嗅探，也可以用 `--source claude-code` 或 `--source codex` 强制指定。`--limit N` 控制最多导几轮（默认 100），`--truncate N` 控制每条字段截断长度（默认 400）。
+`forget` 只归档最旧的一段；必须 `--apply` 才写。归档后的轮次仍可 search / recall。`decay` 只读，并打印它建议的 `forget` 命令。
 
-**Q: 多人协作会冲突吗？**
+### 隔离运行
 
-分两种情况，答案不一样：
+三个开关，最后一个最强：
 
-- **同一台机器上多个 Agent**：同时写是安全的。每次写入都先取锁，再去读最新 T 号并追加（`lib/io.js` 的 `withPocketLock`），所以同机的 Agent 会排队、各拿到自己的号，不会重复。锁文件在 `os.tmpdir()` 里、按 pocket 路径命名，它的作用范围就是一台机器。
-- **多台机器共享同一份 `ContextPocket/`（进 git）**：仍然按**串行交接**来用——一个 Agent 做完 → 提交 → 下一个先 `git pull`。两个克隆同时写时，各自从自己那份算 `latestT + 1`，就会都写出比如 `T9`；合并之后 `log.md` 里就有两个 `## T9`。`verify` 会把这件事报成 error 并直接给出命令，`context-pocket-quan repair --dry-run` → `context-pocket-quan repair` 把撞号那块（及其之后的块）整体后移回合法序列、列出还写着旧编号的正文、并把这次改号写成一个 `[auto]` T-block。那些引用**不会**被自动改写，除非你加 `--apply-refs`：一句写着 `T9` 的话可能指两块中的任何一块，只有读的人知道是哪一块。另有两类东西**永远不改**：`GPT4`、`RTX4090`、`UTF8` 这种只是含了 `T<数字>` 形状的词，以及 `assets/T04-diagram.png` 这种附件文件名——改名要先 `mv` 文件再改文本，工具不替你动文件，所以它只把准确的 `mv` 命令列出来，你执行完再跑一次 `verify` 确认链接没断。
+| 开关 | 用法 |
+|---|---|
+| 环境变量 | `CONTEXTPOCKET_ISOLATED=1 context-pocket-quan ...` |
+| 标记文件 | 在项目根创建 `.contextpocket-isolate` |
+| 物理隔离 | 把 `ContextPocket/` 移出项目 |
 
-两种情况下都建议给轮次署名：`log append --author agent-A` 会把写入者写进那块的 `### Author` 小节。另外每次追加已经拿这一轮去比对 pocket 里已有的记录，所以第二个 Agent 和第一个 Agent 的意见分歧会带着 `[auto]` 前缀落在它那轮的 `### Conflicts` 里——分歧进了历史，而不是悄悄盖掉对方。
-
-**Q: token 紧张时怎么办？**
-
-按 P0→P6 优先级降级：`log.md` 永远写，`index.md` 最后。详情见 SKILL.md "Per-turn rules"。
-
-更多问题看 [docs/FAQ.md](docs/FAQ.md)。
+隔离期间，所有 CLI 命令和 MCP 工具在打开任何口袋文件前就被拒绝；`status` 只报告隔离状态。
 
 ---
 
-## 🧩 贡献
+## 口袋里有什么
 
-欢迎 PR！请看 [CONTRIBUTING.md](CONTRIBUTING.md)。
+```text
+project-root/
+└── ContextPocket/
+    ├── readme.md          项目身份 + 格式版本
+    ├── index.md           轻量索引
+    ├── state.md           当前状态、下一步、坑点
+    ├── requirements.md    需求 R 编号与实现引用
+    ├── preferences.md     开发偏好
+    ├── decisions.md       ADR
+    ├── code-map.md        模块 / 文件地图
+    ├── log.md             只追加的 T 块时间线
+    ├── log-archive.md     已归档轮次
+    ├── absolute.md        🔒 永不被压缩的红线
+    ├── handoff.md         生成的恢复卡
+    ├── config.md          可选配置
+    └── assets/            搜索索引、图缓存、归档附件
+```
 
-### 本地开发
+最小的 T 块：
+
+```markdown
+## T12 · Refresh token rotation · [api] [security]
+--- WHEN: 2026-11-22 10:30 ---
+
+### User
+- 每次使用都轮换 refresh token。
+
+### Action
+- src/auth/refresh.js —— 签发新 token 并吊销旧 token。
+- tests/auth/refresh.test.js —— 覆盖复用检测。
+
+### Decisions & Constraints
+- 安全评审要求必须检测复用。
+```
+
+`### User` 和 `### Action` 是必需小节；其他小节有内容才写。`--- WHEN: … ---` 记录这一轮发生的时间；只给日期就保留 `(day)`，用户原话原样保留。
+
+完整格式：[docs/format-spec.md](docs/format-spec.md)。
+
+---
+
+## 隐私与安全
+
+- 口袋是 **纯文本 Markdown**：没有可执行代码，不联网，不上传。
+- `ContextPocket/` 在 bootstrap 时默认加入 `.gitignore`（可用 `--gitignore false` 关闭）。
+- `verify` 扫描凭据与 PII 形状；厂商密钥会阻断提交钩子。
+- 🔒 `absolute.md` 靠纪律而不是加密来防止压缩；它挡不住刻意读取文件系统的人。
+- 隔离模式让实验和 CI 不会污染真实历史。
+
+详见 [SECURITY.md](SECURITY.md)。
+
+---
+
+## 兼容与迁移
+
+| 从 | 到 | 做法 |
+|---|---|---|
+| `2.13` | `3.1-quan` | 数据格式不变，换命令名即可。 |
+| `2.13-lite` | `3.1-xi` | 轻量模型不变，换命令名即可。 |
+| `context-pocket` | `context-pocket-quan` | 旧名别名保留到 3.1。 |
+| `context-pocket-lite` | `context-pocket-xi` | 旧名别名保留到 3.1。 |
+| v1 口袋 | v2 口袋 | 运行 `migrate --to latest`；迁移前 `verify` 会给 warning。 |
+
+四个版本都读写 v2 格式；换版本不需要复制、转换或锁定口袋。
+
+更多：[docs/MIGRATION.md](docs/MIGRATION.md) · [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) · [docs/FAQ.md](docs/FAQ.md)。
+
+---
+
+## 命令索引
+
+`quan` 共 29 条 CLI 命令；每条都有对应的 MCP 工具，且都支持 `--json`。下面是完整索引，每条都可以加 `--help` 查看参数和示例。
 
 ```bash
-git clone https://github.com/Wink305/ContextPocket.git
-cd context-pocket
-npm link                 # 把当前这份代码变成 `context-pocket-quan` 命令
-# 编辑 templates/ 或 SKILL.md
-# 提交 PR 时附上你用过的项目类型 + 大小，便于回归测试
+context-pocket-quan bootstrap --help
+context-pocket-quan install-hook --help
+context-pocket-quan uninstall-hook --help
+context-pocket-quan verify --help
+context-pocket-quan sync --help
+context-pocket-quan status --help
+context-pocket-quan recall --help
+context-pocket-quan diff --help
+context-pocket-quan search --help
+context-pocket-quan why --help
+context-pocket-quan graph --help
+context-pocket-quan check-conflicts --help
+context-pocket-quan log append --help
+context-pocket-quan log amend --help
+context-pocket-quan absolute add --help
+context-pocket-quan req add --help
+context-pocket-quan decision add --help
+context-pocket-quan state update --help
+context-pocket-quan preferences update --help
+context-pocket-quan code-map update --help
+context-pocket-quan handoff --help
+context-pocket-quan index --help
+context-pocket-quan distill --help
+context-pocket-quan import --help
+context-pocket-quan merge --help
+context-pocket-quan hub --help
+context-pocket-quan archive --help
+context-pocket-quan repair --help
+context-pocket-quan migrate --help
 ```
 
-npm 脚本（全部零依赖）：
-
-| 脚本 | 实际执行 | 说明 |
-|------|---------|------|
-| `npm run lint` | 对仓库里每个 `.js` 文件跑 `node --check` | 会遍历 `bin/`、`lib/`、`scripts/` 和根目录；不需要测试框架，也不依赖 glob 库 |
-| `npm run smoke` | `node mcp-smoke.js` | 通过 stdio 驱动 MCP 服务端。不传参数时，它会在系统临时目录里现造一个一次性 pocket、把 `CONTEXTPOCKET_HOME` 隔离到同一目录，退出时删除，因此可以独立运行。要指定目标项目就写 `npm run smoke -- /path/to/project`（此时请另设 `CONTEXTPOCKET_HOME=<hub 目录>`，否则 hub 写入会落到你真实的 `~/.contextpocket`） |
-| `npm test` | `node tests/run.js` | 需要 `tests/` 下的测试运行器存在 |
-
-### 添加新模板
-
-在 `templates/` 加一个 `.md` 文件，确保：
-1. 占位符用 `<...>` 包裹，容易识别
-2. 在 [SKILL-advanced.md](SKILL-advanced.md) 的 "Bootstrapping from templates" 表里加一行
-3. 至少在一个项目类型里预填
+`xi` 以 `context-pocket-xi` 提供其中 11 条（不含索引 / 图缓存）；`yuan` 以 `context-pocket-yuan` 提供自己的 10 条。
 
 ---
 
-## 📄 许可证
+## 参与贡献
+
+欢迎 PR。发布清单与本地开发见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+```bash
+npm run lint       # 语法检查所有 JS
+npm test           # 全量测试
+npm run smoke      # MCP stdio 冒烟
+npm run smoke-live # 真实 CLI 端到端冒烟
+npm run bench      # 10 口袋 × 1000 轮：search / context / audit 延迟
+```
+
+四个版本共用 `shared/` 下逐字同源的核心；`node scripts/sync-core.js` 是漂移门禁。
+
+## License
 
 [MIT](LICENSE) © 2024 ContextPocket Contributors
 
----
+## 致谢
 
-## 🙏 致谢
-
-- 受 [Conventional Comments](https://conventionalcomments.org/) 启发设计了 T-block 格式
-- 灵感来源于多个 Agent 内置 memory 系统的痛点反思
-- 感谢所有贡献者与早期使用者
+- T 块格式受 [Conventional Comments](https://conventionalcomments.org/) 启发
+- 源于各类 Agent 内置记忆系统的真实痛点
+- 感谢每一位贡献者和早期用户
 
 ---
 
-⭐ 如果这个项目帮到了你，欢迎 Star 支持！
+⭐ 如果 ContextPocket 帮你把项目记忆留住了，欢迎点一个 Star。

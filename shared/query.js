@@ -358,6 +358,23 @@ function filterByTime(rows, opts = {}) {
 }
 
 /**
+ * 解析 `--rank` / MCP `rank` 的取值。
+ *
+ * 历史语义（2.12 起）：裸 `--rank`（或 `rank: true`）只用于图上下文排序，
+ * 需要配 `--with-context` / `--expand`。3.0 追加 `bm25`：只重排搜索结果本身，
+ * 不碰图上下文；两者互斥，避免一个旗标同时表达两种排序。
+ *
+ * @param {boolean|string|undefined} value
+ * @returns {'default'|'graph'|'bm25'}
+ */
+function resolveRankMode(value) {
+  if (value === undefined || value === null || value === false || value === 'false' || value === 'default') return 'default';
+  if (value === true || value === 'true' || value === 'graph') return 'graph';
+  if (value === 'bm25') return 'bm25';
+  throw new Error('--rank must be bm25 (order search results) or graph / bare --rank (order expanded graph context)');
+}
+
+/**
  * 全量扫描搜索：索引不可用（缺失 / 损坏 / `--no-index`）时的检索路径。
  *
  * 实现只有一份，在 lib/indexer.js 的 scanAll：它与倒排索引共用同一个分词器、
@@ -369,8 +386,8 @@ function filterByTime(rows, opts = {}) {
  * @param {string} keyword
  * @returns {object[]} 与索引命中同形状的列表
  */
-function search(pocketDir, keyword) {
-  return scanAll(pocketDir, keyword);
+function search(pocketDir, keyword, opts = {}) {
+  return scanAll(pocketDir, keyword, opts);
 }
 
 /**
@@ -397,20 +414,22 @@ function search(pocketDir, keyword) {
  * @param {number} [opts.untilT] - T 号上界（闭区间）
  * @param {string} [opts.fromDate] - 日期下界 yyyy-mm-dd（闭区间）
  * @param {string} [opts.toDate] - 日期上界 yyyy-mm-dd（闭区间）
+ * @param {'bm25'} [opts.rank] - 可选 BM25 排序；默认字段权重排序保持不变
  * @returns {{ results: object[], total: number, offset: number, limit: number|null, hasMore: boolean, viaIndex: boolean, viaIndex }}
  */
 function searchAny(pocketDir, keyword, opts = {}) {
   let rows = null;
   let viaIndex = false;
+  const rankOpts = opts.rank === 'bm25' ? { rank: 'bm25' } : {};
 
   if (opts.useIndex !== false) {
-    const indexed = searchWithIndex(pocketDir, keyword);
+    const indexed = searchWithIndex(pocketDir, keyword, rankOpts);
     if (indexed !== null) {
       rows = indexed;
       viaIndex = true;
     }
   }
-  if (rows === null) rows = search(pocketDir, keyword);
+  if (rows === null) rows = search(pocketDir, keyword, rankOpts);
 
   // 时间窗口过滤在分页之前施加，保证 total 和分页口径都是过滤后的真实总数
   const filtered = filterByTime(rows, opts);
@@ -1054,6 +1073,7 @@ module.exports = {
   diff,
   search,
   searchAny,
+  resolveRankMode,
   why,
   checkConflicts,
   // 写时冲突闸用：runConflictChecks 是六维规则的单一出处，

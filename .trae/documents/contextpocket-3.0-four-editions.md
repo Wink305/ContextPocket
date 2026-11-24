@@ -15,9 +15,9 @@
 | npm 包 | `context-pocket-xi` · `context-pocket-quan` · `context-pocket-yuan` · `context-pocket-hai` |
 | CLI | `context-pocket-xi` · `context-pocket-quan` · `context-pocket-yuan` · `context-pocket-hai` |
 | MCP server | `context-pocket-xi` · `context-pocket-quan` · `context-pocket-yuan` · `context-pocket-hai` |
-| tag | `ContextPocket-3.0-xi` · `ContextPocket-3.0-quan` · `ContextPocket-3.0-yuan-preview` · `ContextPocket-3.0-hai` |
+| tag | `ContextPocket-3.0-xi` · `ContextPocket-3.0-quan` · `ContextPocket-3.0-yuan`（预览资产为 `-yuan-preview`） · `ContextPocket-3.0-hai` |
 | Release 标题 | `ContextPocket 3.0 xi` · `ContextPocket 3.0 quan` · … |
-| 压缩包 | `ContextPocket-3.0-xi.zip` · `ContextPocket-3.0-quan.zip` · `ContextPocket-3.0-yuan-preview.zip` · `ContextPocket-3.0-hai.zip` |
+| 压缩包 | `ContextPocket-3.0-xi.zip` · `ContextPocket-3.0-quan.zip` · `ContextPocket-3.0-yuan.zip` · `ContextPocket-3.0-hai.zip` |
 | 展示版本 | `3.0-xi` / `3.0-quan` / `3.0-yuan` / `3.0-hai` |
 
 **旧包名兼容（已确认）**：`context-pocket` 与 `context-pocket-lite` 保留一个周期做兼容别名，分别转发到 quan / xi。
@@ -149,15 +149,15 @@ scripts/sync-core.js  # shared -> 各版 lib/，带哈希清单与漂移检查
 - 共享清单从 7 个文件扩到 25 个，`sync-core` 支持 `targetsByFile`：`core` / `constants` / `when` / `version` / `budget` / `links-core` / `indexer` / `query` / `validator` / `migrate` / `writer` / merge 闭包等按需进 quan + yuan，其余双份或三份。
 - `tests/shared.js` 逐字比对，并新增“纯层不得依赖缓存/命令模块”的锁。
 
-> **3.0 落地状态**：`lite/` 目录暂不物理改名，包名 / 命令 / 文档已切到 xi；`xi/` 目录迁移推迟到后续，避免 CI 与路径的大规模迁移风险。`shared/` 当前收录 25 个逐字同源文件（`budget`、`constants`、`core`、`edition`、`fields`、`files`、`handoff-path`、`indexer`、`io`、`isolate`、`lifecycle`、`links-core`、`links`、`merge-review`、`merge`、`migrate`、`parser`、`query`、`repair`、`secrets`、`userhub`、`validator`、`version`、`when`、`writer`），由 `tests/shared.js` 锁定；`lang/` 已进入预览（workspace / merge / map / context / recap / forget / consolidate，7 命令 / 7 工具），`hai/` 仍为 private 骨架。quan 收尾已落地：`hub merge`、`merge report --apply`、`handoff --max-tokens`、`--edition-mode solo|agent`；CI 已加 `sync-core` 门禁。yuan 的 shared v2 前置已完成。
+> **3.0 落地状态**：`lite/` 目录暂不物理改名，包名 / 命令 / 文档已切到 xi；`xi/` 目录迁移推迟到后续，避免 CI 与路径的大规模迁移风险。`shared/` 当前收录 25 个逐字同源文件（`budget`、`constants`、`core`、`edition`、`fields`、`files`、`handoff-path`、`indexer`、`io`、`isolate`、`lifecycle`、`links-core`、`links`、`merge-review`、`merge`、`migrate`、`parser`、`query`、`repair`、`secrets`、`userhub`、`validator`、`version`、`when`、`writer`），由 `tests/shared.js` 锁定；`lang/` 已从预览转正（10 命令 / 10 工具，`edition.json` status=stable，API 冻结），`hai/` 仍为 private 骨架。quan 收尾已落地：`hub merge`、`merge report --apply`、`handoff --max-tokens`、`--edition-mode solo|agent`；CI 已加 `sync-core` 门禁并覆盖 Node 18 / 20 / 22。yuan 的 shared v2 前置已完成；发版自动化见 `scripts/release.js`。
 
 ---
 
 ## 7. 版本、发布与迁移
 
 - **家族版本**：3.0；四版同日发，之后可独立 patch
-- **tag**：`ContextPocket-3.0-xi`、`ContextPocket-3.0-quan`、`ContextPocket-3.0-yuan-preview`
-- **zip**：`ContextPocket-3.0-xi.zip`、`ContextPocket-3.0-quan.zip`、`ContextPocket-3.0-yuan-preview.zip`
+- **tag**：`ContextPocket-3.0-xi`、`ContextPocket-3.0-quan`、`ContextPocket-3.0-yuan`（历史预览 tag 为 `ContextPocket-3.0-yuan-preview`）
+- **zip**：`ContextPocket-3.0-xi.zip`、`ContextPocket-3.0-quan.zip`、`ContextPocket-3.0-yuan.zip`；由 `scripts/release.js` 统一生成（`npm pack` → 解包 → zip → notes → `gh release`）
 - **npm**：四个独立包名；旧包名在 3.0 / 3.1 保留兼容别名，3.2 移除
 - **数据格式**：仍为 v2；merge / hub 数据与 2.13 兼容
 - **迁移**：
@@ -191,10 +191,31 @@ scripts/sync-core.js  # shared -> 各版 lib/，带哈希清单与漂移检查
 
 验收：3 个口袋组成的工作区可检索、回看、合并；`context build` 在 2k / 6k / 12k 预算下输出稳定可解释；所有新增能力不改变 pocket 格式 v2。
 
-> **预览已落地**：`workspace`（init/add/remove/list/status/search/index/recall/verify/repair）、`merge`（按口袋名，默认 dry-run）、`capture`（本地 PR / CI 摘要 → T-block，写前凭据扫描）、`map`（update/view/verify）、`context build/explain`、`recap`、`audit`（只读健康 / 活动 / 未决事项）、`decay`（冷轮次前缀与 forget 建议）、`forget`（默认 dry-run，`--apply` 走 `writer.archiveLog`）与 `consolidate`（默认只报告；`--apply` 只删完全重复的偏好行），以及对应 MCP 十个工具；`focus` / `audit` / `migrate` 已落成 context / search / recap 的默认预设。阶段 2 的索引、审计、衰减与 PR/CI 捕获均已完成。
+> **3.0 stable 已落地**：`workspace`（init/add/remove/list/status/search/index/recall/verify/repair）、`merge`（按口袋名，默认 dry-run）、`capture`（本地摘要 / `gh pr view` / `gh run view` → T-block，写前凭据扫描）、`map`（update/view/verify，增量扫描）、`context build/explain`（事实标注 pocket 来源）、`recap`、`audit`、`decay`（冷轮次前缀；`--apply` 归档同一份候选）、`forget`、`consolidate`（口袋内 + 跨口袋重复）与对应 MCP 十个工具；`focus` / `audit` / `migrate` 已落成 context / search / recap 的默认预设。阶段 2 的索引、审计、衰减与 PR/CI 捕获均已完成。
 
 ### 阶段 2 · yuan 专业增强
 - 已完成：本地 BM25 索引、workspace 审计、decay、CI/PR 摘要捕获
+
+### 阶段 2.5 · 质量与性能（P3，已完成）
+- quan `search --rank bm25`：默认字段权重顺序不变，BM25 只重排命中。
+- `merge report --apply` 补目标 code-map 的 missing 描述；different 仍人工。
+- MCP 常驻进程 `parseAll` 签名缓存（默认关闭，仅 MCP 启用）。
+- `scripts/bench-workspace.js`：10 口袋 × 1000 轮的 search / context / audit 延迟。
+- 内核收敛：`shared/rank.js` 统一 quan / yuan 的 BM25 公式与词频统计；`shared/mcp-runtime.js` 统一 JSON-RPC 传输层，xi 不接入。
+- 格式决策：时间戳时区不进入 format v3，跨时区合并成为真实痛点前不改格式。
+
+### 阶段 2.6 · 工作区时间图（阶段 A，已完成）
+- 显式 `pocket:Tn` → `x-ref` 强边；裸 T / 同 tag / 同文件 / 时间接近不猜。
+- `context build/explain --expand 1|2` 在 Related 增加 Graph 段；`--as-of <日期|pocket:Tn>` 按 WHEN 日期切片，默认 `expand=0` 输出不变。
+- 派生缓存 `.contextpocket/workspace-graph.json`，按口袋签名增量重建；`status` / `audit` 只读检查图健康，不主动建图。
+- `shared/graph-core.js`（零依赖纯函数）；xi 不接入；不新增命令，yuan 仍 10 命令 / 10 工具。
+
+### 阶段 2.7 · 工作区时间图派生边（阶段 B，已完成）
+- `--graph-edges duplicate|shared-file|tag|near|all` 显式开启；`--graph-near-days` 默认 7。
+- 派生边全部 weak：相同 ADR / 需求 / 偏好、同路径、同标签、共享 tag/文件且时间接近的轮次。
+- 偏好节点 + `updated-in` 锚定；缓存 version 2，签名加入 `preferences.md`。
+- 有界：每 key 最多 5 口袋、near 两级上限、派生边总数 2000；Graph 段输出 Derived 汇总与示例。
+- 仍未做：有界 PPR、`workspace graph` 子命令。
 
 ### 阶段 3 · hai MVP
 - 共享 hub（git / 对象存储优先）

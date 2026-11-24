@@ -1,8 +1,7 @@
 {
   "name": "context-pocket-yuan",
-  "version": "3.0",
-  "private": true,
-  "description": "ContextPocket Yuan (渊) — workspace edition: multiple pockets, repo map, budgeted context assembly. Preview: workspace / map / context commands.",
+  "version": "3.1",
+  "description": "ContextPocket Yuan (渊) — workspace edition: multiple pockets, repo map, budgeted context assembly, cross-pocket lifecycle tools and local PR/CI capture.",
   "keywords": [
     "context",
     "memory",
@@ -37,6 +36,7 @@
     "lib/",
     "edition.json",
     "mcp-server-yuan.js",
+    "SKILL.md",
     "README.md"
   ]
 }

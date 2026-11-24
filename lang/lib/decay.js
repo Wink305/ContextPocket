@@ -3,19 +3,21 @@
 /**
  * ContextPocket yuan — 记忆衰减策略（阶段 2）
  *
- * 只读地给出"哪些记忆已经变冷"的策略视图：
+ * 默认只读地给出"哪些记忆已经变冷"的策略视图：
  *   - 轮次：早于 max-age 且不在最近 keep-last 之内的连续前缀，可以直接
  *     `forget` 归档（前缀语义，和 forget 完全一致）；
  *   - 需求 / ❓ / ADR：按它们关联轮次的时间判断是否变冷，提示先复盘；
  *   - 没有 WHEN 的轮次单独报 undated，绝不按文件 mtime 猜年龄。
  *
- * 本命令不写任何文件，也不自动执行 forget / consolidate；它只把策略和
- * 建议命令算清楚，真正动手仍由用户显式运行对应命令。
+ * 默认不写任何文件；`--apply` 只执行同一份前缀候选的归档（交给 quan 的
+ * archiveLog），不会改 ADR / 需求 / 偏好。真正删除或合并仍由用户显式运行
+ * consolidate / merge。
  */
 
 const { readManifest, resolvePocket, parsePocketAll } = require('./workspace');
 const { whenDate } = require('./recap');
 const { todayDate } = require('./when');
+const { archiveLog } = require('./writer');
 
 function positiveInt(value, fallback, label) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -42,7 +44,7 @@ function checkDate(value, label) {
   return text;
 }
 
-function decayPocket(entry, resolved, policy) {
+function decayPocket(entry, resolved, policy, apply) {
   const base = { name: entry.name, path: entry.path };
   let data;
   try {
@@ -100,8 +102,29 @@ function decayPocket(entry, resolved, policy) {
     }
     : null;
 
+  let applied = false;
+  let archivedNow = 0;
+  let applyError = null;
+  if (apply && candidates.length > 0) {
+    const kept = live.length - candidates.length;
+    try {
+      // archiveLog 只按"保留最后 n 轮"切；候选前缀已经在这里算好
+      const archived = archiveLog(resolved.pocketDir, { keepLast: kept });
+      if (!archived.dryRun && archived.archivedCount !== candidates.length) {
+        applyError = 'archive moved ' + archived.archivedCount + ' turn(s), expected '
+          + candidates.length + ' (log.md changed while planning?)';
+      } else {
+        applied = true;
+        archivedNow = archived.archivedCount;
+      }
+    } catch (e) {
+      applyError = e.message;
+    }
+  }
+
   return Object.assign(base, {
     ok: true,
+    error: undefined,
     turns: live.length,
     archived: allBlocks.length - live.length,
     undated,
@@ -112,6 +135,9 @@ function decayPocket(entry, resolved, policy) {
       toT: candidates.length > 0 ? candidates[candidates.length - 1].id : null,
       keep: live.length - candidates.length,
     },
+    applied,
+    archivedNow,
+    applyError,
     openRequirements: openRequirements.length,
     coldRequirements: coldRequirements.map((item) => ({ id: item.id, text: item.text })),
     uncertain,
@@ -131,6 +157,7 @@ function render(result) {
       + ' (' + result.policy.maxAgeDays + ' day(s) old)'
       + ' · min ' + result.policy.minTurns + ' turn(s)',
     '- Today: ' + result.policy.today,
+    '- Mode: ' + result.mode,
     '',
   ];
 
@@ -149,6 +176,12 @@ function render(result) {
         + ' turn(s), keep ' + pocket.candidate.keep + ')');
     } else {
       lines.push('- archive candidate: none');
+    }
+    if (pocket.applied) {
+      lines.push('- applied: ' + pocket.archivedNow + ' turn(s) → log-archive.md');
+    }
+    if (pocket.applyError) {
+      lines.push('- apply failed: ' + pocket.applyError);
     }
     lines.push('- open requirements: ' + pocket.openRequirements
       + ' · cold: ' + pocket.coldRequirements.length);
@@ -169,7 +202,10 @@ function render(result) {
   if (recommendations.length === 0) {
     lines.push('- (none)');
   } else {
-    for (const item of recommendations) lines.push('- ' + item.pocket + ': ' + item.command);
+    for (const item of recommendations) {
+      const pocket = result.pockets.find((candidate) => candidate.name === item.pocket);
+      lines.push('- ' + item.pocket + ': ' + item.command + (pocket && pocket.applied ? ' (applied)' : ''));
+    }
   }
   lines.push('');
 
@@ -184,9 +220,11 @@ function render(result) {
  * @param {number} [options.minTurns=10]
  * @param {string} [options.pockets] 逗号分隔的口袋名
  * @param {string} [options.today] YYYY-MM-DD（测试/回填用；默认今天）
+ * @param {boolean} [options.apply] 执行候选前缀的归档（默认 false：只报告）
  */
 function decayWorkspace(root, options = {}) {
   const manifest = readManifest(root);
+  const apply = !!options.apply;
   const today = checkDate(options.today, '--today') || todayDate();
   const policy = {
     today,
@@ -207,19 +245,23 @@ function decayWorkspace(root, options = {}) {
     if (!resolved.exists) {
       return { name: entry.name, path: entry.path, ok: false, error: 'missing ContextPocket/log.md' };
     }
-    return decayPocket(entry, resolved, policy);
+    return decayPocket(entry, resolved, policy, apply);
   });
 
   const total = (key) => pockets.reduce((sum, pocket) => sum + (pocket.ok ? (pocket[key] || 0) : 0), 0);
+  const applyFailed = pockets.filter((pocket) => pocket.applyError).length;
   const result = {
-    ok: pockets.every((pocket) => pocket.ok),
+    ok: pockets.every((pocket) => pocket.ok) && applyFailed === 0,
     root,
     workspace: manifest.name,
+    mode: apply ? 'apply' : 'plan',
     policy,
     totals: {
       pockets: pockets.length,
       turns: total('turns'),
       archived: total('archived'),
+      archivedNow: total('archivedNow'),
+      applyFailed,
       undated: total('undated'),
       coldTurns: total('coldTurns'),
       archiveCandidates: pockets.reduce((sum, pocket) => sum + (pocket.ok ? pocket.candidate.count : 0), 0),

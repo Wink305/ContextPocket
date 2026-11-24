@@ -84,7 +84,9 @@ function shouldIgnoreDir(name) {
   return IGNORE_DIRS.has(name);
 }
 
-function scanProject(root, projectRoot, pocketName, budget) {
+function scanProject(root, projectRoot, pocketName, budget, options = {}) {
+  const cache = options.cache || null;
+  const metadataOnly = !!options.metadataOnly;
   const files = [];
   const walk = (dir) => {
     if (budget.files >= budget.maxFiles) {
@@ -119,16 +121,34 @@ function scanProject(root, projectRoot, pocketName, budget) {
         continue;
       }
       if (stat.size > MAX_FILE_BYTES) continue;
+
+      const relative = toPosix(path.relative(root, absolute));
+      const mtimeMs = Math.round(stat.mtimeMs);
+      const cached = cache ? cache.get(relative) : null;
+      const reusable = !metadataOnly && cached
+        && cached.size === stat.size
+        && cached.mtimeMs === mtimeMs
+        && cached.language === language
+        && Array.isArray(cached.symbols);
+
       let symbols = [];
-      try {
-        symbols = extractSymbols(fs.readFileSync(absolute, 'utf-8'), language);
-      } catch (e) { /* 文件读不了就只留文件条目 */ }
+      if (reusable) {
+        // size + mtime + language 都没变：文件内容不可能变，直接复用旧符号
+        symbols = cached.symbols;
+        budget.reused += 1;
+      } else if (!metadataOnly) {
+        try {
+          symbols = extractSymbols(fs.readFileSync(absolute, 'utf-8'), language);
+        } catch (e) { /* 文件读不了就只留文件条目 */ }
+        budget.rescanned += 1;
+      }
+
       files.push({
-        path: toPosix(path.relative(root, absolute)),
+        path: relative,
         pocket: pocketName,
         language,
         size: stat.size,
-        mtimeMs: Math.round(stat.mtimeMs),
+        mtimeMs,
         symbols,
       });
       budget.files += 1;
@@ -138,26 +158,47 @@ function scanProject(root, projectRoot, pocketName, budget) {
   return files;
 }
 
-function scanWorkspace(root, manifest) {
+/**
+ * @param {string} root
+ * @param {object} manifest
+ * @param {object} [options]
+ * @param {Map<string, object>} [options.cache] 旧 map 的 path → 文件条目
+ * @param {boolean} [options.metadataOnly] 只比 size/mtime，不读文件、不解析符号（verify 用）
+ */
+function scanWorkspace(root, manifest, options = {}) {
   const maxFiles = (manifest.repoMap && manifest.repoMap.maxFiles) || DEFAULT_MAX_FILES;
   const languages = (manifest.repoMap && manifest.repoMap.languages) || null;
-  const budget = { files: 0, maxFiles, truncated: false };
+  const budget = { files: 0, maxFiles, truncated: false, reused: 0, rescanned: 0 };
   const byPath = new Map();
   for (const entry of manifest.pockets) {
     const resolved = resolvePocket(root, entry);
     if (!resolved.exists) continue;
-    for (const file of scanProject(root, resolved.projectRoot, entry.name, budget)) {
+    const scanned = scanProject(root, resolved.projectRoot, entry.name, budget, options);
+    for (const file of scanned) {
       if (languages && !languages.includes(file.language)) continue;
       if (!byPath.has(file.path)) byPath.set(file.path, file);
     }
   }
   const files = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
-  return { files, truncated: budget.truncated, maxFiles };
+  return {
+    files,
+    truncated: budget.truncated,
+    maxFiles,
+    reused: budget.reused,
+    rescanned: budget.rescanned,
+  };
 }
 
 function updateMap(root) {
   const manifest = readManifest(root);
-  const scanned = scanWorkspace(root, manifest);
+  const previous = readMap(root);
+  const cache = new Map();
+  if (previous) {
+    for (const file of previous.files) {
+      if (file && typeof file.path === 'string') cache.set(file.path, file);
+    }
+  }
+  const scanned = scanWorkspace(root, manifest, { cache });
   const data = {
     version: MAP_VERSION,
     generatedAt: new Date().toISOString(),
@@ -169,7 +210,15 @@ function updateMap(root) {
   const file = mapPath(root);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n', 'utf-8');
-  return { ok: true, path: file, count: data.files.length, truncated: data.truncated, map: data };
+  return {
+    ok: true,
+    path: file,
+    count: data.files.length,
+    truncated: data.truncated,
+    reused: scanned.reused,
+    rescanned: scanned.rescanned,
+    map: data,
+  };
 }
 
 function readMap(root) {
@@ -226,7 +275,8 @@ function verifyMap(root) {
     return { ok: false, missing: true, error: 'repo map cache is missing (run "context-pocket-yuan map update")' };
   }
   const manifest = readManifest(root);
-  const scanned = scanWorkspace(root, manifest).files;
+  // 漂移只看路径 / size / mtime，不读文件正文、不重新解析符号
+  const scanned = scanWorkspace(root, manifest, { metadataOnly: true }).files;
   const cachedByPath = new Map(cached.files.map((file) => [file.path, file]));
   const scannedByPath = new Map(scanned.map((file) => [file.path, file]));
   const added = [];

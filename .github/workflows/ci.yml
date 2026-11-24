@@ -11,6 +11,8 @@ name: CI
 # 的附属品。1.5.1 当时只有 push main 触发，tag 和 Release 都发完了才发现那条 run 是红的。
 # 2.0.1-hotfix1 起 tag 去掉 v 前缀（用户拍板「以后不要v了」）：`[0-9]*` 认新命名，
 # `v*` 继续兼容历史 tag，两条都在，发版闸门不因改名而失效。
+# 3.0 起矩阵覆盖 Node 18 / 20 / 22；actions/checkout 与 setup-node 用 v5，
+# 清掉 GitHub 对 Node 20 runtime 的 deprecation 告警。
 
 on:
   push:
@@ -21,11 +23,15 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node }}
       - run: npm run lint
       - run: node scripts/sync-core.js
       - run: node tests/run.js

@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1] - 2026-11-24
+
+### ContextPocket 3.1：工作区时间图（阶段 A+B）
+
+### 工作区时间图 · 阶段 B（派生跨口袋边）
+
+- **`--graph-edges <list>`**：在 `context build/explain` 上显式开启派生跨口袋边，取值 `duplicate` / `shared-file` / `tag` / `near` / `all`；必须搭配 `--expand`，默认不开启，阶段 A 的输出与性能不变。
+- **四类派生边**（全部 `evidence=weak`、`scope=cross`，只有显式开启才参与 BFS）：
+  - `duplicate-adr` / `duplicate-req` / `duplicate-pref`：跨口袋相同 ADR 标题、需求文本、偏好 key+value；归一化函数与 `consolidate` 共用 `normalizeKey`。
+  - `shared-file`：同一相对路径出现在多个口袋的文件节点。
+  - `same-tag`：同名标签跨口袋连接。
+  - `temporal-near`：不同口袋的轮次共享 tag / 文件，且 WHEN 日期差在 `--graph-near-days`（默认 7）以内。
+- **偏好节点**：`preferences.md` 的每条偏好成为 `pocket:pref:<key>` 节点，用文件头 `# Preferences · T<n>` 锚定到最近轮次；缓存版本升到 2，签名加入 `preferences.md`。
+- **有界与去重**：同一 key 只取字典序前 5 个口袋；near 每个 key 最多 20 对、总计 400 对；派生边总数上限 2000，超出标记 `truncated`。跨口袋桥接节点（file / tag / pref）只在跨口袋命中时进入 Graph 结果。
+- **Graph 段**：除 BFS 邻居外，新增 `Derived: N edge(s) — ...` 汇总和最多 8 条派生边示例，确保 duplicate ADR / 需求即使已是种子也可见。
+- **修正**：`DEFAULT_RESULT_TYPES` 的需求类型从 `req` 改为实际的 `R`，让需求节点真正出现在图扩展结果里。
+- **边界**：不新增命令，yuan 仍 10 命令 / 10 工具；不做 PPR，不新增 `workspace graph` 子命令；xi 不动。
+
+### 工作区时间图（阶段 A）
+
+- **跨口袋 `x-ref` 边**：T-block 里显式写出的 `web:T1` 会变成 `api:T5 --x-ref--> web:T1` 强证据边；裸 `T5`、同 tag、同文件、时间接近都不猜。节点 id 一律限定为 `api:T5` / `api:adr:ADR-1` / `api:req:R1` / `api:file:src/a.js` / `api:tag:auth`。
+- **`context build/explain --expand 1|2`**：Related 增加 Graph 段，显示 `web:T1 · gist (1 hop, cross)` 与 `Path: api:T1 → x-ref → web:T1 [api:T1 · 2026-11-02]`；Graph 随 Related 一起裁剪。默认 `expand=0`，未指定时输出逐字不变。
+- **`--as-of <YYYY-MM-DD|pocket:Tn>`**：只保留该日期已知的节点；`pocket:Tn` 用该轮 WHEN 解析。时间轴用 WHEN 日期，不跨口袋比较数字 T，也不按文件 mtime 猜；无日期节点在 as-of 下不可见。`--as-of` 必须搭配 `--expand`。
+- **图缓存与增量**：缓存在工作区 `.contextpocket/workspace-graph.json`（阶段 B 起 `version=2`，含每口袋 `crossRefs`、扁平 `nodes/edges`、`stats`）。只重建签名（源文件 `mtimeMs:size`）变化的口袋；跨口袋边用缓存 `crossRefs` 全量重算。悬空引用计入 `stats.danglingCrossRefs`，不伪造节点。
+- **只读健康**：`workspace status` 与 `audit` 增加 `graph: fresh/stale/missing · N node(s) · M cross-pocket edge(s)`；只 stat 源文件检查新鲜度，**不主动建图**，也不写任何口袋文件。
+- **边界**：不新增顶层命令，yuan 仍 10 命令 / 10 MCP 工具；不引入 format v3；阶段 A 不做 duplicate / shared-file / same-tag / temporal-near 边（阶段 B 已加入，需 `--graph-edges` 显式开启），也不做全局 PPR；xi 完全不接入。
+
+### yuan 从预览转正（3.0 stable）
+
+- **API 冻结**：`lang/edition.json` 的 `status` 从 `preview` 改为 `stable`，移除 `plannedCommands` / `plannedTools`；命令面保持 10 命令 / 10 MCP 工具，schema 不再变。仍未发布到 npm registry。
+- **workspace status 健康摘要**：`workspace status` 直接返回索引 `present` / `fresh` / `docsCount` / `termsCount` 与 repo map `present` / `files` / `symbols`，不用先跑 `audit`。CLI 人类输出增加 Health 段，MCP `action=status` 同样携带。
+- **repo map 增量**：`map update` 按 path + size + mtime 复用未变化文件的旧符号，并报告 `reused` / `rescanned`；`map verify` 只比 metadata，不读文件正文、不重新解析符号。
+- **跨口袋 consolidate**：同一 ADR 标题 / 需求文本 / 偏好 key 出现在两个或以上口袋时，在 `crossPocket` 中报告；`--apply` 仍只删除**单个口袋内**完全重复的偏好行，跨口袋发现与带编号记录永远人工合并。
+- **`decay --apply`**：默认仍只出报告；`--apply` 按同一份冷轮次前缀调用 `archiveLog`，不另写选区逻辑，至少保留一轮。
+- **context 来源**：Facts 每条事实标注 `pocket:Tn` / `pocket:Rn` / `pocket:ADR-n`（State 标注 `pocket — State`），repo map 行标注 `[pocket]`，让"为什么它被放进上下文"可追溯。
+- **capture 连接器**：新增 `--pr <number|url>`（本机 `gh pr view`）与 `--run <id>`（本机 `gh run view` + `--log-failed`）；仍只摘标题 / 最多 5 条要点 / 首个链接，写入前做凭据扫描，默认 dry run。不引入服务端。
+- **文档**：新增 [`lang/SKILL.md`](lang/SKILL.md)（与 quan `SKILL.md` 同级的 Agent 可执行说明）；[`lite/README.md`](lite/README.md) 增加 xi → quan 升级指引（何时升级、数据无需迁移）。
+- **发布自动化**：新增 `scripts/release.js`（preflight → 五道门禁 → `npm pack` → zip → notes → `gh release`，默认 dry run）；CI 矩阵覆盖 Node 18 / 20 / 22，`actions/checkout` / `actions/setup-node` 升到 v5，清掉 Node 20 deprecation 告警。
+
+### 质量与性能（P3）
+
+- **quan 可选 BM25 排序**：`search --rank bm25` 只重排命中结果，命中集合不变；默认字段权重排序与既有确定性测试逐字不变。索引升到 v7（文档 `length` + `avgLength`），索引路径与 `--no-index` 扫描路径使用同一份 BM25 公式，顺序一致。
+- **merge report --apply 补 code-map**：只应用 `reason=missing` 的描述（目标树里已有该文件、但没有真实描述），不重扫目录、不重建树；`reason=different`（目标已有不同描述）与目标树里不存在的路径仍留人工。
+- **MCP 常驻解析缓存**：`parseAll` 增加按源文件签名（mtime / ctime / size / ino）缓存的进程内 LRU，只在 MCP server 启动时显式启用；CLI 与测试默认关闭。yuan 的 `parsePocketAll` 改为新建顶层对象再合并归档，避免污染缓存。
+- **大 workspace 基准**：新增 `scripts/bench-workspace.js`（`npm run bench`），默认生成 10 口袋 × 1000 轮 = 1 万轮，报告 search / context / context expand（depth 2）/ context edges（派生边）/ audit 的 cold 与 warm 延迟，以及图节点数、跨口袋边数、派生边数、悬空引用、全量构建 / fresh 读取 / 单口袋增量重建耗时。本机参考（Windows / Node 24，10 口袋 × 1000 轮，3 次）：index build ≈ 0.8s，search warm ≈ 13ms，context warm ≈ 32ms（cold ≈ 270ms），context expand warm ≈ 157ms（cold ≈ 389ms），context edges warm ≈ 233ms（cold ≈ 612ms），audit warm ≈ 413ms（cold ≈ 822ms）；图 11570 节点 / 200 条 x-ref 边 / 1680 条派生边，cold build ≈ 474ms，fresh read ≈ 62ms，单口袋增量 ≈ 337ms。数字随机器变化，只作量级参考。
+- **格式决策**：时间戳时区不进入 format v3；`WHEN` 继续按用户原话 / 本地时间记录，跨时区合并仍按文本比较。只有跨时区合并成为真实痛点时再评估 v3，不提前改格式。
+- **内核收敛（无用户可见变更）**：新增 `shared/rank.js`，quan 的 per-pocket 索引与 yuan 的 workspace 索引共用同一份 BM25 公式与词频统计；新增 `shared/mcp-runtime.js`，quan / yuan 共用换行分隔 JSON-RPC、initialize 协商、tools/list、批量与错误封套，各自只保留工具 schema 与 dispatch；新增 `shared/graph-core.js`，yuan 的跨口袋引用解析、日期活性、邻接与有界 BFS 都是零依赖纯函数。`shared/` 现为 28 文件 / 64 副本；xi 不接入，保持 5 文件、零缓存。
+
 ## [3.0] - 2026-11-21
 
 ### ContextPocket 3.0 家族：xi / quan / yuan / hai

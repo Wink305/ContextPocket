@@ -1,13 +1,11 @@
 {
   "edition": "yuan",
   "package": "context-pocket-yuan",
-  "family": "3.0",
-  "status": "preview",
+  "family": "3.1",
+  "status": "stable",
   "dataFormat": "v2",
   "commands": 10,
   "tools": 10,
-  "plannedCommands": 38,
-  "plannedTools": 38,
   "modes": [
     "focus",
     "audit",
@@ -18,6 +16,8 @@
     "full"
   ],
   "derivedCaches": [
-    "repo-map"
+    "repo-map",
+    "search-index",
+    "workspace-graph"
   ]
 }

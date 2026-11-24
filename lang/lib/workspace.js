@@ -35,8 +35,11 @@ function manifestPath(root) {
  */
 function parsePocketAll(pocketDir) {
   const data = parseAll(pocketDir);
-  data.log = mergeLogs(data.log, parseLogText(readFileSafe(path.join(pocketDir, 'log-archive.md'))));
-  return data;
+  // parseAll 的结果可能是常驻进程缓存对象：必须新建顶层对象再换 log，
+  // 不能原地改 data.log（否则 quan 侧下一次 parseAll 会看到被并进来的归档）
+  return Object.assign({}, data, {
+    log: mergeLogs(data.log, parseLogText(readFileSafe(path.join(pocketDir, 'log-archive.md')))),
+  });
 }
 
 function findWorkspaceRoot(startDir) {
@@ -178,7 +181,62 @@ function listPockets(root) {
   };
 }
 
-function statusWorkspace(root) {
+/**
+ * 工作区派生缓存的健康摘要。
+ *
+ * `workspace-index` 与 `repomap` 都以本模块为底座，这里延迟 require，
+ * 避免 `workspace.js ↔ workspace-index.js` 的模块环。
+ */
+function workspaceHealth(root) {
+  let index;
+  try {
+    index = require('./workspace-index').inspectIndex(root);
+  } catch (e) {
+    index = { present: false, fresh: false, docsCount: 0, termsCount: 0, builtAt: null, error: e.message };
+  }
+
+  let repoMap;
+  try {
+    const repomap = require('./repomap');
+    const map = repomap.readMap(root);
+    repoMap = map
+      ? {
+        present: true,
+        files: map.files.length,
+        symbols: map.files.reduce((sum, file) => sum + (Array.isArray(file.symbols) ? file.symbols.length : 0), 0),
+        generatedAt: map.generatedAt || null,
+        truncated: !!map.truncated,
+        path: repomap.mapPath(root),
+      }
+      : {
+        present: false,
+        files: 0,
+        symbols: 0,
+        generatedAt: null,
+        truncated: false,
+        path: repomap.mapPath(root),
+      };
+  } catch (e) {
+    repoMap = { present: false, files: 0, symbols: 0, generatedAt: null, truncated: false, error: e.message };
+  }
+
+  let graph;
+  try {
+    // 只读检查缓存，不构建；workspace-graph 依赖 workspace，必须延迟 require
+    graph = require('./workspace-graph').inspectWorkspaceGraph(root);
+  } catch (e) {
+    graph = { present: false, fresh: false, nodes: 0, edges: 0, crossPocketEdges: 0, error: e.message };
+  }
+
+  return { index, repoMap, graph };
+}
+
+/**
+ * @param {string} root
+ * @param {object} [options]
+ * @param {boolean} [options.health] include index / repo-map health (read-only)
+ */
+function statusWorkspace(root, options = {}) {
   const manifest = readManifest(root);
   const pockets = manifest.pockets.map((entry) => {
     const resolved = resolvePocket(root, entry);
@@ -214,7 +272,9 @@ function statusWorkspace(root) {
       return Object.assign(resolved, { ok: false, error: e.message });
     }
   });
-  return { root, name: manifest.name, manifest, pockets };
+  const result = { root, name: manifest.name, manifest, pockets };
+  if (options.health) result.health = workspaceHealth(root);
+  return result;
 }
 
 function flattenBlockText(block) {
@@ -334,6 +394,7 @@ module.exports = {
   removePocket,
   resolvePocket,
   listPockets,
+  workspaceHealth,
   statusWorkspace,
   searchWorkspace,
   recallRef,

@@ -55,7 +55,7 @@ context-pocket-quan migrate --dir <project-root> --to v2             # 真写：
 
 ### Q: 怎么确认我装的 context-pocket-quan 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket-quan --version`（`-v` 和 `context-pocket-quan version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket-quan","version":"3.0","display":"3.0-quan","edition":"quan","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位 + 版本名如 `3.0-quan`，轻量版为 `3.0-xi`；带预发布/hotfix 后缀时显示完整串）。旧命令 `context-pocket` 仍指向同一个通用版，3.0 / 3.1 保留，3.2 移除。
+**A**: `context-pocket-quan --version`（`-v` 和 `context-pocket-quan version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket-quan","version":"3.1","display":"3.1-quan","edition":"quan","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位 + 版本名如 `3.1-quan`，轻量版为 `3.1-xi`；带预发布/hotfix 后缀时显示完整串）。旧命令 `context-pocket` 仍指向同一个通用版，3.0 / 3.1 保留，3.2 移除。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余六处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、`CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 三处说明与示例里写着的那串号。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 
@@ -406,7 +406,7 @@ cd path/to/ContextPocket && npm link    # 得到 context-pocket-quan / context-p
 - `sync` — 找 git 里漏记的轮次
 - `recall <T-id>` — 查看某轮详情（归档过的轮次也能查到）。T 号也可以写成选项：`--t-id 3`，历史别名 `--t 3` / `--id 3` 同样认（MCP 侧对应 `tId`）。只写 flag 不给值仍然算没传，那时报 "T-id is required" 是实话
 - `diff <Ta> <Tb>` — 对比两轮变化（也可以写 `--t-a <a> --t-b <b>`，与 MCP 的 `tA`/`tB` 同名）
-- `search <keyword> [--limit <N>] [--offset <N>] [--no-index]` — 全文搜索
+- `search <keyword> [--limit <N>] [--offset <N>] [--no-index] [--since/--until/--from/--to] [--rank bm25]` — 全文搜索；`--rank bm25` 只换结果顺序，默认字段权重顺序不变
 - `why <file-path>` — 反查"这个文件是哪轮动的、为什么"。路径也可以写成选项：`--file-path src/a.js`（对齐 MCP 的 `filePath`），历史别名 `--file` / `-f` 同样认；只写 flag 不给值仍算没传。每条命中带证据等级：`evidence: "changed"` 表示这个路径在那一轮的 Action 小节里（真的改过），`"mentioned"` 表示只在别的小节里被谈到过（待确认、附件、冲突点名）。改过的排在前面，所以 `--limit` 截断时先掉的是"只提到过"的那些
 - `check-conflicts` — 6 维冲突扫描
 - `req add --text "…"` / `decision add --title "…"` — 记需求 / 记架构决策
@@ -418,7 +418,7 @@ cd path/to/ContextPocket && npm link    # 得到 context-pocket-quan / context-p
 - `index [--rebuild]` — 查看/重建搜索索引
 - `distill [--dry-run] [--recent-keep N]` — 从归档与旧轮次里提炼摘要报告
 - `import --file <session.jsonl>` — 导入历史会话
-- `merge --from <other>/ContextPocket [--dry-run] [--include-archive]` — 合并另一个口袋：轮次重编号，并合入 ADR / 需求 / 🔒 红线 / 非冲突偏好；state、code-map 与冲突写入 merge 报告
+- `merge --from <other>/ContextPocket [--dry-run] [--include-archive]` — 合并另一个口袋：轮次重编号，并合入 ADR / 需求 / 🔒 红线 / 非冲突偏好；state、code-map 与冲突写入 merge 报告（`merge report --apply <id>` 可安全重放偏好 / 需求 / state / 缺失的 code-map 描述）
 - `hub list|search|pref|remove` — 已注册项目列表 / 只读跨项目检索 / 全局偏好 / 移除注册（项目在 `bootstrap` 时自动登记，`bootstrap --no-hub` 跳过这一步）
 - `migrate` — 格式迁移（含备份 + 回滚）
 - `repair [--dry-run] [--apply-refs] [--author "…"]` — 把跨机器并行写出来的撞号 T 编号收回来：撞号那块及其后的块整体后移，派生值跟着对齐，正文旧引用默认只列不改（`--apply-refs` 才改写），改完体检更差整份回滚
@@ -455,7 +455,7 @@ context-pocket-quan merge report --file merge-2026-11-21.md
 context-pocket-quan merge report --apply merge-2026-11-21#1
 ```
 
-`--apply` 只处理三类可安全重放的项：需求状态冲突（目标仍停在合并时的状态才改）、偏好冲突（目标值仍是合并时记录的值才改）、源 state 的 summary / next steps / pitfalls（目标没有那一行才追加）。合并后有人又改过的项会跳过，绝不覆盖；code-map 会列出目标中真实存在、但描述缺失或不同的文件建议，仍留在 Markdown 报告里人工确认；附件冲突同样人工处理。重复执行同一个 id 是无害的 no-op。
+`--apply` 处理四类可安全重放的项：需求状态冲突（目标仍停在合并时的状态才改）、偏好冲突（目标值仍是合并时记录的值才改）、源 state 的 summary / next steps / pitfalls（目标没有那一行才追加）、code-map 的**目标缺失**描述（目标树里已有该文件、但没有真实描述时才补）。合并后有人又改过的项会跳过，绝不覆盖；code-map 已有不同描述的仍留在 Markdown 报告里人工确认；附件冲突同样人工处理。重复执行同一个 id 是无害的 no-op。
 
 ### Q: 如何安装 Git pre-commit hook？
 

@@ -22,6 +22,7 @@ const { assert, test, tmpProject, ROOT } = require('./harness');
 
 const writer = require(path.join(ROOT, 'lib', 'writer'));
 const { bootstrap } = require(path.join(ROOT, 'lib', 'bootstrap'));
+const capture = require(path.join(ROOT, 'lang', 'lib', 'capture'));
 const CLI = path.join(ROOT, 'lang', 'bin', 'context-pocket-yuan.js');
 const MCP = path.join(ROOT, 'lang', 'mcp-server-yuan.js');
 
@@ -67,8 +68,8 @@ test('yuan: workspace manifest registers pockets by relative path and qualified 
   addTurn(web.pocketDir, 'web layout');
 
   const version = parseJson(runLang(['version', '--json'], workspace));
-  assert.strictEqual(version.version, '3.0');
-  assert.strictEqual(version.display, '3.0-yuan');
+  assert.strictEqual(version.version, '3.1');
+  assert.strictEqual(version.display, '3.1-yuan');
   assert.strictEqual(version.edition, 'yuan');
 
   assert.strictEqual(parseJson(runLang(['workspace', 'init', '--name', 'payments', '--json'], workspace)).name, 'payments');
@@ -585,6 +586,237 @@ test('yuan: capture writes a PR summary only with --apply and refuses credential
   assert.strictEqual(after.pockets.find((p) => p.name === 'api').latestT, 1, '拒绝时不能写入');
 });
 
+test('yuan: workspace status reports index and repo-map health without verify', () => {
+  const workspace = tmpProject('yuan-health');
+  const api = makePocketIn(workspace, 'api');
+  addTurn(api.pocketDir, 'health seed');
+  fs.mkdirSync(path.join(api.projectDir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(api.projectDir, 'src', 'health.js'),
+    'export function health() {}\n', 'utf-8');
+
+  parseJson(runLang(['workspace', 'init', '--name', 'healthws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+
+  const cold = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(cold.health.index.present, false, JSON.stringify(cold.health));
+  assert.strictEqual(cold.health.repoMap.present, false, JSON.stringify(cold.health));
+
+  parseJson(runLang(['workspace', 'index', '--json'], workspace));
+  parseJson(runLang(['map', 'update', '--json'], workspace));
+
+  const warm = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(warm.health.index.present, true, JSON.stringify(warm.health));
+  assert.strictEqual(warm.health.index.fresh, true, JSON.stringify(warm.health.index));
+  assert.ok(warm.health.index.docsCount >= 1, JSON.stringify(warm.health.index));
+  assert.strictEqual(warm.health.repoMap.present, true, JSON.stringify(warm.health.repoMap));
+  assert.ok(warm.health.repoMap.files >= 1, JSON.stringify(warm.health.repoMap));
+
+  addTurn(api.pocketDir, 'health drift');
+  const stale = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(stale.health.index.fresh, false, '新轮次后索引必须报 stale：' + JSON.stringify(stale.health.index));
+
+  const human = runLang(['workspace', 'status'], workspace).stdout;
+  assert.match(human, /Health/);
+  assert.match(human, /index: stale/);
+  assert.match(human, /repo map: 2 file\(s\)/);
+});
+
+test('yuan: repo map update reuses unchanged symbols and only rescans changed files', () => {
+  const workspace = tmpProject('yuan-incremental');
+  const api = makePocketIn(workspace, 'api');
+  fs.rmSync(path.join(api.projectDir, 'app.js'), { force: true });
+  addTurn(api.pocketDir, 'map seed');
+  parseJson(runLang(['workspace', 'init', '--name', 'incws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+
+  fs.mkdirSync(path.join(api.projectDir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(api.projectDir, 'src', 'a.js'), 'export function alpha() {}\n', 'utf-8');
+  fs.writeFileSync(path.join(api.projectDir, 'src', 'b.js'), 'export function beta() {}\n', 'utf-8');
+
+  const first = parseJson(runLang(['map', 'update', '--json'], workspace));
+  assert.strictEqual(first.count, 2, JSON.stringify(first));
+  assert.strictEqual(first.rescanned, 2, JSON.stringify(first));
+  assert.strictEqual(first.reused, 0, JSON.stringify(first));
+
+  const second = parseJson(runLang(['map', 'update', '--json'], workspace));
+  assert.strictEqual(second.reused, 2, '未变化的文件必须复用旧符号：' + JSON.stringify(second));
+  assert.strictEqual(second.rescanned, 0, JSON.stringify(second));
+
+  fs.appendFileSync(path.join(api.projectDir, 'src', 'b.js'), 'export class Gamma {}\n', 'utf-8');
+  const third = parseJson(runLang(['map', 'update', '--json'], workspace));
+  assert.strictEqual(third.reused, 1, JSON.stringify(third));
+  assert.strictEqual(third.rescanned, 1, JSON.stringify(third));
+
+  const view = parseJson(runLang(['map', 'view', '--json'], workspace));
+  const b = view.rows.find((row) => row.path === 'api/src/b.js');
+  assert.deepStrictEqual(b.symbols.sort(), ['Gamma', 'beta']);
+
+  const verify = parseJson(runLang(['map', 'verify', '--json'], workspace));
+  assert.strictEqual(verify.ok, true, JSON.stringify(verify));
+});
+
+test('yuan: consolidate reports duplicates that span pockets and never auto-removes them', () => {
+  const workspace = tmpProject('yuan-cross');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'api seed');
+  addTurn(web.pocketDir, 'web seed');
+
+  for (const pocket of [api.pocketDir, web.pocketDir]) {
+    writer.addDecision(pocket, { title: 'Use JWT', decision: 'JWT for API auth' });
+    writer.addRequirement(pocket, { text: '支持 token 刷新' });
+    writer.updatePreferences(pocket, { key: 'reviewer', value: 'alice' });
+  }
+  writer.updatePreferences(api.pocketDir, { key: 'style', value: 'tabs' });
+  writer.updatePreferences(web.pocketDir, { key: 'style', value: 'spaces' });
+
+  parseJson(runLang(['workspace', 'init', '--name', 'crossws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+
+  const before = {
+    api: fs.readFileSync(path.join(api.pocketDir, 'decisions.md'), 'utf-8'),
+    web: fs.readFileSync(path.join(web.pocketDir, 'decisions.md'), 'utf-8'),
+  };
+
+  const plan = parseJson(runLang(['consolidate', '--json'], workspace));
+  assert.strictEqual(plan.totals.crossPocketAdrGroups, 1, JSON.stringify(plan.totals));
+  assert.strictEqual(plan.totals.crossPocketRequirementGroups, 1, JSON.stringify(plan.totals));
+  assert.strictEqual(plan.totals.crossPocketPreferenceDuplicates, 1, JSON.stringify(plan.totals));
+  assert.strictEqual(plan.totals.crossPocketPreferenceConflicts, 1, JSON.stringify(plan.totals));
+  assert.deepStrictEqual(plan.crossPocket.adrs.groups[0].pockets, ['api', 'web']);
+  assert.strictEqual(plan.crossPocket.adrs.groups[0].conflict, false, JSON.stringify(plan.crossPocket.adrs));
+  assert.deepStrictEqual(plan.crossPocket.preferences.conflicts[0].pockets, ['api', 'web']);
+
+  const applied = parseJson(runLang(['consolidate', '--apply', '--json'], workspace));
+  assert.strictEqual(applied.totals.crossPocketAdrGroups, 1, 'apply 不能清掉跨口袋报告');
+  assert.strictEqual(fs.readFileSync(path.join(api.pocketDir, 'decisions.md'), 'utf-8'), before.api,
+    '跨口袋 ADR 永远只报告');
+  assert.strictEqual(fs.readFileSync(path.join(web.pocketDir, 'decisions.md'), 'utf-8'), before.web);
+  assert.match(fs.readFileSync(path.join(api.pocketDir, 'preferences.md'), 'utf-8'), /style:\s*tabs/i,
+    '跨口袋偏好冲突不能自动选一个');
+  assert.match(fs.readFileSync(path.join(web.pocketDir, 'preferences.md'), 'utf-8'), /style:\s*spaces/i);
+
+  const human = runLang(['consolidate'], workspace).stdout;
+  assert.match(human, /Cross-pocket/);
+  assert.match(human, /cross-pocket group/);
+});
+
+test('yuan: decay --apply archives exactly the reported prefix and keeps the newest turns', () => {
+  const workspace = tmpProject('yuan-decay-apply');
+  const api = makePocketIn(workspace, 'api');
+  for (let i = 1; i <= 5; i++) addTurn(api.pocketDir, 'old turn ' + i, { when: '2026-01-0' + i });
+  parseJson(runLang(['workspace', 'init', '--name', 'decayapply', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+
+  const logPath = path.join(api.pocketDir, 'log.md');
+  const archivePath = path.join(api.pocketDir, 'log-archive.md');
+  const options = ['--today', '2026-06-01', '--max-age-days', '90', '--keep-last', '2', '--min-turns', '1'];
+
+  const plan = parseJson(runLang(['decay', ...options, '--json'], workspace));
+  assert.strictEqual(plan.mode, 'plan');
+  assert.strictEqual(plan.totals.archiveCandidates, 3, JSON.stringify(plan.totals));
+  assert.strictEqual(plan.totals.archivedNow, 0, JSON.stringify(plan.totals));
+  assert.ok(!fs.existsSync(archivePath), 'plan 不能写归档文件');
+
+  const applied = parseJson(runLang(['decay', ...options, '--apply', '--json'], workspace));
+  assert.strictEqual(applied.mode, 'apply');
+  assert.strictEqual(applied.totals.archivedNow, 3, JSON.stringify(applied.totals));
+  assert.strictEqual(applied.pockets[0].applied, true, JSON.stringify(applied.pockets[0]));
+  assert.strictEqual(applied.ok, true, JSON.stringify(applied));
+
+  const log = fs.readFileSync(logPath, 'utf-8');
+  assert.ok(!/## T1 ·/.test(log) && !/## T3 ·/.test(log), log);
+  assert.ok(/## T4 ·/.test(log) && /## T5 ·/.test(log), log);
+  const archive = fs.readFileSync(archivePath, 'utf-8');
+  assert.ok(/## T1 ·/.test(archive) && /## T3 ·/.test(archive), archive);
+  assert.ok(!/## T4 ·/.test(archive), archive);
+
+  const again = parseJson(runLang(['decay', ...options, '--apply', '--json'], workspace));
+  assert.strictEqual(again.totals.archivedNow, 0, '已归档的轮次不能被二次归档：' + JSON.stringify(again.totals));
+});
+
+test('yuan: context facts and repo map lines name their pocket', () => {
+  const workspace = tmpProject('yuan-sources');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'source needle', { when: '2026-11-02' });
+  addTurn(web.pocketDir, 'web turn', { when: '2026-11-02' });
+  writer.addRequirement(api.pocketDir, { text: '支持 token 刷新' });
+  writer.addDecision(api.pocketDir, { title: 'Use JWT', decision: 'JWT for API auth' });
+  writer.updateState(api.pocketDir, { summary: '登录已通', nextStep: '补 token 刷新' });
+  fs.mkdirSync(path.join(api.projectDir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(api.projectDir, 'src', 'login.js'), 'export function login() {}\n', 'utf-8');
+
+  parseJson(runLang(['workspace', 'init', '--name', 'srcws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+  parseJson(runLang(['map', 'update', '--json'], workspace));
+
+  const built = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'needle', '--json',
+  ], workspace));
+
+  assert.ok(built.content.includes('api — State: 登录已通'), built.content);
+  assert.ok(built.content.includes('api:R1 — 支持 token 刷新'), built.content);
+  assert.ok(built.content.includes('api:ADR-1 — Use JWT'), built.content);
+  assert.ok(built.content.includes('api:T1 — source needle'), built.content);
+  assert.ok(built.content.includes('web:T1 — web turn'), built.content);
+  assert.ok(built.content.includes('[api] api/src/login.js'), built.content);
+  assert.ok(built.content.includes('api:T1 [T] source needle'), built.content);
+});
+
+test('yuan: capture accepts gh PR / CI summaries and validates the source choice', () => {
+  const pr = capture.summarizePrJson(JSON.stringify({
+    number: 42,
+    title: 'Fix login redirect',
+    body: '- Preserve the returnTo query\n- Add regression test',
+    url: 'https://github.com/acme/app/pull/42',
+    state: 'MERGED',
+  }));
+  assert.strictEqual(pr.gist, 'PR #42 · Fix login redirect (merged)');
+  assert.strictEqual(pr.url, 'https://github.com/acme/app/pull/42');
+  assert.match(pr.text, /Preserve the returnTo query/);
+
+  const log = [
+    '2026-11-22T10:00:00.1234567Z ##[group]Run npm test',
+    '2026-11-22T10:00:01.1234567Z FAIL src/login.test.js',
+    '2026-11-22T10:00:02.1234567Z   expected 200, got 500',
+    '',
+  ].join('\n');
+  const failures = capture.extractFailureLines(log);
+  assert.deepStrictEqual(failures, ['FAIL src/login.test.js', 'expected 200, got 500'], JSON.stringify(failures));
+
+  const run = capture.summarizeRunOutput(JSON.stringify({
+    workflowName: 'CI',
+    displayTitle: 'fix: login redirect',
+    conclusion: 'failure',
+    url: 'https://github.com/acme/app/actions/runs/7',
+    headBranch: 'fix-login',
+  }), log);
+  assert.strictEqual(run.gist, 'CI · fix: login redirect (failure)');
+  assert.strictEqual(run.url, 'https://github.com/acme/app/actions/runs/7');
+  assert.match(run.text, /- FAIL src\/login\.test\.js/);
+
+  const workspace = tmpProject('yuan-capture-gh');
+  const api = makePocketIn(workspace, 'api');
+  addTurn(api.pocketDir, 'capture seed');
+  parseJson(runLang(['workspace', 'init', '--name', 'ghws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+
+  const noSource = runLang(['capture', '--pocket', 'api', '--json'], workspace);
+  assert.strictEqual(noSource.code, 1);
+  assert.match(parseJson(noSource).error, /one source/);
+
+  const both = runLang(['capture', 'pr.md', '--pr', '42', '--pocket', 'api', '--json'], workspace);
+  assert.strictEqual(both.code, 1);
+  assert.match(parseJson(both).error, /only one source/);
+
+  const emptyPr = runLang(['capture', '--pr', '--pocket', 'api', '--json'], workspace);
+  assert.strictEqual(emptyPr.code, 1);
+  assert.match(parseJson(emptyPr).error, /--pr needs a value/);
+});
+
 test('yuan: MCP exposes the workspace tools and serves status over stdio', () => {
   const workspace = tmpProject('yuan-mcp');
   const api = makePocketIn(workspace, 'api');
@@ -622,6 +854,372 @@ test('yuan: MCP exposes the workspace tools and serves status over stdio', () =>
   ]);
   const status = JSON.parse(messages[2].result.content[0].text);
   assert.strictEqual(status.pockets[0].name, 'api');
+  assert.strictEqual(status.health.index.present, false, 'status 必须同时带缓存健康摘要：' + JSON.stringify(status.health));
+  assert.strictEqual(status.health.repoMap.present, false, JSON.stringify(status.health));
   const index = JSON.parse(messages[3].result.content[0].text);
   assert.ok(index.docsCount >= 1, 'MCP action=index 应返回索引计数：' + JSON.stringify(index));
+});
+
+test('yuan: context --expand follows cross-pocket x-refs and caches the workspace graph', () => {
+  const workspace = tmpProject('yuan-graph');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'api calls web', {
+    when: '2026-11-02',
+    action: ['Changed src/api.js — depends on web:T1'],
+  });
+  addTurn(web.pocketDir, 'web endpoint', { when: '2026-11-01' });
+  addTurn(web.pocketDir, 'web followup one', { when: '2026-11-03' });
+  addTurn(web.pocketDir, 'web followup two', { when: '2026-11-04' });
+  addTurn(web.pocketDir, 'web followup three', { when: '2026-11-05' });
+
+  parseJson(runLang(['workspace', 'init', '--name', 'graphws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+
+  const cachePath = path.join(workspace, '.contextpocket', 'workspace-graph.json');
+  const plain = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'calls', '--json',
+  ], workspace));
+  assert.ok(!plain.content.includes('### Graph'), '默认 expand=0 不出现 Graph 段：' + plain.content);
+  assert.strictEqual(plain.sources.graph.enabled, false);
+  assert.ok(!fs.existsSync(cachePath), '默认 context build 不能创建图缓存');
+
+  const plainExplain = parseJson(runLang([
+    'context', 'explain', '--max-tokens', '50000', '--query', 'calls', '--json',
+  ], workspace));
+  assert.strictEqual(plainExplain.sections.related.graph.enabled, false);
+  assert.ok(!plainExplain.content.includes('· graph '), '默认 explain 不出现 graph 行：' + plainExplain.content);
+  assert.ok(!fs.existsSync(cachePath), '默认 context explain 不能创建图缓存');
+
+  const expanded = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'calls', '--expand', '1', '--json',
+  ], workspace));
+  assert.strictEqual(expanded.sources.graph.enabled, true, JSON.stringify(expanded.sources));
+  assert.ok(expanded.sources.graph.neighbors >= 1, JSON.stringify(expanded.sources.graph));
+  assert.ok(expanded.sources.graph.crossPocketEdges >= 1, JSON.stringify(expanded.sources.graph));
+  assert.ok(expanded.content.includes('### Graph'), expanded.content);
+  assert.ok(expanded.content.includes('- web:T1 · web endpoint (1 hop, cross)'), expanded.content);
+  assert.ok(expanded.content.includes('Path: api:T1 → x-ref → web:T1 [api:T1 · 2026-11-02]'),
+    expanded.content);
+
+  assert.ok(fs.existsSync(cachePath), '--expand 必须建立工作区图缓存');
+  const expandedExplain = parseJson(runLang([
+    'context', 'explain', '--max-tokens', '50000', '--query', 'calls', '--expand', '1', '--json',
+  ], workspace));
+  assert.strictEqual(expandedExplain.sections.related.graph.enabled, true, JSON.stringify(expandedExplain.sections.related));
+  assert.ok(expandedExplain.content.includes('· graph '), expandedExplain.content);
+
+  const tight = parseJson(runLang([
+    'context', 'build', '--max-tokens', '120', '--query', 'calls', '--expand', '1', '--json',
+  ], workspace));
+  assert.ok(tight.trimmed.includes('Related'), JSON.stringify(tight.trimmed));
+  assert.ok(!tight.content.includes('### Graph'), 'Graph 必须随 Related 一起被裁掉：' + tight.content);
+  const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+  assert.strictEqual(cache.version, 2);
+  assert.deepStrictEqual(cache.pockets.api.crossRefs, [
+    { fromT: 1, toPocket: 'web', toT: 1, date: '2026-11-02' },
+  ]);
+  assert.ok(cache.edges.some((edge) => edge.type === 'x-ref'
+    && edge.from === 'api:T1' && edge.to === 'web:T1'), JSON.stringify(cache.edges));
+
+  const status = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(status.health.graph.present, true, JSON.stringify(status.health));
+  assert.strictEqual(status.health.graph.fresh, true, JSON.stringify(status.health.graph));
+  assert.ok(status.health.graph.crossPocketEdges >= 1, JSON.stringify(status.health.graph));
+  assert.match(runLang(['workspace', 'status'], workspace).stdout, /graph: fresh/);
+
+  const audit = parseJson(runLang(['audit', '--json'], workspace));
+  assert.strictEqual(audit.health.graph.present, true, JSON.stringify(audit.health));
+  assert.ok(audit.totals.crossPocketEdges >= 1, JSON.stringify(audit.totals));
+  assert.ok(audit.content.includes('- graph: fresh'), audit.content);
+
+  const before = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'calls',
+    '--expand', '1', '--as-of', '2026-10-31', '--json',
+  ], workspace));
+  assert.strictEqual(before.sources.graph.asOf, '2026-10-31');
+  assert.ok(!before.content.includes('web:T1'), 'as-of 之前的节点不能出现：' + before.content);
+
+  const atRef = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'calls',
+    '--expand', '1', '--as-of', 'web:T2', '--json',
+  ], workspace));
+  assert.strictEqual(atRef.sources.graph.asOf, '2026-11-03', 'pocket:Tn 必须用该轮 WHEN 解析');
+  assert.ok(atRef.content.includes('web:T1'), atRef.content);
+
+  const asOfOnly = runLang(['context', 'build', '--as-of', '2026-11-02', '--json'], workspace);
+  assert.strictEqual(asOfOnly.code, 1);
+  assert.match(parseJson(asOfOnly).error, /requires --expand/);
+
+  const badDepth = runLang(['context', 'build', '--expand', '3', '--json'], workspace);
+  assert.strictEqual(badDepth.code, 1);
+  assert.match(parseJson(badDepth).error, /must be 1 or 2/);
+
+  const bareDepth = runLang(['context', 'build', '--expand', '--json'], workspace);
+  assert.strictEqual(bareDepth.code, 1);
+  assert.match(parseJson(bareDepth).error, /needs a depth/);
+
+  const badAsOf = runLang(['context', 'build', '--expand', '1', '--as-of', 'nope', '--json'], workspace);
+  assert.strictEqual(badAsOf.code, 1);
+  assert.match(parseJson(badAsOf).error, /YYYY-MM-DD or pocket:Tn/);
+
+  addTurn(web.pocketDir, 'web drift', { when: '2026-11-06' });
+  const stale = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(stale.health.graph.fresh, false, '源文件变化后图必须报 stale：' + JSON.stringify(stale.health.graph));
+
+  const refreshed = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'calls', '--expand', '1', '--json',
+  ], workspace));
+  assert.ok(refreshed.content.includes('### Graph'), refreshed.content);
+  const freshAgain = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(freshAgain.health.graph.fresh, true, JSON.stringify(freshAgain.health.graph));
+});
+
+test('yuan: workspace graph rebuilds only changed pockets and counts dangling refs', () => {
+  const workspace = tmpProject('yuan-graph-inc');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'api points at web', {
+    when: '2026-11-02',
+    action: ['depends on web:T1'],
+  });
+  addTurn(web.pocketDir, 'web target', { when: '2026-11-02' });
+
+  parseJson(runLang(['workspace', 'init', '--name', 'graphinc', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+
+  const wg = require(path.join(ROOT, 'lang', 'lib', 'workspace-graph'));
+
+  const first = wg.ensureWorkspaceGraph(workspace);
+  assert.strictEqual(first.cacheStatus, 'rebuilt');
+  assert.deepStrictEqual(first.rebuiltPockets, ['api', 'web']);
+  assert.strictEqual(first.stats.crossPocketEdges, 1, JSON.stringify(first.stats));
+  assert.strictEqual(first.stats.danglingCrossRefs, 0, JSON.stringify(first.stats));
+
+  const second = wg.ensureWorkspaceGraph(workspace);
+  assert.strictEqual(second.cacheStatus, 'fresh');
+  assert.deepStrictEqual(second.rebuiltPockets, []);
+
+  addTurn(web.pocketDir, 'web second', { when: '2026-11-03' });
+  const third = wg.ensureWorkspaceGraph(workspace);
+  assert.strictEqual(third.cacheStatus, 'partial');
+  assert.deepStrictEqual(third.rebuiltPockets, ['web'], '只重建签名变化的口袋');
+  assert.strictEqual(third.stats.crossPocketEdges, 1, '跨口袋边用缓存 crossRefs 重算');
+
+  addTurn(api.pocketDir, 'api missing target', {
+    when: '2026-11-04',
+    action: ['depends on web:T99'],
+  });
+  const fourth = wg.ensureWorkspaceGraph(workspace);
+  assert.strictEqual(fourth.stats.danglingCrossRefs, 1, JSON.stringify(fourth.stats));
+  assert.strictEqual(fourth.stats.crossPocketEdges, 1, JSON.stringify(fourth.stats));
+
+  const inspected = wg.inspectWorkspaceGraph(workspace);
+  assert.strictEqual(inspected.present, true);
+  assert.strictEqual(inspected.fresh, true, JSON.stringify(inspected));
+  assert.strictEqual(inspected.danglingCrossRefs, 1, JSON.stringify(inspected));
+
+  const forced = wg.ensureWorkspaceGraph(workspace, { force: true });
+  assert.strictEqual(forced.cacheStatus, 'rebuilt');
+  assert.deepStrictEqual(forced.rebuiltPockets, ['api', 'web']);
+});
+
+test('yuan: --graph-edges traverses duplicate / shared-file / tag / near derived edges', () => {
+  const workspace = tmpProject('yuan-graph-derived');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'api only work', {
+    when: '2026-11-01',
+    tags: ['auth'],
+    action: ['Changed src/shared.js'],
+  });
+  addTurn(web.pocketDir, 'web shared work', {
+    when: '2026-11-03',
+    tags: ['auth'],
+    action: ['Changed src/shared.js'],
+  });
+  addTurn(web.pocketDir, 'web recent one', { when: '2026-11-04' });
+  addTurn(web.pocketDir, 'web recent two', { when: '2026-11-05' });
+  addTurn(web.pocketDir, 'web recent three', { when: '2026-11-06' });
+
+  writer.addDecision(api.pocketDir, { title: 'Use JWT', decision: 'JWT for API auth' });
+  writer.addDecision(web.pocketDir, { title: 'Use JWT', decision: 'JWT for API auth' });
+  writer.addRequirement(api.pocketDir, { text: '支持 token 刷新' });
+  writer.addRequirement(web.pocketDir, { text: '支持 token 刷新' });
+  writer.updatePreferences(api.pocketDir, { key: 'reviewer', value: 'alice' });
+  writer.updatePreferences(web.pocketDir, { key: 'reviewer', value: 'alice' });
+
+  parseJson(runLang(['workspace', 'init', '--name', 'derivedws', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+
+  const wg = require(path.join(ROOT, 'lang', 'lib', 'workspace-graph'));
+  const built = wg.ensureWorkspaceGraph(workspace);
+  const derived = wg.deriveWorkspaceEdges(built.graph.nodes, built.graph.edges, {
+    groups: wg.GRAPH_EDGE_GROUPS.slice(),
+    nearDays: 7,
+  });
+  assert.deepStrictEqual(derived.stats, {
+    duplicateAdr: 1,
+    duplicateReq: 1,
+    duplicatePref: 1,
+    sharedFile: 1,
+    sameTag: 1,
+    temporalNear: 1,
+    total: 6,
+    truncated: false,
+  }, JSON.stringify(derived.stats));
+  const types = new Set(derived.edges.map((edge) => edge.type));
+  for (const type of ['duplicate-adr', 'duplicate-req', 'duplicate-pref', 'shared-file', 'same-tag', 'temporal-near']) {
+    assert.ok(types.has(type), 'missing derived edge ' + type + ': ' + JSON.stringify([...types]));
+  }
+  assert.ok(derived.edges.every((edge) => edge.evidence === 'weak' && edge.scope === 'cross'));
+
+  const plain = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'only', '--expand', '2', '--json',
+  ], workspace));
+  assert.deepStrictEqual(plain.sources.graph.edges, [], '派生边必须显式开启');
+  assert.strictEqual(plain.sources.graph.derivedEdges, 0);
+  assert.ok(!plain.content.includes('web:file:src/shared.js'), plain.content);
+  assert.ok(!plain.content.includes('web:tag:auth'), plain.content);
+  assert.ok(!plain.content.includes('web:pref:reviewer'), plain.content);
+  assert.ok(!plain.content.includes('web:T1 · web shared work'), plain.content);
+
+  const shared = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'only',
+    '--expand', '2', '--graph-edges', 'shared-file', '--json',
+  ], workspace));
+  assert.deepStrictEqual(shared.sources.graph.edges, ['shared-file']);
+  assert.ok(shared.sources.graph.derivedEdges >= 1, JSON.stringify(shared.sources.graph));
+  assert.ok(shared.content.includes('web:file:src/shared.js'), shared.content);
+  assert.ok(shared.content.includes('shared-file'), shared.content);
+  assert.ok(!shared.content.includes('web:tag:auth'), shared.content);
+
+  const nearOne = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'only',
+    '--expand', '2', '--graph-edges', 'near', '--graph-near-days', '1', '--json',
+  ], workspace));
+  assert.strictEqual(nearOne.sources.graph.derivedEdges, 0, JSON.stringify(nearOne.sources.graph));
+  assert.ok(!nearOne.content.includes('web:T1 · web shared work'), nearOne.content);
+
+  const all = parseJson(runLang([
+    'context', 'build', '--max-tokens', '50000', '--query', 'only',
+    '--expand', '2', '--graph-edges', 'all', '--json',
+  ], workspace));
+  assert.deepStrictEqual(all.sources.graph.edges, ['duplicate', 'shared-file', 'tag', 'near']);
+  assert.ok(all.sources.graph.derivedEdges >= 6, JSON.stringify(all.sources.graph));
+  assert.ok(all.content.includes('web:file:src/shared.js'), all.content);
+  assert.ok(all.content.includes('web:tag:auth'), all.content);
+  assert.ok(all.content.includes('web:pref:reviewer'), all.content);
+  assert.ok(all.content.includes('web:T1 · web shared work'), all.content);
+  assert.ok(all.content.includes('same-tag'), all.content);
+  assert.ok(all.content.includes('duplicate-pref'), all.content);
+  assert.ok(all.content.includes('temporal-near'), all.content);
+
+  const noExpand = runLang(['context', 'build', '--graph-edges', 'tag', '--json'], workspace);
+  assert.strictEqual(noExpand.code, 1);
+  assert.match(parseJson(noExpand).error, /requires --expand/);
+
+  const unknown = runLang(['context', 'build', '--expand', '1', '--graph-edges', 'nope', '--json'], workspace);
+  assert.strictEqual(unknown.code, 1);
+  assert.match(parseJson(unknown).error, /unknown --graph-edges/);
+
+  const bare = runLang(['context', 'build', '--expand', '1', '--graph-edges', '--json'], workspace);
+  assert.strictEqual(bare.code, 1);
+  assert.match(parseJson(bare).error, /needs a list/);
+
+  const badDays = runLang([
+    'context', 'build', '--expand', '1', '--graph-edges', 'near', '--graph-near-days', '0', '--json',
+  ], workspace);
+  assert.strictEqual(badDays.code, 1);
+  assert.match(parseJson(badDays).error, /positive integer/);
+});
+
+test('yuan: derived edges cap hub keys to five pockets and flag truncation', () => {
+  const wg = require(path.join(ROOT, 'lang', 'lib', 'workspace-graph'));
+  const nodes = [];
+  for (let i = 0; i < 7; i++) {
+    nodes.push({
+      id: 'p' + i + ':tag:auth',
+      pocket: 'p' + i,
+      type: 'tag',
+      rawId: 'tag:auth',
+      label: 'auth',
+      date: null,
+    });
+  }
+  const derived = wg.deriveWorkspaceEdges(nodes, [], { groups: ['tag'] });
+  assert.strictEqual(derived.stats.sameTag, 10, '5 个口袋两两配对 = 10 条');
+  assert.strictEqual(derived.stats.truncated, true, '超过 5 个口袋必须标记截断');
+  assert.ok(derived.edges.every((edge) => edge.from < edge.to));
+});
+
+test('yuan: MCP context accepts expand/asOf and returns graph neighbors', () => {
+  const workspace = tmpProject('yuan-mcp-graph');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'mcp graph needle', {
+    when: '2026-11-02',
+    action: ['Changed src/shared.js', 'depends on web:T1'],
+  });
+  addTurn(web.pocketDir, 'mcp graph target', {
+    when: '2026-11-01',
+    action: ['Changed src/shared.js'],
+  });
+  addTurn(web.pocketDir, 'mcp graph recent one', { when: '2026-11-03' });
+  addTurn(web.pocketDir, 'mcp graph recent two', { when: '2026-11-04' });
+  addTurn(web.pocketDir, 'mcp graph recent three', { when: '2026-11-05' });
+
+  parseJson(runLang(['workspace', 'init', '--name', 'mcpgraph', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+
+  const requests = [
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+    {
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: {
+        name: 'context_pocket_context',
+        arguments: { query: 'needle', maxTokens: 50000, expand: 1, asOf: '2026-11-03' },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'context_pocket_context',
+        arguments: { query: 'needle', maxTokens: 50000, expand: 2, graphEdges: 'shared-file' },
+      },
+    },
+  ];
+  const child = spawnSync(process.execPath, [MCP], {
+    cwd: workspace,
+    input: requests.map((r) => JSON.stringify(r)).join('\n') + '\n',
+    encoding: 'utf-8',
+    timeout: 15000,
+  });
+  assert.strictEqual(child.status, 0, child.stderr);
+  const messages = child.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const contextTool = messages[1].result.tools.find((tool) => tool.name === 'context_pocket_context');
+  assert.deepStrictEqual(contextTool.inputSchema.properties.expand.enum, [1, 2]);
+  assert.strictEqual(contextTool.inputSchema.properties.asOf.type, 'string');
+  assert.strictEqual(contextTool.inputSchema.properties.graphEdges.type, 'string');
+  assert.strictEqual(contextTool.inputSchema.properties.graphNearDays.type, 'integer');
+
+  const context = JSON.parse(messages[2].result.content[0].text);
+  assert.strictEqual(context.sources.graph.enabled, true, JSON.stringify(context.sources));
+  assert.strictEqual(context.sources.graph.asOf, '2026-11-03');
+  assert.ok(context.content.includes('### Graph'), context.content);
+  assert.ok(context.content.includes('web:T1'), context.content);
+
+  const derivedContext = JSON.parse(messages[3].result.content[0].text);
+  assert.deepStrictEqual(derivedContext.sources.graph.edges, ['shared-file']);
+  assert.ok(derivedContext.sources.graph.derivedEdges >= 1, JSON.stringify(derivedContext.sources.graph));
+  assert.ok(derivedContext.content.includes('web:file:src/shared.js'), derivedContext.content);
 });

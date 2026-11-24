@@ -31,6 +31,10 @@ const { consolidateWorkspace } = require('./lib/consolidate');
 const { mergeWorkspace } = require('./lib/merge-workspace');
 const { verifyWorkspace, repairWorkspace } = require('./lib/diagnostics');
 const { pkgVersion } = require('./lib/version');
+const { startServer } = require('./lib/mcp-runtime');
+
+// 常驻进程：按口袋源文件签名缓存 parseAll，减少大 workspace 的重复解析
+require('./lib/parser').enableParseCache();
 
 const VERSION = pkgVersion();
 
@@ -88,6 +92,10 @@ const TOOLS = [
         maxTokens: { type: 'integer', description: 'Approximate token budget (default: workspace manifest)' },
         query: { type: 'string', description: 'Include workspace search hits for this query' },
         includeRepoMap: { type: 'boolean', description: 'Include the repo map section', default: true },
+        expand: { type: 'integer', enum: [1, 2], description: 'Add cross-pocket graph neighbors at this depth (builds the derived workspace graph on first use)' },
+        asOf: { type: 'string', description: 'Only include nodes known at this date (YYYY-MM-DD or pocket:Tn); requires expand' },
+        graphEdges: { type: 'string', description: 'Comma-separated derived cross-pocket edges: duplicate, shared-file, tag, near, or all; requires expand' },
+        graphNearDays: { type: 'integer', description: 'Temporal-near window in days (default 7; used with graphEdges=near)' },
         editionMode: { type: 'string', enum: ['focus', 'audit', 'migrate'], description: 'Default budget / repo-map presets (explicit args win)' },
       },
     },
@@ -172,6 +180,7 @@ const TOOLS = [
         minTurns: { type: 'integer', description: 'Do not recommend forget below this many turns (default 10)' },
         pockets: { type: 'string', description: 'Comma-separated pocket names' },
         today: { type: 'string', description: 'Override today (YYYY-MM-DD; tests / backfill)' },
+        apply: { type: 'boolean', description: 'Archive the reported prefix candidates (default false: report only)', default: false },
       },
     },
   },
@@ -182,6 +191,9 @@ const TOOLS = [
       type: 'object',
       properties: {
         file: { type: 'string', description: 'Local PR / CI summary file' },
+        pr: { type: 'string', description: 'GitHub PR number or URL (runs local gh pr view)' },
+        run: { type: 'string', description: 'GitHub Actions run id (runs local gh run view)' },
+        repo: { type: 'string', description: 'gh --repo owner/name (default: current repository)' },
         pocket: { type: 'string', description: 'Target pocket name (required unless the workspace has one)' },
         kind: { type: 'string', description: 'Summary kind: pr or ci', default: 'pr' },
         gist: { type: 'string', description: 'Override the extracted title' },
@@ -190,7 +202,6 @@ const TOOLS = [
         when: { type: 'string', description: 'Forwarded to the T-block WHEN line' },
         apply: { type: 'boolean', description: 'Write the T-block (default false: plan only)', default: false },
       },
-      required: ['file'],
     },
   },
 ];
@@ -212,7 +223,7 @@ function toolWorkspace(args) {
   const root = workspaceRoot(args);
   if (action === 'add') return addPocket(root, args.name, args.path);
   if (action === 'remove') return removePocket(root, args.name);
-  if (action === 'status') return statusWorkspace(root);
+  if (action === 'status') return statusWorkspace(root, { health: true });
   if (action === 'search') return searchWorkspaceIndexed(root, args.keyword, {
     limit: args.limit !== undefined ? args.limit : resolveMode(args).profile.searchLimit,
     pockets: args.pockets,
@@ -251,6 +262,10 @@ function toolContext(args) {
     includeRepoMap: args.includeRepoMap !== undefined
       ? !!args.includeRepoMap
       : (mode.profile.includeRepoMap !== undefined ? mode.profile.includeRepoMap : true),
+    expand: args.expand,
+    asOf: args.asOf,
+    graphEdges: args.graphEdges,
+    graphNearDays: args.graphNearDays,
   };
   return action === 'explain' ? buildExplain(root, options) : buildContext(root, options);
 }
@@ -308,12 +323,16 @@ function toolDecay(args) {
     minTurns: args.minTurns,
     pockets: args.pockets,
     today: args.today,
+    apply: !!args.apply,
   });
 }
 
 function toolCapture(args) {
   return captureWorkspace(workspaceRoot(args), {
     file: args.file,
+    pr: args.pr,
+    run: args.run,
+    repo: args.repo,
     pocket: args.pocket,
     kind: args.kind,
     gist: args.gist,
@@ -344,62 +363,12 @@ function callTool(name, args) {
   }
 }
 
-function send(message) {
-  process.stdout.write(JSON.stringify(message) + '\n');
-}
-
-function handle(message) {
-  const { id, method, params } = message;
-  const isNotification = id === undefined;
-  if (method === 'initialize') {
-    send({
-      jsonrpc: '2.0',
-      id,
-      result: {
-        protocolVersion: (params && params.protocolVersion) || '2024-11-05',
-        capabilities: { tools: {} },
-        serverInfo: { name: 'context-pocket-yuan', version: VERSION.version },
-        instructions: SERVER_INSTRUCTIONS,
-      },
-    });
-    return;
-  }
-  if (method === 'ping') {
-    send({ jsonrpc: '2.0', id, result: {} });
-    return;
-  }
-  if (method === 'tools/list') {
-    send({ jsonrpc: '2.0', id, result: { tools: TOOLS } });
-    return;
-  }
-  if (method === 'tools/call') {
-    const name = params && params.name;
-    const args = (params && params.arguments) || {};
-    send({ jsonrpc: '2.0', id, result: callTool(name, args) });
-    return;
-  }
-  if (isNotification) return;
-  send({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found: ' + method } });
-}
-
-let buffer = '';
-process.stdin.setEncoding('utf-8');
-process.stdin.on('data', (chunk) => {
-  buffer += chunk;
-  let idx;
-  while ((idx = buffer.indexOf('\n')) !== -1) {
-    const line = buffer.slice(0, idx).trim();
-    buffer = buffer.slice(idx + 1);
-    if (!line) continue;
-    let message;
-    try {
-      message = JSON.parse(line);
-    } catch (e) {
-      send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
-      continue;
-    }
-    handle(message);
-  }
+startServer({
+  name: 'context-pocket-yuan',
+  version: VERSION.version,
+  instructions: SERVER_INSTRUCTIONS,
+  tools: TOOLS,
+  callTool,
 });
 
 process.stderr.write('ContextPocket Yuan MCP server started\n');

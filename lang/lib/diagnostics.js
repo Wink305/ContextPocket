@@ -16,8 +16,7 @@ const path = require('path');
 const { readManifest, resolvePocket, parsePocketAll } = require('./workspace');
 const { verifyMap, updateMap, readMap } = require('./repomap');
 const { inspectIndex } = require('./workspace-index');
-
-const REF_RE = /\b([a-z][a-z0-9_-]*):T(\d+)\b/gi;
+const { blockText, parseCrossRefs } = require('./graph-core');
 
 function pendingMergeReviews(pocketDir) {
   let files;
@@ -36,15 +35,6 @@ function pendingMergeReviews(pocketDir) {
     } catch (e) { /* 坏 sidecar 由 verify 报，不在这里中断 */ }
   }
   return pending;
-}
-
-function blockText(block) {
-  const parts = [block.gist || ''];
-  for (const value of Object.values(block.sections || {})) {
-    if (Array.isArray(value)) parts.push(value.join('\n'));
-    else if (value) parts.push(String(value));
-  }
-  return parts.join('\n');
 }
 
 function verifyWorkspace(root, options = {}) {
@@ -119,11 +109,9 @@ function verifyWorkspace(root, options = {}) {
     for (const [name, data] of parsed) {
       for (const block of data.log.blocks) {
         const text = blockText(block);
-        let m;
-        REF_RE.lastIndex = 0;
-        while ((m = REF_RE.exec(text)) !== null) {
-          const targetName = m[1];
-          const targetId = Number(m[2]);
+        for (const ref of parseCrossRefs(text)) {
+          const targetName = ref.pocket;
+          const targetId = ref.tId;
           if (targetName === name) continue;
           const target = parsed.get(targetName);
           if (!target) {

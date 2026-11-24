@@ -6,6 +6,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const { readFileSafe, isPlaceholderLine, maxNumber, minNumber } = require('./core');
 const { TBLOCK_SECTIONS, REQ_STATUSES, SESSION_LINE_RE } = require('./constants');
 const { WHEN_LINE_RE, parseWhenLine } = require('./when');
@@ -855,7 +856,7 @@ function parseAbsolute(pocketDir) {
  * @param {string} pocketDir
  * @returns {object}
  */
-function parseAll(pocketDir) {
+function parseAllUncached(pocketDir) {
   const log = parseLog(pocketDir);
   const requirements = parseRequirements(pocketDir);
   const decisions = parseDecisions(pocketDir);
@@ -870,6 +871,91 @@ function parseAll(pocketDir) {
     // 三个带编号的文件共用一份畸形编号清单，verify 用它报"这一行需要修"
     implausible: log.implausible.concat(requirements.implausible, decisions.implausible),
   };
+}
+
+// ============================================================
+// 常驻进程解析缓存（MCP）
+// ============================================================
+//
+// MCP server 是长驻进程：一次 status / verify / handoff 会多次 parseAll，
+// 而大口袋的单次 parse 是几十毫秒。这里按 pocketDir 记住"上次解析结果 +
+// 当时的源文件签名"，签名一致就直接复用。
+//
+// 默认关闭：CLI 进程本来就短命，测试也不该被跨用例缓存影响。只有 MCP
+// server 在启动时显式 enableParseCache()，把这条优化限制在常驻进程里。
+//
+// 返回的对象按**只读**约定使用；调用方需要派生（例如 yuan 合并 log-archive）
+// 必须新建顶层对象，不能原地改 cached.log。签名包含 mtime / ctime / size /
+// ino，原子写与普通写都会让缓存失效。
+
+const PARSE_CACHE_FILES = [
+  'log.md',
+  'log-archive.md',
+  'requirements.md',
+  'decisions.md',
+  'index.md',
+  'state.md',
+  'preferences.md',
+  'absolute.md',
+];
+const PARSE_CACHE_LIMIT = 16;
+const parseMemo = new Map();
+let parseCacheEnabled = false;
+
+function parseSignature(pocketDir) {
+  const parts = [];
+  for (const file of PARSE_CACHE_FILES) {
+    try {
+      const stat = fs.statSync(path.join(pocketDir, file));
+      parts.push(file + ':' + stat.mtimeMs + ':' + stat.ctimeMs + ':' + stat.size + ':' + stat.ino);
+    } catch (e) {
+      parts.push(file + ':-');
+    }
+  }
+  return parts.join('|');
+}
+
+function enableParseCache() {
+  parseCacheEnabled = true;
+}
+
+function disableParseCache() {
+  parseCacheEnabled = false;
+  parseMemo.clear();
+}
+
+/**
+ * 丢掉某个 pocket 的解析缓存；省略参数时清空全部。
+ * @param {string} [pocketDir]
+ */
+function resetParseCache(pocketDir) {
+  if (pocketDir === undefined) {
+    parseMemo.clear();
+    return parseMemo.size;
+  }
+  parseMemo.delete(path.resolve(pocketDir));
+  return parseMemo.size;
+}
+
+function parseAll(pocketDir) {
+  if (!parseCacheEnabled) return parseAllUncached(pocketDir);
+
+  const key = path.resolve(pocketDir);
+  const signature = parseSignature(key);
+  const hit = parseMemo.get(key);
+  if (hit && hit.signature === signature) {
+    // LRU：命中后挪到队尾，淘汰最久未用的那一份
+    parseMemo.delete(key);
+    parseMemo.set(key, hit);
+    return hit.data;
+  }
+
+  const data = parseAllUncached(key);
+  if (!parseMemo.has(key) && parseMemo.size >= PARSE_CACHE_LIMIT) {
+    parseMemo.delete(parseMemo.keys().next().value);
+  }
+  parseMemo.set(key, { signature, data });
+  return data;
 }
 
 // ============================================================
@@ -955,6 +1041,9 @@ module.exports = {
   parsePreferences,
   parseAbsolute,
   parseAll,
+  enableParseCache,
+  disableParseCache,
+  resetParseCache,
   parseCodeMapEntries,
   extractPaths,
   extractCorrects,

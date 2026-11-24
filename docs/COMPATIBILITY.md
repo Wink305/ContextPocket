@@ -95,4 +95,4 @@ read: [CONVENTIONS.md]  # 创建一个 CONVENTIONS.md,内容写"用大白话提�
 
 ---
 
-最后更新:2026（对应 skill 3.0 + merge；CLI 子命令与 MCP 工具各 29 个）
+最后更新:2026（对应 skill 3.1 + workspace 时间图 + merge + BM25 可选排序；CLI 子命令与 MCP 工具各 29 个）

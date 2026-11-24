@@ -59,7 +59,7 @@ const {
 } = require('../lib/writer');
 const { formatVerifyResult, formatStatus, colorize, formatSearchHitLines } = require('../lib/formatter');
 const { bootstrap } = require('../lib/bootstrap');
-const { recall, recallWindow, diff, searchAny, why, checkConflicts } = require('../lib/query');
+const { recall, recallWindow, diff, searchAny, why, checkConflicts, resolveRankMode } = require('../lib/query');
 const {
   buildContext,
   formatContextLines,
@@ -106,7 +106,7 @@ const VALUE_OPTIONS = new Set([
   'action', 'append-summary', 'attachments', 'author', 'commits', 'conflicts', 'consequences',
   'context', 'decision', 'decisions', 'dir', 'drift-last-n', 'f', 'file', 'file-path',
   'from', 'gist', 'id', 'impl', 'key', 'keyword', 'keep-last', 'language', 'last-n', 'limit', 'max-tokens', 'edition-mode',
-  'mode', 'next-step', 'offset', 'options', 'pitfall', 'pitfalls', 'preferences', 'project-type', 'recent-keep', 'source',
+  'mode', 'next-step', 'offset', 'options', 'pitfall', 'pitfalls', 'preferences', 'project-type', 'rank', 'recent-keep', 'source',
   'since', 'status', 'summary', 'supersedes', 't', 't-a', 't-b', 't-id', 'tags', 'text', 'title', 'to', 'truncate', 'type', 'uncertain',
   'until', 'user', 'value', 'when', 'gitignore',
 ]);
@@ -115,7 +115,7 @@ const VALUE_OPTIONS = new Set([
 // "rebuild" 当成 quiet 的值，导致开关失效）
 const BOOL_OPTIONS = new Set([
   'apply-refs', 'apply', 'auto', 'auto-suggest', 'diff', 'drift', 'dry-run', 'force', 'full', 'help', 'h', 'include-archive', 'interactive', 'json', 'list', 'list-only', 'no-conflict-check', 'no-hub', 'no-index',
-  'quiet', 'read', 'rebuild', 'rank', 'verify', 'version', 'v', 'with-context',
+  'quiet', 'read', 'rebuild', 'verify', 'version', 'v', 'with-context',
 ]);
 
 // 真实存在的两段式命令。只有落在这些组合里的第二个词才当子命令，
@@ -811,10 +811,16 @@ function cmdRecall(options, positional) {
 
   // --rank 只是入向上下文的排序方式；没有 --with-context 就没有可排的东西，
   // 明确报错而不是静默丢旗标（同 --with-context 与窗口的互斥处理）。
+  if (options.rank === 'bm25') {
+    failJson(options, 'recall: --rank bm25 is a search option; recall has no result list to rank.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank bm25 only applies to search.\n');
+    process.exit(1);
+  }
   if (options.rank && !withContext) {
     failJson(options, 'recall: --rank orders --with-context output; pass --with-context too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --with-context.');
-    console.error('     Use `context-pocket-quan recall <T-id> --with-context --rank`.\n');
+    console.error('     Use `context-pocket-quan recall <T-id> --with-context --rank`.');
+    console.error('     For search-result ranking use `search <kw> --rank bm25`.\n');
     process.exit(1);
   }
 
@@ -999,10 +1005,20 @@ function cmdSearch(options, positional) {
     console.error(colorize('\n  ❌ Error:', 'red') + ' ' + graphOptions.error);
     process.exit(1);
   }
-  if (options.rank && graphOptions.depth === 0) {
+
+  let rankMode;
+  try {
+    rankMode = resolveRankMode(options.rank);
+  } catch (e) {
+    failJson(options, 'search: ' + e.message);
+    console.error(colorize('\n  ❌ Error:', 'red') + ' ' + e.message);
+    process.exit(1);
+  }
+  if (rankMode === 'graph' && graphOptions.depth === 0) {
     failJson(options, 'search: --rank orders --expand graph context; pass --expand too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
-    console.error('     Use `context-pocket-quan search <kw> --expand <n> --rank`.\n');
+    console.error('     Use `context-pocket-quan search <kw> --expand <n> --rank`.');
+    console.error('     For search-result ranking use `--rank bm25`.\n');
     process.exit(1);
   }
 
@@ -1026,13 +1042,14 @@ function cmdSearch(options, positional) {
     untilT,
     fromDate,
     toDate,
+    rank: rankMode === 'bm25' ? 'bm25' : undefined,
   });
   const graphContext = graphOptions.depth > 0
     ? expandGraph(
       readGraph(pocketDir).graph,
       searchNodeIds(results),
       graphOptions.depth,
-      { asOf: graphOptions.asOf, exclude: searchNodeIds(results), rank: !!options.rank }
+      { asOf: graphOptions.asOf, exclude: searchNodeIds(results), rank: rankMode === 'graph' }
     )
     : null;
 
@@ -1050,6 +1067,7 @@ function cmdSearch(options, positional) {
       limit,
       hasMore,
       viaIndex,
+      ...(rankMode !== 'default' ? { rank: rankMode } : {}),
       results,
       ...(graphContext ? { graphContext } : {}),
     });
@@ -1057,9 +1075,10 @@ function cmdSearch(options, positional) {
 
   // 时间窗口说明（人类输出头部）：措辞与 recall 的窗口模式共用一份
   const label = timeWindowLabel(sinceT, untilT, fromDate, toDate);
+  const rankLabel = rankMode === 'bm25' ? ' · rank bm25' : '';
 
   console.log('');
-  console.log(colorize(`  Search: "${keyword}"`, 'bold') + (label ? colorize('  ( ' + label + ' )', 'dim') : ''));
+  console.log(colorize(`  Search: "${keyword}"`, 'bold') + (label ? colorize('  ( ' + label + ' )', 'dim') : '') + colorize(rankLabel, 'dim'));
   const shown = limit !== null && results.length < total
     ? colorize(` · showing ${offset + 1}–${offset + results.length}`, 'dim')
     : '';
@@ -1113,6 +1132,11 @@ function cmdWhy(options, positional) {
   }
 
   const limit = Math.max(1, intOption(options.limit, 10));
+  if (options.rank === 'bm25') {
+    failJson(options, 'why: --rank bm25 is a search option; why has no result list to rank.');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --rank bm25 only applies to search.\n');
+    process.exit(1);
+  }
   if (options.rank && graphOptions.depth === 0) {
     failJson(options, 'why: --rank orders --expand graph context; pass --expand too.');
     console.error(colorize('\n  ❌ Error:', 'red') + ' --rank needs --expand.');
@@ -2459,13 +2483,15 @@ function cmdMergeReport(options, positional) {
     for (const item of result.applied) {
       if (item.type === 'requirement') console.log(`     - R${String(item.id).replace(/^R/, '')}: ${item.from} → ${item.to}`);
       else if (item.type === 'preference') console.log(`     - ${item.key}: ${item.from} → ${item.to}`);
+      else if (item.type === 'code-map') console.log(`     - ${item.path} → ${item.description}`);
       else console.log(`     - state ${item.kind}: ${item.text}`);
     }
     for (const item of result.skipped) {
       const what = item.type === 'requirement' ? item.id
         : item.type === 'preference' ? item.key
           : item.type === 'state' ? 'state ' + item.kind
-            : item.type;
+            : item.type === 'code-map' ? 'code-map ' + (item.path || (item.count + ' item(s)'))
+              : item.type;
       console.log(colorize(`     ↳ skipped ${what}: ${item.reason}`, 'dim'));
     }
     console.log('');

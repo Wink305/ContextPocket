@@ -1078,6 +1078,14 @@ test('CI workflow gates release tags with the same four checks as main', () => {
     for (const cmd of ['node scripts/sync-core.js', 'npm run lint', 'node tests/run.js', 'npm run smoke', 'npm run smoke-live']) {
       assert.ok(text.includes(cmd), rel + ' 缺 ' + cmd + '：tag 触发了却少跑一道门禁');
     }
+    assert.ok(/actions\/checkout@v5/.test(text),
+      rel + ' 必须用 actions/checkout@v5：v4 已进入 Node 20 deprecation 告警');
+    assert.ok(/actions\/setup-node@v5/.test(text),
+      rel + ' 必须用 actions/setup-node@v5：v4 已进入 Node 20 deprecation 告警');
+    assert.ok(/matrix:\s*\n\s+node:\s*\[\s*'18'\s*,\s*'20'\s*,\s*'22'\s*\]/.test(text),
+      rel + " 必须覆盖 Node 18 / 20 / 22 矩阵：matrix.node: ['18', '20', '22']");
+    assert.ok(text.includes('node-version: ${{ matrix.node }}'),
+      rel + ' 的 setup-node 必须读 matrix.node，不能写死一个版本');
   };
   assertGates(wf);
 
@@ -1085,4 +1093,284 @@ test('CI workflow gates release tags with the same four checks as main', () => {
     /on\.push/, 'tags 锚点必须在触发条件被改掉时真的报红');
   assert.throws(() => assertGates(wf.replace('npm run smoke-live', 'echo skipped')),
     /smoke-live/, '四道命令的锚点必须在少一道时真的报红');
+  assert.throws(() => assertGates(wf.replace("node: ['18', '20', '22']", "node: ['20']")),
+    /Node 18 \/ 20 \/ 22/, '矩阵锚点必须在缩水时真的报红');
+  assert.throws(() => assertGates(wf.replace('actions/checkout@v5', 'actions/checkout@v4')),
+    /checkout@v5/, 'actions 版本锚点必须在回退时真的报红');
+});
+
+// 发版脚本曾把 tag / zip / notes 全留在人脑里：同一个版本两次打包可能内容不同。
+// 这里只锁零依赖的纯函数与 zip 写入器；真正跑 npm pack / gh 仍由脚本自身负责。
+test('release script: tag rules, args and the zero-dependency zip writer stay stable', () => {
+  const release = require(path.join(ROOT, 'scripts', 'release'));
+
+  assert.strictEqual(release.buildTag('3.0', { name: 'yuan' }), 'ContextPocket-3.0-yuan');
+  assert.strictEqual(release.buildTag('3.0', { name: 'xi' }, 'Custom-1'), 'Custom-1');
+
+  const parsed = release.parseArgs(['yuan', '--yes', '--version', '3.0', '--tag=Custom', '--draft']);
+  assert.strictEqual(parsed.edition, 'yuan');
+  assert.strictEqual(parsed.flags.yes, true);
+  assert.strictEqual(parsed.flags.version, '3.0');
+  assert.strictEqual(parsed.flags.tag, 'Custom');
+  assert.strictEqual(parsed.flags.draft, true);
+
+  assert.strictEqual(release.crc32(Buffer.from('123456789')), 0xCBF43926,
+    'CRC32 必须与标准测试向量一致');
+
+  const dir = tmpProject('release-zip');
+  const source = path.join(dir, 'pkg');
+  fs.mkdirSync(path.join(source, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(source, 'a.txt'), 'alpha\n', 'utf-8');
+  fs.writeFileSync(path.join(source, 'sub', 'b.txt'), 'beta\n', 'utf-8');
+
+  const zipPath = path.join(dir, 'out.zip');
+  const info = release.createZip(source, zipPath, 'ContextPocket-3.0-test');
+  assert.strictEqual(info.files, 2, JSON.stringify(info));
+  const buffer = fs.readFileSync(zipPath);
+  assert.strictEqual(buffer.readUInt32LE(0), 0x04034b50, 'zip 必须以 local file header 开头');
+  assert.ok(buffer.includes(Buffer.from('ContextPocket-3.0-test/a.txt')), 'zip 内必须有顶层目录前缀');
+  assert.ok(buffer.includes(Buffer.from('ContextPocket-3.0-test/sub/b.txt')));
+  assert.strictEqual(buffer.readUInt32LE(buffer.length - 22), 0x06054b50, 'zip 必须以 EOCD 结尾');
+});
+
+test('parser: resident parse cache reuses by signature and invalidates after a write', () => {
+  const parser = require(path.join(ROOT, 'lib', 'parser'));
+  const { bootstrap } = require(path.join(ROOT, 'lib', 'bootstrap'));
+  const dir = tmpProject('parse-cache');
+  const { pocketDir } = bootstrap(dir, {});
+
+  parser.disableParseCache();
+  const offA = parser.parseAll(pocketDir);
+  const offB = parser.parseAll(pocketDir);
+  assert.notStrictEqual(offA, offB, '默认关闭时每次都应重新解析');
+
+  parser.enableParseCache();
+  try {
+    const cachedA = parser.parseAll(pocketDir);
+    const cachedB = parser.parseAll(pocketDir);
+    assert.strictEqual(cachedA, cachedB, '启用后签名一致必须复用同一份解析结果');
+
+    fs.appendFileSync(path.join(pocketDir, 'log.md'), [
+      '',
+      '## T1 · cache invalidation · [test]',
+      '',
+      '### User',
+      '- u',
+      '',
+      '### Action',
+      '- a',
+      '',
+    ].join('\n'), 'utf-8');
+
+    const after = parser.parseAll(pocketDir);
+    assert.notStrictEqual(after, cachedA, '源文件变化必须重新解析');
+    assert.strictEqual(after.log.latestT, 1, '重新解析必须看到新轮次');
+  } finally {
+    parser.disableParseCache();
+  }
+});
+
+test('query: rank resolver keeps bare --rank graph-only and accepts bm25', () => {
+  const { resolveRankMode } = require(path.join(ROOT, 'lib', 'query'));
+  assert.strictEqual(resolveRankMode(undefined), 'default');
+  assert.strictEqual(resolveRankMode(false), 'default');
+  assert.strictEqual(resolveRankMode(true), 'graph');
+  assert.strictEqual(resolveRankMode('true'), 'graph');
+  assert.strictEqual(resolveRankMode('false'), 'default');
+  assert.strictEqual(resolveRankMode('graph'), 'graph');
+  assert.strictEqual(resolveRankMode('bm25'), 'bm25');
+  assert.throws(() => resolveRankMode('nope'), /--rank must be bm25/);
+});
+
+test('rank: shared BM25 formula is the one both indexes use', () => {
+  const { termStats, bm25Score, BM25_K1, BM25_B } = require(path.join(ROOT, 'lib', 'rank'));
+
+  const stats = termStats([['alpha', 'beta', 'alpha'], ['gamma']], new Set(['alpha']));
+  assert.deepStrictEqual(stats, { counts: { alpha: 2 }, length: 4 }, JSON.stringify(stats));
+  assert.strictEqual(termStats([], new Set(['alpha'])).length, 0);
+
+  const base = {
+    tf: { alpha: 2 },
+    length: 4,
+    avgLength: 10,
+    terms: ['alpha'],
+    df: { alpha: 2 },
+    totalDocs: 10,
+  };
+  const plain = bm25Score(base);
+  assert.ok(plain > 0, JSON.stringify(plain));
+  assert.strictEqual(bm25Score(Object.assign({}, base, { df: { alpha: 0 } })), 0,
+    'df=0 的词不能贡献分数');
+  assert.strictEqual(bm25Score(Object.assign({}, base, { weights: { alpha: 2 } })), plain * 2,
+    'yuan 的字段权重必须是乘数');
+  assert.strictEqual(BM25_K1, 1.2);
+  assert.strictEqual(BM25_B, 0.75);
+});
+
+test('mcp-runtime: framing, initialize negotiation and tool calls are shared', () => {
+  const { createRuntime, LATEST_PROTOCOL_VERSION } = require(path.join(ROOT, 'lib', 'mcp-runtime'));
+  const out = [];
+  const runtime = createRuntime({
+    name: 'test-server',
+    version: '3.0',
+    instructions: 'hello',
+    tools: [{ name: 'echo', inputSchema: { type: 'object' } }],
+    callTool: (name, args) => {
+      if (name === 'boom') throw new Error('boom');
+      return { content: [{ type: 'text', text: name + ':' + JSON.stringify(args) }] };
+    },
+    write: (message) => out.push(message),
+  });
+
+  runtime.handleLine(JSON.stringify({
+    jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' },
+  }));
+  runtime.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }));
+  runtime.handleLine(JSON.stringify({
+    jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: { x: 1 } },
+  }));
+  runtime.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'ping' }));
+  runtime.handleLine(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }));
+  runtime.handleLine('{bad');
+  runtime.handleLine(JSON.stringify([
+    { jsonrpc: '2.0', id: 5, method: 'ping' },
+    { jsonrpc: '2.0', id: 6, method: 'nope' },
+    { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'boom', arguments: {} } },
+  ]));
+  runtime.handleLine(JSON.stringify({
+    jsonrpc: '2.0', id: 8, method: 'initialize', params: { protocolVersion: '1999-01-01' },
+  }));
+  runtime.handleLine(JSON.stringify({ id: 9, method: 'ping' }));
+
+  assert.strictEqual(out[0].result.protocolVersion, '2025-03-26');
+  assert.strictEqual(out[0].result.serverInfo.name, 'test-server');
+  assert.strictEqual(out[0].result.instructions, 'hello');
+  assert.strictEqual(out[1].result.tools.length, 1);
+  assert.match(out[2].result.content[0].text, /echo:\{"x":1\}/);
+  assert.deepStrictEqual(out[3].result, {});
+  assert.strictEqual(out[4].error.code, -32700, '坏 JSON 必须回 parse error');
+  assert.deepStrictEqual(out[5].result, {});
+  assert.strictEqual(out[6].error.code, -32601);
+  assert.strictEqual(out[7].result.isError, true, 'callTool 抛错必须兜底成工具错误');
+  assert.strictEqual(out[8].result.protocolVersion, LATEST_PROTOCOL_VERSION,
+    '不认识的协议版本回落到最新版');
+  assert.strictEqual(out[9].error.code, -32600, '缺 jsonrpc 字段必须是 invalid request');
+  assert.strictEqual(out.length, 10, '通知不能产生响应：' + JSON.stringify(out));
+});
+
+// ------------------------------------------------------------
+// graph-core：工作区时间图的纯图原语
+// ------------------------------------------------------------
+
+test('graph-core: parseCrossRefs only accepts qualified pocket:Tn and keeps first-seen order', () => {
+  const { parseCrossRefs } = require(path.join(ROOT, 'lib', 'graph-core'));
+  assert.deepStrictEqual(
+    parseCrossRefs('see api:T5, then WEB:T2; api:T5 again; bare T7; ghost:T0'),
+    [{ pocket: 'api', tId: 5 }, { pocket: 'web', tId: 2 }]
+  );
+  assert.deepStrictEqual(parseCrossRefs('nothing here'), []);
+  assert.deepStrictEqual(parseCrossRefs(''), []);
+});
+
+test('graph-core: activeOnDate never guesses a date and treats the range as inclusive', () => {
+  const { activeOnDate } = require(path.join(ROOT, 'lib', 'graph-core'));
+  assert.strictEqual(activeOnDate({ date: null }, null), true, '不做 as-of 时无日期节点仍可用');
+  assert.strictEqual(activeOnDate({ date: null }, '2026-11-02'), false, '无日期节点在 as-of 下不可见');
+  assert.strictEqual(activeOnDate({ date: '2026-11-03' }, '2026-11-02'), false);
+  assert.strictEqual(activeOnDate({ date: '2026-11-02' }, '2026-11-02'), true);
+  assert.strictEqual(activeOnDate({ dateFrom: '2026-11-01', dateTo: '2026-11-03' }, '2026-11-04'), false);
+  assert.strictEqual(activeOnDate({ dateFrom: '2026-11-01', dateTo: '2026-11-03' }, '2026-11-03'), true);
+});
+
+test('graph-core: buildAdjacency skips weak/missing edges, is bidirectional and bounded', () => {
+  const { buildAdjacency } = require(path.join(ROOT, 'lib', 'graph-core'));
+  const nodes = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  const edges = [
+    { from: 'a', to: 'b', type: 'references', evidence: 'strong' },
+    { from: 'a', to: 'c', type: 'references', evidence: 'weak' },
+    { from: 'a', to: 'ghost', type: 'references', evidence: 'strong' },
+    { from: 'b', to: 'd', type: 'references', evidence: 'strong' },
+  ];
+  const full = buildAdjacency(nodes, edges);
+  assert.deepStrictEqual(full.get('a').map((item) => item.id), ['b']);
+  assert.deepStrictEqual(full.get('b').map((item) => item.id), ['a', 'd']);
+  assert.deepStrictEqual(full.get('d').map((item) => item.id), ['b']);
+  assert.deepStrictEqual(full.get('c'), []);
+  const bounded = buildAdjacency(nodes, edges, { maxDegree: 1 });
+  assert.deepStrictEqual(bounded.get('b').map((item) => item.id), ['a'], 'maxDegree 截断按 id 排序');
+});
+
+test('graph-core: expandByDate is deterministic, typed, dated and bounded', () => {
+  const { expandByDate } = require(path.join(ROOT, 'lib', 'graph-core'));
+  const nodes = [
+    { id: 'api:T1', pocket: 'api', type: 'T', date: '2026-11-01' },
+    { id: 'web:T1', pocket: 'web', type: 'T', date: '2026-11-01' },
+    { id: 'web:T2', pocket: 'web', type: 'T', date: '2026-11-03' },
+    { id: 'web:adr:ADR-1', pocket: 'web', type: 'ADR', date: '2026-11-03' },
+    { id: 'api:file:src/a.js', pocket: 'api', type: 'file', date: null },
+  ];
+  const edges = [
+    { from: 'api:T1', to: 'web:T1', type: 'x-ref', evidence: 'strong', scope: 'cross', date: '2026-11-01' },
+    { from: 'api:T1', to: 'api:file:src/a.js', type: 'modifies', evidence: 'strong', scope: 'intra' },
+    { from: 'web:T1', to: 'web:T2', type: 'references', evidence: 'strong', scope: 'intra' },
+    { from: 'web:T1', to: 'web:adr:ADR-1', type: 'decided-in', evidence: 'strong', scope: 'intra' },
+    { from: 'api:T1', to: 'web:T2', type: 'x-ref', evidence: 'weak', scope: 'cross' },
+  ];
+  const graph = { nodes, edges };
+  const one = expandByDate(graph, ['api:T1'], 1);
+  assert.deepStrictEqual(one.results.map((item) => item.id), ['web:T1'], '弱边不参与，文件类型不返回');
+  assert.strictEqual(one.results[0].scope, 'cross');
+  assert.deepStrictEqual(expandByDate(graph, ['api:T1'], 1), one, '同样输入必须逐字一致');
+
+  const two = expandByDate(graph, ['api:T1'], 2);
+  assert.deepStrictEqual(two.results.map((item) => item.id).sort(), ['web:T1', 'web:T2', 'web:adr:ADR-1']);
+  assert.deepStrictEqual(two.results.find((item) => item.id === 'web:T2').path.map((edge) => edge.type),
+    ['x-ref', 'references']);
+
+  assert.deepStrictEqual(expandByDate(graph, ['api:T1'], 1, { asOf: '2026-11-01' }).results.map((i) => i.id),
+    ['web:T1'], '11-01 时 web:T1 已存在，11-02 之后的不应出现');
+  assert.deepStrictEqual(expandByDate(graph, ['api:T1'], 1, { asOf: '2026-10-31' }).results, [],
+    '种子在 as-of 之前还不存在时不能扩展');
+
+  assert.deepStrictEqual(expandByDate(graph, ['api:T1'], 1, { exclude: ['web:T1'] }).results, []);
+  assert.deepStrictEqual(expandByDate(graph, ['api:T1'], 1, { resultTypes: ['ADR'] }).results, []);
+
+  const bounded = expandByDate(graph, ['api:T1'], 2, { maxNodes: 1 });
+  assert.strictEqual(bounded.results.length, 1);
+  assert.strictEqual(bounded.hasMore, true);
+});
+
+test('graph-core: normalizeKey and daysBetween are the shared derived-edge primitives', () => {
+  const { normalizeKey, daysBetween } = require(path.join(ROOT, 'lib', 'graph-core'));
+  assert.strictEqual(normalizeKey('  Use   JWT  '), 'use jwt');
+  assert.strictEqual(normalizeKey(null), '');
+  assert.strictEqual(daysBetween('2026-11-01', '2026-11-03'), 2);
+  assert.strictEqual(daysBetween('2026-11-03', '2026-11-01'), 2, '差值取绝对值');
+  assert.strictEqual(daysBetween('2026-11-01', '2026-13-01'), null);
+  assert.strictEqual(daysBetween(null, '2026-11-01'), null);
+});
+
+test('graph-core: weak edges need an explicit includeWeak, and crossOnlyTypes filters bridges', () => {
+  const { buildAdjacency, expandByDate } = require(path.join(ROOT, 'lib', 'graph-core'));
+  const nodes = [
+    { id: 'a:T1', pocket: 'a', type: 'T', date: '2026-11-01' },
+    { id: 'a:file:x', pocket: 'a', type: 'file', date: '2026-11-01' },
+    { id: 'b:file:x', pocket: 'b', type: 'file', date: '2026-11-02' },
+  ];
+  const edges = [
+    { from: 'a:T1', to: 'a:file:x', type: 'modifies', evidence: 'strong', scope: 'intra' },
+    { from: 'a:file:x', to: 'b:file:x', type: 'shared-file', evidence: 'weak', scope: 'cross' },
+  ];
+  assert.deepStrictEqual(buildAdjacency(nodes, edges).get('a:file:x').map((item) => item.id), ['a:T1']);
+  assert.deepStrictEqual(buildAdjacency(nodes, edges, { includeWeak: true }).get('a:file:x').map((item) => item.id),
+    ['a:T1', 'b:file:x']);
+
+  const crossOnly = expandByDate({ nodes, edges }, ['a:T1'], 2, {
+    includeWeak: true,
+    resultTypes: ['T', 'file'],
+    crossOnlyTypes: ['file'],
+    includeEdge: (edge) => edge.evidence !== 'weak' || edge.type === 'shared-file',
+  });
+  assert.deepStrictEqual(crossOnly.results.map((item) => item.id), ['b:file:x']);
+  assert.strictEqual(crossOnly.results[0].scope, 'cross');
 });

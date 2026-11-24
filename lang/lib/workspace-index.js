@@ -24,15 +24,13 @@ const path = require('path');
 const { readManifest, resolvePocket, parsePocketAll, cacheDir, searchWorkspace } = require('./workspace');
 const { whenDate } = require('./recap');
 const { tokenize } = require('./indexer');
+const { bm25Score } = require('./rank');
 const { writeAtomic } = require('./io');
 
 // 文档集合/打分规则变了就升版本，旧缓存整体作废
 const INDEX_VERSION = 1;
 const INDEX_FILE = 'search-index.json';
 const MAX_TEXT = 4000;
-
-const BM25_K1 = 1.2;
-const BM25_B = 0.75;
 
 // 参与签名的源文件（任一变化即视为该口袋过期）
 const SOURCE_FILES = [
@@ -445,16 +443,15 @@ function queryIndex(index, keyword, options = {}) {
     if (filters.pockets && !filters.pockets.has(String(doc.pocket).toLowerCase())) continue;
     if (filters.types && !filters.types.has(String(doc.type).toLowerCase())) continue;
 
-    let score = 0;
-    for (const term of tokens) {
-      const df = index.df[term] || 0;
-      if (df === 0) continue;
-      const idf = Math.log(1 + (index.totalDocs - df + 0.5) / (df + 0.5));
-      const tf = doc.tf[term] || 0;
-      const weight = doc.weights[term] || 1;
-      const denom = tf + BM25_K1 * (1 - BM25_B + BM25_B * (doc.length / (index.avgLength || 1)));
-      score += idf * ((tf * (BM25_K1 + 1)) / denom) * weight;
-    }
+    let score = bm25Score({
+      tf: doc.tf,
+      length: doc.length,
+      avgLength: index.avgLength,
+      terms: tokens,
+      df: index.df,
+      totalDocs: index.totalDocs,
+      weights: doc.weights,
+    });
 
     // 短语加成：多词查询整串出现在正文里，说明命中比"词项散落"更可信
     const phrase = tokens.length > 1 && normQuery.length > 0 && normalize(doc.text).includes(normQuery);
