@@ -24,6 +24,7 @@ const {
 const { SESSION_LINE_RE } = require('./constants');
 const { estimateTokens, applyHandoffBudget } = require('./budget');
 const { WHEN_LINE_RE, parseWhen, parseWhenLine, whenLine, nowStamp, todayDate, formatSupportsWhen } = require('./when');
+const { parseKnowledgeText } = require('./knowledge-core');
 
 // ============================================================
 // 工具函数
@@ -1035,6 +1036,28 @@ function generateHandoff(pocketDir, opts = {}) {
   content += emit(capped(adrLines, 8, 'decisions', 'decisions.md'));
   if (adrLines.length === 0) content += '- (none current)\n';
   content += '\n';
+
+  // 知识沉淀：只有 knowledge.md 存在时才出现，不改变旧口袋的 handoff 输出。
+  const knowledgeText = readFileSafe(path.join(pocketDir, 'knowledge.md'));
+  if (knowledgeText) {
+    const parsedKnowledge = parseKnowledgeText(knowledgeText);
+    const active = parsedKnowledge.notes
+      .filter((note) => note.status === 'active')
+      .sort((a, b) => (b.updated || '').localeCompare(a.updated || '') || a.id.localeCompare(b.id));
+    content += '### Knowledge (active only)\n';
+    const knowledgeLines = active.map((note) => '- ' + note.id + ': ' + note.title
+      + (note.topic ? ' · ' + note.topic : '')
+      + ' · ' + note.sources.length + ' source(s)'
+      + (note.confidence === 'disputed' ? ' · ⚠️ disputed' : ''));
+    content += emit(capped(knowledgeLines, 5, 'knowledge notes', 'knowledge.md'));
+    if (knowledgeLines.length === 0) content += '- (no active K yet)\n';
+    const drafts = parsedKnowledge.notes.filter((note) => note.status === 'draft').length;
+    const disputed = parsedKnowledge.notes.filter((note) => note.confidence === 'disputed').length;
+    if (drafts > 0 || disputed > 0) {
+      content += '- (' + drafts + ' draft, ' + disputed + ' disputed — see knowledge.md)\n';
+    }
+    content += '\n';
+  }
 
   content += '### Code Map (top 3 levels, capped)\n';
   const codeMapPath = path.join(pocketDir, 'code-map.md');

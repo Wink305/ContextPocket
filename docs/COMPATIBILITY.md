@@ -35,6 +35,7 @@ ContextPocket 设计为 **Agent-agnostic**——所有文件是纯文本 Markdow
 | 回看某轮 | `recall <Tn>` | 可选 | "读 log.md 找 T<n>" |
 | 两轮对比 | `diff <Ta> <Tb>` | 可选 | "对比 log.md 的 T<a> 到 T<b>" |
 | 全文检索 | `search <关键词>` | 可选 | grep / ripgrep |
+| 知识沉淀 | `distill --knowledge`（`--apply` / `--activate`） | 可选 | "把反复出现的坑整理成 knowledge.md" |
 | 健康检查 | `verify` | 可选 | "检查所有引用是否完整" |
 | 导出快照 | Agent 直接写文件（无工具） | 可选 | "合并所有文件成单个 snapshot" |
 | 重置 | `archive --keep-last N` + 重建 | 可选 | "归档旧 ContextPocket/ 然后重建" |
@@ -95,4 +96,4 @@ read: [CONVENTIONS.md]  # 创建一个 CONVENTIONS.md,内容写"用大白话提�
 
 ---
 
-最后更新:2026（对应 skill 3.1 + workspace 时间图 + merge + BM25 可选排序；CLI 子命令与 MCP 工具各 29 个）
+最后更新:2026（对应 skill 3.2 + workspace 时间图 + merge + BM25 可选排序 + 记忆沉淀 K；CLI 子命令与 MCP 工具各 29 个）

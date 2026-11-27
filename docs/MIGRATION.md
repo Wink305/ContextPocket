@@ -10,7 +10,7 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 版本类型 | 位置 | 示例 | 说明 |
 |---------|------|------|------|
-| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `3.1` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
+| **Skill 版本** | 真值只有 `package.json` 的 `version`；另外六处是它的抄本——`SKILL.md` frontmatter 的 `version:`、`lib/version.js` 的 `FALLBACK_VERSION`（拿不到 package.json 时的兜底）、`CHANGELOG.md` 的 `## [<版本>] - <日期>` 节标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 里的版本号示例 | `3.2` | 遵循 [语义化版本](https://semver.org/lang/zh-CN/)，代表 skill 功能的迭代。静态文件自己算不出版本号，所以七处同值由 `tests/unit.js` 逐处比对：漂了就红 |
 | **数据格式版本** | `ContextPocket/readme.md` 中的 `format:` 字段 | `v2` | 代表 `ContextPocket/` 目录内数据文件的结构版本 |
 
 ### 3.0 家族：包名与命令名迁移
@@ -19,12 +19,12 @@ ContextPocket 存在两套独立的版本号，各司其职：
 
 | 场景 | 新包名 / 命令 | 旧包名 / 命令 | 说明 |
 |------|---------------|---------------|------|
-| 通用版 | `context-pocket-quan` | `context-pocket` | 3.0 / 3.1 保留旧名作为转发入口，3.2 移除 |
-| 轻量版 | `context-pocket-xi` | `context-pocket-lite` | 同上 |
+| 通用版 | `context-pocket-quan` | `context-pocket` | 3.2 起旧名移除，改用新名 |
+| 轻量版 | `context-pocket-xi` | `context-pocket-lite` | 3.2 起旧名移除，改用新名 |
 | 专业攻坚版 | `context-pocket-yuan` | — | 3.0 起稳定；尚未发布 npm，安装走 Release 归档或 git clone |
 | 协作强化版 | `context-pocket-hai` | — | 尚未发布 |
 
-MCP 入口同名：`context-pocket-quan-mcp` / `context-pocket-xi-mcp`；旧的 `context-pocket-mcp` / `context-pocket-lite-mcp` 同样保留到 3.1。**数据格式与口袋目录不变**（仍为 `ContextPocket/` + format v2），换包不需要迁移数据；只是命令名和 npm 包名换了。已安装旧包的机器可以继续用旧命令，也可以改装新包后按新命令调用。
+MCP 入口同名：`context-pocket-quan-mcp` / `context-pocket-xi-mcp`；旧的 `context-pocket-mcp` / `context-pocket-lite-mcp` 已在 3.2 移除。**数据格式与口袋目录不变**（仍为 `ContextPocket/` + format v2），换包不需要迁移数据；只是命令名和 npm 包名换了。已安装旧包的机器升级到 3.2 后需要改用新命令。
 
 > **xi → quan 何时升级、怎么升**：见 [`lite/README.md`](../lite/README.md) 的 “When to upgrade to quan” 一节。结论是无需迁移：同一个 `ContextPocket/`、同一套文件与 format v2，只换可执行入口。
 
@@ -49,6 +49,8 @@ MCP 入口同名：`context-pocket-quan-mcp` / `context-pocket-xi-mcp`；旧的 
 v1 是 ContextPocket 的首个正式数据格式，包含 10 个核心文件（`lib/constants.js` 的 `CORE_FILES`）+ 2 个按需文件（`log-archive.md`、`handoff.md`，用到才创建），以及 T-block / R-id / ADR 等基础结构。lite 模式下核心文件只有 5 个（`LITE_CORE_FILES`），缺的文件由写入方在第一次需要时补齐。
 
 **v2 只比 v1 多一样东西**：每个 T-block 的标题下面多一条时间结构行，记下"这一轮是什么时候的事"。文件数量、小节名称、R-id / ADR 编号规则全部没动，所以 v1 的 pocket 依然是完全健康的，升级是可选的（见下面「v1 → v2 迁移」）。
+
+**记忆沉淀层（K）不改变 v2**：`knowledge.md`（quan）与工作区 `knowledge/`（yuan）都是可选文件，不存在时工具不会创建、也不会报格式错误。quan 的图缓存 `graph/4`、yuan 的工作区索引 v2 / 工作区图 v3 都是可删除重建的派生缓存，不参与 `format` 判定，因此没有对应的迁移步骤。
 
 ---
 
@@ -198,15 +200,17 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 `ContextPocket/assets/graph.jsonl`，一行一条 JSON 记录，第一行是 meta：
 
 ```jsonl
-{"kind":"meta","schema":"graph/3","sources":{"log.md":"<sha1>", ...}}
+{"kind":"meta","schema":"graph/4","sources":{"log.md":"<sha1>", ...}}
 {"kind":"node","id":"T1","type":"turn","label":"初版","archived":false,"source":"log.md"}
 {"kind":"edge","from":"T1","to":"file:src/a.ts","type":"modifies","evidence":"strong","source":"log.md","tId":1,"recordedAt":1,"validFrom":1,"validTo":null,"via":null}
 ```
 
-节点类型 `turn` / `file` / `decision` / `correction` / `tag` / `requirement`；
-边类型 `modifies` / `mentions`（弱证据）/ `references` / `decided-in` /
-`supersedes` / `last-changed` / `tagged` / `opened-in` / `completed-in` /
-`implements`。每条边带 `source`（来自哪份文件）与 `tId`（哪一轮），
+节点类型 `turn` / `file` / `decision` / `correction` / `tag` / `requirement` /
+`knowledge`（仅当 `knowledge.md` 存在）；边类型 `modifies` / `mentions`（弱证据）/
+`references` / `decided-in` / `supersedes` / `last-changed` / `tagged` /
+`opened-in` / `completed-in` / `implements`，以及知识层的 `derived-from`（强）/
+`covers`（强）/ `supersedes`（强）/ `contradicts`（弱）/ `duplicate-of`（弱）。
+每条边带 `source`（来自哪份文件）与 `tId`（哪一轮），
 `evidence: "weak"` 的边绝不冒充改动 —— 与 `why` 的证据分层同一套。
 `recordedAt` / `validFrom` / `validTo` 是事实的记录轮与有效区间（`Corrects`
 与 `Supersedes` 会关闭旧事实），`--as-of` 历史切片据此筛选。
@@ -224,7 +228,7 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
 
 ### 新鲜度与自愈
 
-- meta 行记着五个源文件各自的 sha1；源动了，缓存判 `stale`。
+- meta 行记着五份核心源文件各自的 sha1（存在 `knowledge.md` 时再加一份）；源动了，缓存判 `stale`。
 - `graph`（查看）遇到 missing / stale / corrupt / schema 不符，**当场重写**再输出
   —— 与 `search` 对 `search-index.json` 的自愈语义相同。
 - `graph verify` 只报不写：`fresh` 通过；`missing` 也通过（缓存是可选物）；
@@ -232,8 +236,8 @@ v2 只在每个 T-block 的 `## T<n> · …` 标题**下一行**多一条结构�
   字节与现场派生对不上）都是失败、退 1。
 - `graph rebuild` 强制重写。**回归锁**：删掉缓存 → rebuild → 与删除前逐字节一致
   （`tests/pocket.js`）。派生规则变更时 bump `GRAPH_SCHEMA`（`"graph/1"` →
-  `"graph/2"` 加时间字段 → `"graph/3"` 加 tag/requirement 派生），旧缓存据此判
-  corrupt 自动重写，不需要任何手工迁移步骤。
+  `"graph/2"` 加时间字段 → `"graph/3"` 加 tag/requirement 派生 → `"graph/4"` 加
+  `knowledge.md` 与 K 节点），旧缓存据此判 corrupt 自动重写，不需要任何手工迁移步骤。
 
 ### 灰色地带
 

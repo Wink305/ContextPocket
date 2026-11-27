@@ -11,6 +11,7 @@
     "indexer.js",
     "io.js",
     "isolate.js",
+    "knowledge-core.js",
     "lifecycle.js",
     "links-core.js",
     "links.js",
@@ -57,6 +58,10 @@
       "lang/lib"
     ],
     "indexer.js": [
+      "lib",
+      "lang/lib"
+    ],
+    "knowledge-core.js": [
       "lib",
       "lang/lib"
     ],

@@ -15,7 +15,7 @@
 const { readEdition } = require('./edition');
 
 /** 拿不到 package.json 时的兜底值。改动它必须同时改 package.json。 */
-const FALLBACK_VERSION = '3.1';
+const FALLBACK_VERSION = '3.2';
 
 const EDITION = (readEdition() || {}).edition || 'quan';
 

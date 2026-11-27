@@ -30,6 +30,13 @@ const { forgetWorkspace } = require('./lib/forget');
 const { consolidateWorkspace } = require('./lib/consolidate');
 const { mergeWorkspace } = require('./lib/merge-workspace');
 const { verifyWorkspace, repairWorkspace } = require('./lib/diagnostics');
+const {
+  buildKnowledge,
+  applyKnowledge,
+  listKnowledge,
+  viewKnowledge,
+  verifyKnowledge,
+} = require('./lib/workspace-knowledge');
 const { pkgVersion } = require('./lib/version');
 const { startServer } = require('./lib/mcp-runtime');
 
@@ -47,7 +54,7 @@ const TOOLS = [
       properties: {
         action: {
           type: 'string',
-          enum: ['init', 'add', 'remove', 'list', 'status', 'search', 'recall', 'index', 'verify', 'repair'],
+          enum: ['init', 'add', 'remove', 'list', 'status', 'search', 'recall', 'index', 'verify', 'repair', 'knowledge'],
           description: 'list = registered pockets (default); init/add/remove manage the manifest; search/recall read across pockets; index builds the local BM25 cache; verify/repair check and safely fix the workspace',
           default: 'list',
         },
@@ -62,7 +69,13 @@ const TOOLS = [
         rebuild: { type: 'boolean', description: 'Rebuild the local index from scratch (action=index)', default: false },
         editionMode: { type: 'string', enum: ['focus', 'audit', 'migrate'], description: 'Default presets for search limit (explicit limit wins)' },
         deep: { type: 'boolean', description: 'Deep checks for verify (cross-refs, repo map, pending reviews)', default: false },
-        apply: { type: 'boolean', description: 'Apply safe repairs only (action=repair)', default: false },
+        apply: { type: 'boolean', description: 'Apply safe repairs only (action=repair); with action=knowledge + knowledgeAction=apply, confirm writing knowledge/', default: false },
+        knowledgeAction: { type: 'string', enum: ['build', 'apply', 'list', 'view', 'verify'], description: 'Knowledge lifecycle action (action=knowledge)' },
+        id: { type: 'string', description: 'Knowledge id like K-0001 (knowledgeAction=view)' },
+        status: { type: 'string', description: 'Filter by K status (knowledgeAction=list)' },
+        kind: { type: 'string', description: 'Filter by K kind (knowledgeAction=list)' },
+        topic: { type: 'string', description: 'Filter by K topic (knowledgeAction=list)' },
+        activate: { type: 'boolean', description: 'Promote validated drafts to active when applying knowledge', default: false },
       },
     },
   },
@@ -92,6 +105,7 @@ const TOOLS = [
         maxTokens: { type: 'integer', description: 'Approximate token budget (default: workspace manifest)' },
         query: { type: 'string', description: 'Include workspace search hits for this query' },
         includeRepoMap: { type: 'boolean', description: 'Include the repo map section', default: true },
+        knowledge: { type: 'boolean', description: 'Include active K notes in Related (default true when knowledge/ exists)', default: true },
         expand: { type: 'integer', enum: [1, 2], description: 'Add cross-pocket graph neighbors at this depth (builds the derived workspace graph on first use)' },
         asOf: { type: 'string', description: 'Only include nodes known at this date (YYYY-MM-DD or pocket:Tn); requires expand' },
         graphEdges: { type: 'string', description: 'Comma-separated derived cross-pocket edges: duplicate, shared-file, tag, near, or all; requires expand' },
@@ -235,6 +249,43 @@ function toolWorkspace(args) {
   if (action === 'recall') return recallRef(root, args.ref);
   if (action === 'verify') return verifyWorkspace(root, { deep: !!args.deep });
   if (action === 'repair') return repairWorkspace(root, { apply: !!args.apply });
+  if (action === 'knowledge') {
+    const sub = args.knowledgeAction || 'list';
+    if (sub === 'build') return Object.assign({ ok: true, action: 'knowledge', knowledgeAction: sub }, buildKnowledge(root));
+    if (sub === 'apply') {
+      if (!args.apply) {
+        const plan = buildKnowledge(root);
+        return {
+          ok: true,
+          action: 'knowledge',
+          knowledgeAction: sub,
+          applied: false,
+          counts: plan.counts,
+          proposals: plan.proposals.slice(0, 50),
+        };
+      }
+      return Object.assign({ ok: true, action: 'knowledge', knowledgeAction: sub },
+        applyKnowledge(root, { activate: !!args.activate }));
+    }
+    if (sub === 'list') {
+      return Object.assign({ ok: true, action: 'knowledge', knowledgeAction: sub }, listKnowledge(root, {
+        status: args.status,
+        kind: args.kind,
+        topic: args.topic,
+        limit: args.limit,
+      }));
+    }
+    if (sub === 'view') {
+      if (!args.id) throw new Error('knowledgeAction=view requires id');
+      const note = viewKnowledge(root, args.id);
+      if (!note) throw new Error('knowledge note not found: ' + args.id);
+      return { ok: true, action: 'knowledge', knowledgeAction: sub, note };
+    }
+    if (sub === 'verify') {
+      return Object.assign({ ok: true, action: 'knowledge', knowledgeAction: sub }, verifyKnowledge(root));
+    }
+    throw new Error('unknown knowledge action: ' + sub);
+  }
   if (action === 'list') {
     const result = listPockets(root);
     return { ok: true, root, name: result.manifest.name, count: result.pockets.length, pockets: result.pockets };
@@ -262,6 +313,7 @@ function toolContext(args) {
     includeRepoMap: args.includeRepoMap !== undefined
       ? !!args.includeRepoMap
       : (mode.profile.includeRepoMap !== undefined ? mode.profile.includeRepoMap : true),
+    knowledge: args.knowledge !== false,
     expand: args.expand,
     asOf: args.asOf,
     graphEdges: args.graphEdges,

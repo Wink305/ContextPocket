@@ -14,7 +14,7 @@
 
 const CROSS_REF_RE = /\b([a-z][a-z0-9_-]*):T(\d+)\b/gi;
 
-const DEFAULT_RESULT_TYPES = ['T', 'correction', 'ADR', 'R'];
+const DEFAULT_RESULT_TYPES = ['T', 'correction', 'ADR', 'R', 'K'];
 
 /** 与 consolidate / 工作区派生边共用的归一化 key：折叠空白、去首尾、转小写。 */
 function normalizeKey(value) {

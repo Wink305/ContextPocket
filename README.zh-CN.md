@@ -5,7 +5,7 @@
 **[English](README.md)** · [文档](docs/) · [更新日志](CHANGELOG.md) · [安全](SECURITY.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 3.1 family](https://img.shields.io/badge/version-3.1%20family-blueviolet.svg)](CHANGELOG.md)
+[![Version: 3.2 family](https://img.shields.io/badge/version-3.2%20family-blueviolet.svg)](CHANGELOG.md)
 [![Pocket format: v2](https://img.shields.io/badge/format-v2-blue.svg)](docs/format-spec.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -47,7 +47,7 @@ AI 编码会话越来越长，记忆却仍然很短：
 
 ## 选择版本
 
-3.1 是四个独立包组成的家族。它们共用同一个 `ContextPocket/` 目录和 **v2 数据格式**，换版本不需要迁移口袋。
+3.2 是四个独立包组成的家族。它们共用同一个 `ContextPocket/` 目录和 **v2 数据格式**，换版本不需要迁移口袋。
 
 | 版本 | 包名 / 命令 | 定位 | 适合 | 体量 |
 |---|---|---|---|---|
@@ -62,17 +62,17 @@ AI 编码会话越来越长，记忆却仍然很短：
 - 同时维护多个仓库、需要生命周期工具 → **yuan**；
 - 需要团队评审和共享写入 → 等 **hai**。
 
-**旧名兼容**：`context-pocket` / `context-pocket-mcp` 仍指向 **quan**，`context-pocket-lite` / `context-pocket-lite-mcp` 仍指向 **xi**。旧名保留到 3.1，3.2 移除。
+**旧名已在 3.2 移除**：`context-pocket` / `context-pocket-mcp` 不再存在，请改用 `context-pocket-quan` / `context-pocket-quan-mcp`；轻量版旧名 `context-pocket-lite` / `context-pocket-lite-mcp` 同样移除，请改用 `context-pocket-xi` / `context-pocket-xi-mcp`。
 
 ### 下载
 
-`main` 是 3.1 家族线。每个归档都带自己的 `package.json`、README 和 LICENSE；**不经过 npm registry**，从 GitHub Release 归档或 git clone 安装。
+`main` 是 3.2 家族线。每个归档都带自己的 `package.json`、README 和 LICENSE；**不经过 npm registry**，从 GitHub Release 归档或 git clone 安装。
 
 | 版本 | 展示版本 | Release / 归档 |
 |---|---|---|
-| **quan 泉** | `3.1-quan` | [ContextPocket-3.1-quan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-quan) · `ContextPocket-3.1-quan.zip` |
-| **xi 溪** | `3.1-xi` | [ContextPocket-3.1-xi](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-xi) · `ContextPocket-3.1-xi.zip` |
-| **yuan 渊** | `3.1-yuan` | [ContextPocket-3.1-yuan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-yuan) · `ContextPocket-3.1-yuan.zip` |
+| **quan 泉** | `3.2-quan` | [ContextPocket-3.2-Quan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.2-Quan) · `ContextPocket-3.2-Quan.zip` |
+| **xi 溪** | `3.2-xi` | [ContextPocket-3.2-Xi](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.2-Xi) · `ContextPocket-3.2-Xi.zip` |
+| **yuan 渊** | `3.2-yuan` | [ContextPocket-3.2-Yuan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.2-Yuan) · `ContextPocket-3.2-Yuan.zip` |
 | **hai 海** | 规划中 | — |
 
 上一个稳定版：[`2.13`](https://github.com/Wink305/ContextPocket/releases/tag/2.13) · [`2.13-lite`](https://github.com/Wink305/ContextPocket/releases/tag/2.13-lite)。
@@ -189,7 +189,8 @@ context-pocket-quan handoff --dir .
 
 - 10 个核心文件，29 条命令 / MCP 工具。
 - 有来源的多跳图：`search <kw> --expand 2`、`why <file> --expand 2`、`--as-of <T>` 历史切片。
-- 搜索索引、图缓存、handoff 预算、merge 复核、hub 注册、隔离模式、Git 安全网。
+- 记忆沉淀：`distill --knowledge` 从显式 Pitfalls / Uncertain / Decisions 与 tag / file 锚点生成 K 候选；`--apply` 写成 `knowledge.md`（默认 draft），`--activate` 才升 active。`search --type K` 可检索，`graph` 里是 `k:K1` 与 `derived-from` 边。
+- 搜索索引、图缓存（`graph/4`）、handoff 预算、merge 复核、hub 注册、隔离模式、Git 安全网。
 - `--edition-mode solo|agent` 只改变交互方式，不改变数据。
 
 更多：[SKILL.md](SKILL.md) · [SKILL-advanced.md](SKILL-advanced.md) · [SKILL-reference.md](SKILL-reference.md)。
@@ -202,6 +203,7 @@ context-pocket-quan handoff --dir .
 - `context build` / `explain` 按预算组装红线、事实与相关材料；每条事实标注来源（`api:T5`、`api:R3`、`[api] src/login.js`）。
 - `context build --expand 1|2` 沿显式 `pocket:Tn` 引用增加跨口袋图邻居（`Path: api:T5 → x-ref → web:T9`）；`--as-of <日期|pocket:Tn>` 按 WHEN 日期切片。派生图缓存在 `.contextpocket/workspace-graph.json`，只重建变化的口袋。
 - `--graph-edges duplicate|shared-file|tag|near|all` 显式开启派生跨口袋边（相同 ADR/需求/偏好、同路径、同标签或时间接近的轮次）；全部 weak、有界、默认关闭。
+- 记忆沉淀：`workspace knowledge build|apply|list|view|verify` 把跨口袋证据写成 `knowledge/K-*.md`；默认只出提案、写入默认 draft，duplicate / conflict 留人工。`context build` 的 Related 会带 active K（`--no-knowledge` 关闭），`workspace status` / `audit` 报告 K 健康。
 - 生命周期：`recap`、`audit`、`decay`（`--apply` 归档报告出的前缀）、`forget`、`consolidate`（口袋内 + 跨口袋）、`merge`、`capture`（本地文件或本机 `gh pr view` / `gh run view`）。
 - `--edition-mode focus|audit|migrate` 提供预算预设，显式参数优先。
 - API 已冻结：10 命令 / 10 MCP 工具，`edition.json` 转 stable。仍未发布 npm，用 Release 归档或 git clone。
@@ -349,10 +351,10 @@ project-root/
 
 | 从 | 到 | 做法 |
 |---|---|---|
-| `2.13` | `3.1-quan` | 数据格式不变，换命令名即可。 |
-| `2.13-lite` | `3.1-xi` | 轻量模型不变，换命令名即可。 |
-| `context-pocket` | `context-pocket-quan` | 旧名别名保留到 3.1。 |
-| `context-pocket-lite` | `context-pocket-xi` | 旧名别名保留到 3.1。 |
+| `2.13` | `3.2-quan` | 数据格式不变，换命令名即可。 |
+| `2.13-lite` | `3.2-xi` | 轻量模型不变，换命令名即可。 |
+| `context-pocket` | `context-pocket-quan` | 旧名别名已在 3.2 移除，改用 quan 命令名。 |
+| `context-pocket-lite` | `context-pocket-xi` | 旧名别名已在 3.2 移除，改用 xi 命令名。 |
 | v1 口袋 | v2 口袋 | 运行 `migrate --to latest`；迁移前 `verify` 会给 warning。 |
 
 四个版本都读写 v2 格式；换版本不需要复制、转换或锁定口袋。

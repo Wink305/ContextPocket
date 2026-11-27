@@ -136,12 +136,12 @@ test('Lite metrics stay below the full package and exact T-id search skips unrel
     ['core files', liteCoreFiles, mainCoreFiles, 5, 10],
     ['CLI commands', liteCommands, mainCommands, 11, 29],
     ['MCP tools', liteMcpTools, mainMcpTools, 11, 29],
-    ['package files', litePack.files, mainPack.files, 33, 82],
+    ['package files', litePack.files, mainPack.files, 33, 84],
     ['cold-start module count', liteModules, mainModules, 19, null],
     // 475.4 / 82：README 收缩后是 453.9 / 77；新增 scripts/release.js（发版自动化）、
-    // 3.0 转正文档、benchmark 脚本、shared/rank.js、shared/mcp-runtime.js 与
-    // shared/graph-core.js 后按实测回填。
-    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 135.1, 475.4],
+    // 3.0 转正文档、benchmark 脚本、shared/rank.js、shared/mcp-runtime.js、
+    // shared/graph-core.js 与记忆沉淀的 lib/knowledge*.js 后按实测回填。
+    ['package size kB', litePack.sizeKb, mainPack.sizeKb, 137.0, 494.6],
   ];
   for (const [label, liteValue, mainValue, expectedLite, expectedMain] of measured) {
     assert.ok(liteValue < mainValue, `${label}: Lite ${liteValue} must be below full ${mainValue}`);

@@ -53,9 +53,18 @@ context-pocket-quan migrate --dir <project-root> --to v2             # 真写：
 
 向后兼容性原则：**新 skill 能读旧数据，旧 skill 可能不识别新数据**。当前这一跳属于前者——v2 相对 v1 只多一行结构行，v1 的读取路径（`lib/parser.js` 的 `parseLogText`）遇到它不会多出任何行为，这一点由测试直接钉住（同一份内容加不加时间行，解析结果必须相等）。
 
+### Q: `knowledge.md` / `knowledge/` 是什么？需要 LLM 或向量库吗？
+
+**A**: 是可选的记忆沉淀层，不需要 LLM、不需要向量库、也不改数据格式。
+
+- 每条 K 笔记都带 `Sources`，指回 T / ADR / 需求 / 文件 / 标签 / 偏好；无来源只能停在 `draft`。
+- quan 用 `distill --knowledge` 生成候选，yuan 用 `workspace knowledge build` 汇总跨口袋证据；默认都只出计划，`--apply` / `--yes` 才写，写完默认 draft，`--activate` 才升 active。
+- 重复与冲突只报告，不自动合并、不自动删除、不自动晋升；时间只认显式 `Updated` 或来源 WHEN，不猜文件 mtime。
+- Markdown 是真相源；索引与图缓存删掉可重建，`format` 仍是 v2。
+
 ### Q: 怎么确认我装的 context-pocket-quan 是哪个版本？版本号写在哪里？
 
-**A**: `context-pocket-quan --version`（`-v` 和 `context-pocket-quan version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket-quan","version":"3.1","display":"3.1-quan","edition":"quan","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位 + 版本名如 `3.1-quan`，轻量版为 `3.1-xi`；带预发布/hotfix 后缀时显示完整串）。旧命令 `context-pocket` 仍指向同一个通用版，3.0 / 3.1 保留，3.2 移除。
+**A**: `context-pocket-quan --version`（`-v` 和 `context-pocket-quan version` 是同一种意思的三种写法）。它只读包自己的 `package.json`，不要求当前目录有 `ContextPocket/`，也不写任何东西——在空目录里问照样答，跑完目录还是空的。要机器读就加 `--json`，一行：`{"ok":true,"name":"context-pocket-quan","version":"3.2","display":"3.2-quan","edition":"quan","source":"package.json","node":"<你的 Node 版本>"}`。`version` 是包内版本号，`display` 是对外展示版（稳定版两位 + 版本名如 `3.2-quan`，轻量版为 `3.2-xi`；带预发布/hotfix 后缀时显示完整串）。旧命令 `context-pocket` 已在 3.2 移除，请改用 `context-pocket-quan`。
 
 MCP 那一侧不必另问：`initialize` 回包里的 `serverInfo.version` 就是同一个数字。两个入口都经 `lib/version.js` 的 `pkgVersion()` 读 `package.json`，所以**要改的版本号只有 `package.json` 这一处**，其余六处都是它的静态抄本，由 `tests/unit.js` 逐处比对：拿不到 `package.json` 时的兜底值 `FALLBACK_VERSION`（目录式安装——把 `bin/` 与 `lib/` 拷进 skills 目录、没带 package.json——才会走到它）、`SKILL.md` frontmatter 的 `version:`、`CHANGELOG.md` 里 `## [<版本>] - <日期>` 那节定版标题，以及 `docs/COMPATIBILITY.md` / `docs/FAQ.md` / `docs/MIGRATION.md` 三处说明与示例里写着的那串号。抄本自己算不出版本号，漏改任何一处也不会在任何入口报错，只会让不同地方各说一个号——所以报警器只能长在测试里。上面 `--json` 里的 `source` 字段会老实说明这次是从哪一处拿到的号。
 
@@ -394,7 +403,7 @@ cp /tmp/cp-config-backup.md ContextPocket/config.md
 node path/to/context-pocket/bin/context-pocket.js <command> --dir <project-root>
 
 # 方式二：本地仓库注册成全局命令（README 的"From a clone"）
-cd path/to/ContextPocket && npm link    # 得到 context-pocket-quan / context-pocket-quan-mcp（旧名 context-pocket / context-pocket-mcp 同时保留）
+cd path/to/ContextPocket && npm link    # 得到 context-pocket-quan / context-pocket-quan-mcp（旧名已在 3.2 移除）
 ```
 
 常用命令：

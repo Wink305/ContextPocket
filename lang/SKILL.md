@@ -3,10 +3,10 @@ name: ContextPocket-Yuan
 description: >
   Workspace memory layer for multi-pocket projects. Adds a workspace manifest, cross-pocket
   search, a repo map, a dated cross-pocket graph with explicit and derived edges,
-  budgeted context assembly, audit / recap / decay / forget / consolidate, and local
-  PR/CI capture on top of the standard ContextPocket/ Markdown format.
-  Per-turn recording stays in quan / xi; yuan reads and organises.
-version: 3.1
+  a sourced knowledge base (K notes), budgeted context assembly, audit / recap / decay /
+  forget / consolidate, and local PR/CI capture on top of the standard ContextPocket/
+  Markdown format. Per-turn recording stays in quan / xi; yuan reads and organises.
+version: 3.2
 format: v1
 tags: [dev-tools, context, memory, workspace, repo-map, agent-handoff]
 ---
@@ -21,7 +21,7 @@ tags: [dev-tools, context, memory, workspace, repo-map, agent-handoff]
 > Yuan does **not** replace it. If you are recording a turn, use quan / xi.
 > This file tells you how to read, search and maintain **several pockets at once**.
 >
-> **Status**: 3.1 stable — 10 commands / 10 MCP tools, `edition.json` frozen.
+> **Status**: 3.2 stable — 10 commands / 10 MCP tools, `edition.json` frozen.
 > Still not published to npm; install from a release archive or a git clone.
 
 ---
@@ -117,6 +117,9 @@ context-pocket-yuan workspace list
    - `graph.present=false` → no workspace graph yet; `context build --expand 1` builds it.
    - `graph.fresh=false` → a pocket changed; the next `--expand` rebuilds only that pocket.
      `status` and `audit` never build the graph themselves.
+   - `knowledge.present=false` → no knowledge base yet; `workspace knowledge build` proposes
+     K notes without writing. `knowledge.indexDrift=true` → `knowledge/index.md` is behind
+     the notes; `workspace knowledge verify` names the mismatches.
 
 2. **Assemble the context, do not dump the log.**
 
@@ -131,7 +134,7 @@ context-pocket-yuan workspace list
    |---|---|---|
    | 0 · Start here | 🔒 red lines / ❓ must-confirm / Next | never trimmed |
    | 1 · Facts | state / open requirements / ADRs / recent turns | trimmed second |
-   | 2 · Related | workspace search + repo map (+ graph with `--expand`) | trimmed first |
+   | 2 · Related | workspace search + active K notes + repo map (+ graph with `--expand`) | trimmed first |
 
    Every fact names its source: `api:R3 — …`, `api:ADR-2 — …`, `api:T5 — …`,
    `api — State: …`. Repo-map rows are `[api] services/api/src/login.js — …`.
@@ -165,6 +168,9 @@ context-pocket-yuan workspace list
 | Archive the cold prefix | `decay --apply` | same prefix semantics as `forget` |
 | Archive by explicit selector | `forget --before T10` / `--before-date` / `--keep-last` | plan by default; `--apply` writes |
 | Duplicate records | `consolidate` | per pocket **and** across pockets |
+| Distill reusable knowledge | `workspace knowledge build` | proposal only; writes nothing |
+| Write / promote K notes | `workspace knowledge apply --yes [--activate]` | drafts by default; activation is explicit |
+| Read / validate the knowledge base | `workspace knowledge list` / `view K-0001` / `verify` | read-only |
 | Merge two pockets | `merge <source> --into <target>` | dry run by default |
 | Record a PR / CI summary | `capture <file>` / `capture --pr 42` / `capture --run <id>` | local file or local gh |
 | Deep check / safe repair | `workspace verify --deep` / `workspace repair --apply` | repair only rebuilds the repo map |
@@ -206,6 +212,29 @@ context-pocket-yuan workspace list
   derived edges, cache writes and as-of filtering all require an explicit
   `--expand` (and `--graph-edges` for derived edges).
 - `status` / `audit` only inspect graph freshness; they never build it.
+
+### knowledge (K notes)
+
+- **Markdown is the source of truth.** Notes live in `knowledge/index.md` (table) and
+  `knowledge/K-*.md` (one file per note). `.contextpocket/knowledge-index.json` is a
+  derived cache; delete it and `workspace knowledge list` rebuilds it.
+- Every note carries `Topic / Kind / Status / Confidence / Sources / Tags / Updated`.
+  Status is one of `draft / active / stale / superseded / archived`; `disputed` is a
+  **confidence**, never a status. Optional `Supersedes / SupersededBy / Conflicts`
+  link notes to each other.
+- **No sources, no active.** `Sources` must resolve to real workspace nodes
+  (`api:T5`, `api:ADR-2`, `api:R3`, `api:file:src/login.js`, `api:tag:auth`,
+  `api:pref:editor`); a note without resolvable sources can only stay `draft`. `active` also requires
+  an explicit `Updated` date. Time comes from `Updated` / source `WHEN`, never mtime.
+- **Plan first.** `knowledge build` writes nothing; `knowledge apply` without
+  `--yes` writes nothing; `apply --yes` writes drafts unless `--activate` is given.
+  `duplicate` and `conflict` proposals are reported and **never** auto-merged,
+  auto-deleted, or auto-promoted.
+- The workspace index (v2) and workspace graph (v3) both include K notes:
+  graph nodes are `kb:K-0001`, edges are `derived-from` (strong) plus
+  `covers` / `supersedes` / `contradicts` / `duplicate-of`.
+- `context build/explain` adds a `### Knowledge` subsection under Related: query
+  hits first, otherwise up to 5 recent active notes. `--no-knowledge` disables it.
 
 ### decay / forget
 
@@ -276,6 +305,8 @@ mode as a different data format; it is only a preset.
   dry runs until `--apply`. Read the plan out loud before applying anything destructive.
 - **Never auto-delete ADRs or requirements.** They carry ids and references; yuan
   reports them for manual merging.
+- **Never auto-delete or auto-merge knowledge notes.** No `draft → active` without
+  an explicit `--activate` after review; duplicates and conflicts stay for humans.
 - **Never archive every turn.** At least one T-block must remain in `log.md`.
 - **No server.** The only network-shaped step is the local `gh` CLI, and only when
   the user passes `--pr` / `--run`. If `gh` is missing or unauthenticated, stop and
@@ -298,6 +329,9 @@ mode as a different data format; it is only a preset.
 | `graph is stale` | a pocket changed after the last build | the next `--expand` rebuilds that pocket |
 | `--as-of requires --expand` | as-of without expansion | add `--expand 1` or `--expand 2` |
 | `--graph-edges requires --expand` | derived edges without expansion | add `--expand 1` or `--expand 2` |
+| `knowledge note not found` | wrong K id or never applied | `workspace knowledge list`, then `view K-0001` |
+| `is active but has no Sources` | activation was requested without resolvable evidence | add real sources first; drafts may stay drafts |
+| `missing from index.md` | `index.md` is behind the note files | `workspace knowledge verify`, then let `build` / `apply` refresh it |
 | `unknown --graph-edges value` | typo in the edge list | use `duplicate`, `shared-file`, `tag`, `near` or `all` |
 | `that turn has no WHEN date` | `--as-of pocket:Tn` on an undated turn | pass an explicit `YYYY-MM-DD` |
 | `gh CLI not found` | gh not installed | save the PR/CI summary to a file, then `capture <file>` |

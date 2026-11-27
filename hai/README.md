@@ -24,7 +24,7 @@
 
 | 项目 | 值 |
 |------|----|
-| 版本线 | 3.1 家族 |
-| 展示版本 | `3.1-hai`（发布后） |
+| 版本线 | 3.2 家族 |
+| 展示版本 | `3.2-hai`（发布后） |
 | 可安装 | 否 |
 | 跟踪计划 | [.trae/documents/contextpocket-3.0-four-editions.md](../.trae/documents/contextpocket-3.0-four-editions.md) |

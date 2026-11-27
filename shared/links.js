@@ -16,7 +16,7 @@ const { writeAtomic } = require('./io');
 const linksCore = require('./links-core');
 const { deriveLinks } = linksCore;
 
-const GRAPH_SOURCE_FILES = ['code-map.md', 'decisions.md', 'log-archive.md', 'log.md', 'requirements.md'];
+const GRAPH_SOURCE_FILES = ['code-map.md', 'decisions.md', 'knowledge.md', 'log-archive.md', 'log.md', 'requirements.md'];
 
 /**
  * 缓存格式版本（Node schema v2 的第一版序列化）。派生规则变了
@@ -25,8 +25,10 @@ const GRAPH_SOURCE_FILES = ['code-map.md', 'decisions.md', 'log-archive.md', 'lo
  * graph/3：派生加入 tag / requirement 节点与 tagged / opened-in /
  * completed-in / implements 边（与 Lite 2.5 对齐），requirements.md
  * 进入源签名，节点序列化保留 status。
+ * graph/4：knowledge.md 进入源签名；新增 K 节点与 derived-from /
+ * covers / supersedes / contradicts / duplicate-of 边。
  */
-const GRAPH_SCHEMA = 'graph/3';
+const GRAPH_SCHEMA = 'graph/4';
 
 const GRAPH_FILE = 'graph.jsonl';
 
@@ -54,7 +56,7 @@ function serializeGraph(graph, sources) {
   const lines = [JSON.stringify({ kind: 'meta', schema: GRAPH_SCHEMA, sources })];
   for (const n of graph.nodes) {
     const rec = { kind: 'node', id: n.id, type: n.type, label: n.label };
-    for (const key of ['archived', 'source', 'status', 'recordedAt', 'validFrom', 'validTo']) {
+    for (const key of ['archived', 'source', 'status', 'topic', 'kKind', 'confidence', 'date', 'sourceCount', 'recordedAt', 'validFrom', 'validTo']) {
       if (n[key] !== undefined) rec[key] = n[key];
     }
     lines.push(JSON.stringify(rec));

@@ -417,6 +417,13 @@ function search(pocketDir, keyword, opts = {}) {
  * @param {'bm25'} [opts.rank] - 可选 BM25 排序；默认字段权重排序保持不变
  * @returns {{ results: object[], total: number, offset: number, limit: number|null, hasMore: boolean, viaIndex: boolean, viaIndex }}
  */
+function normalizeTypeFilter(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const list = Array.isArray(value) ? value : String(value).split(',');
+  const set = new Set(list.map((item) => String(item).trim().toUpperCase()).filter(Boolean));
+  return set.size > 0 ? set : null;
+}
+
 function searchAny(pocketDir, keyword, opts = {}) {
   let rows = null;
   let viaIndex = false;
@@ -433,12 +440,14 @@ function searchAny(pocketDir, keyword, opts = {}) {
 
   // 时间窗口过滤在分页之前施加，保证 total 和分页口径都是过滤后的真实总数
   const filtered = filterByTime(rows, opts);
+  const typeSet = normalizeTypeFilter(opts.types);
+  const typed = typeSet ? filtered.filter((row) => typeSet.has(String(row.type).toUpperCase())) : filtered;
 
-  const total = filtered.length;
+  const total = typed.length;
   const offset = Math.max(0, intOption(opts.offset, 0));
   const wanted = intOption(opts.limit, DEFAULT_SEARCH_LIMIT);
   const limit = wanted > 0 ? wanted : null;
-  const results = limit === null ? filtered.slice(offset) : filtered.slice(offset, offset + limit);
+  const results = limit === null ? typed.slice(offset) : typed.slice(offset, offset + limit);
 
   return {
     results,

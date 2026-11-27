@@ -44,16 +44,20 @@ const COMMAND_HELP = {
     remove <name>                   Unregister a pocket (data untouched)
     list                            List registered pockets and latest T
     status                          Per-pocket latest T / open reqs / ADRs + cache health
-                                    (index, repo map, workspace graph)
+                                    (index, repo map, workspace graph, knowledge)
     search <keyword> [--limit <n>]  BM25 search across pockets; builds the local index on demand
     index [--rebuild]               Build/refresh .contextpocket/search-index.json
     recall <pocket:Tn>              Read one turn from a named pocket
     verify [--deep]                 Check manifest, pockets, refs, repo map, reviews
     repair [--apply]                Plan safe fixes; --apply rebuilds the repo map
+    knowledge build                 Propose K notes from cross-pocket evidence (no writes)
+    knowledge apply [--yes]         Write knowledge/index.md + K-*.md (draft by default)
+                                    add --activate to promote validated drafts
+    knowledge list|view|verify      Inspect / read / validate the knowledge base
 
   Search options:
     --pocket <a,b>   Only these pocket names
-    --type <types>   Comma-separated types: T, FIX, ADR, R, pref, absolute
+    --type <types>   Comma-separated types: T, FIX, ADR, R, pref, absolute, K
     --no-index       Force a live scan (skip the local index)
     --rebuild-index  Rebuild the index before searching
     --edition-mode   focus / audit / migrate search-limit presets
@@ -91,6 +95,7 @@ const COMMAND_HELP = {
     --max-tokens <n>   Approximate budget (default: workspace manifest)
     --query <text>     Include workspace search hits
     --no-repo-map      Skip the repo map section
+    --no-knowledge     Skip active K notes in Related (default: include if knowledge/ exists)
     --expand <1|2>     Add cross-pocket graph neighbors (default 0: off).
                        Builds .contextpocket/workspace-graph.json on first use
                        and rebuilds only pockets whose files changed.
@@ -258,7 +263,7 @@ function commandHelp(key) {
 }
 
 const TOOL_DESCRIPTIONS = {
-  context_pocket_workspace: 'Manage a ContextPocket workspace of multiple pockets: init/add/remove/list/status/search/recall/index/verify/repair. status includes cache health (index present/fresh, repo map files/symbols, workspace graph nodes/cross-pocket edges) without running verify first. search uses a local BM25 index across pockets (set noIndex=true to force a live scan) and can filter by pockets/types; action=index builds or rebuilds .contextpocket/search-index.json. verify --deep checks cross-pocket refs, repo map drift and pending merge reviews; repair only applies safe fixes. Cross-pocket references use qualified ids like api:T12.',
+  context_pocket_workspace: 'Manage a ContextPocket workspace of multiple pockets: init/add/remove/list/status/search/recall/index/verify/repair/knowledge. status includes cache health (index present/fresh, repo map files/symbols, workspace graph nodes/cross-pocket edges, knowledge notes) without running verify first. search uses a local BM25 index across pockets (set noIndex=true to force a live scan) and can filter by pockets/types (including K); action=index builds or rebuilds .contextpocket/search-index.json. verify --deep checks cross-pocket refs, repo map drift and pending merge reviews; repair only applies safe fixes. knowledgeAction=build proposes K notes from cross-pocket evidence without writing; apply with apply=true writes knowledge/index.md + K-*.md (draft by default, activate=true promotes validated drafts); list/view/verify inspect the base. Cross-pocket references use qualified ids like api:T12.',
   context_pocket_map: 'Scan JS/JSX/TS/TSX/Python for files and top-level symbols; cache at .contextpocket/repo-map.json. update reuses symbols for files whose size + mtime are unchanged, view prints, verify compares metadata only (size + mtime) and reports drift.',
   context_pocket_context: 'Assemble or explain a token-budgeted context view from the workspace: red lines and must-confirm first, then facts, then search/repo-map related material. Every fact and related item names its pocket (pocket:Tn / [pocket]) so the source is traceable. expand=1|2 adds cross-pocket graph neighbors from explicit pocket:Tn references (builds/refreshes .contextpocket/workspace-graph.json incrementally); asOf (YYYY-MM-DD or pocket:Tn) filters nodes to those known at that date and requires expand. graphEdges opts into derived cross-pocket edges (duplicate, shared-file, tag, near, or all; requires expand); graphNearDays sets the temporal-near window (default 7). action=explain returns per-section token estimates and budget trims without the full context. Trimmed sections are always reported.',
   context_pocket_recap: 'Read-only recap across pockets for a T range or date window. Current state, open requirements and ADRs stay; turns are filtered and the oldest are dropped first when the budget is tight.',

@@ -228,7 +228,15 @@ function workspaceHealth(root) {
     graph = { present: false, fresh: false, nodes: 0, edges: 0, crossPocketEdges: 0, error: e.message };
   }
 
-  return { index, repoMap, graph };
+  let knowledge;
+  try {
+    // 只读检查 knowledge/，不构建；workspace-knowledge 依赖 workspace，必须延迟 require
+    knowledge = require('./workspace-knowledge').inspectKnowledge(root);
+  } catch (e) {
+    knowledge = { present: false, notes: 0, active: 0, draft: 0, error: e.message };
+  }
+
+  return { index, repoMap, graph, knowledge };
 }
 
 /**

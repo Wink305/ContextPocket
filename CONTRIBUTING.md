@@ -84,7 +84,7 @@
 
 ### 命令设计原则
 
-ContextPocket 面向用户的入口是**自然语言意图**，不是斜杠命令：用户用日常说法表达需求，Agent 依据 `SKILL.md` 的「Quick responses」意图表推断意图，再调用对应 CLI 子命令（`context-pocket <subcommand>`）或 MCP 工具。设计新能力时：
+ContextPocket 面向用户的入口是**自然语言意图**，不是斜杠命令：用户用日常说法表达需求，Agent 依据 `SKILL.md` 的「Quick responses」意图表推断意图，再调用对应 CLI 子命令（`context-pocket-quan <subcommand>`）或 MCP 工具。设计新能力时：
 
 - CLI 子命令动词开头: `bootstrap` / `status` / `handoff` / `verify`
 - 短命令名优先（< 15 字符）
@@ -163,7 +163,7 @@ const MIGRATIONS = [
 
 ```
 context-pocket/
-├── package.json           # 零依赖；bin 里注册 context-pocket / context-pocket-mcp；engines.node >=14
+├── package.json           # 零依赖；bin 里注册 context-pocket-quan / context-pocket-quan-mcp；engines.node >=14
 ├── README.md / README.zh-CN.md
 ├── SKILL.md               # Agent 每轮必读的主体（意图 → 动作对照表）
 ├── SKILL-advanced.md      # 按需：bootstrap / 项目类型预填 / 归档 / 边缘情况（含版本迁移）
@@ -202,7 +202,7 @@ context-pocket/
 
 ## 发布流程（维护者）
 
-版本号在本包只有一处真值：`package.json` 的 `version`。CLI 的 `context-pocket --version` 与 MCP
+版本号在本包只有一处真值：`package.json` 的 `version`。CLI 的 `context-pocket-quan --version` 与 MCP
 `initialize` 回包的 `serverInfo.version` 都经 `lib/version.js` 的 `pkgVersion()` 读它，
 **其余六处都是静态抄本**：`FALLBACK_VERSION`、`SKILL.md` 的 `version:`、CHANGELOG 的节标题，
 以及 `docs/COMPATIBILITY.md` 的"对应 skill …"、`docs/FAQ.md` 的 `--version --json` 示例、
@@ -246,14 +246,14 @@ context-pocket/
 8. **npm 首发**（这一步在 1.6.0 之前一直漏着，而 CHANGELOG 里两处旧注释早就默认它存在）：
    - 一次性登录：`npm adduser`，浏览器 2FA 必须维护者本人过。判据是 `npm whoami` 能回账号；
      它报 `ENEEDAUTH` 是**没登录**，不是网络故障——`npm ping` 通照样发不出去。
-   - 占名自查：首发前 `npm view context-pocket` 返回 404 属正常；一旦返回版本号，说明包名
+   - 占名自查：首发前 `npm view context-pocket-quan` 返回 404 属正常；一旦返回版本号，说明包名
      已被占用，停下来别发。
    - 复核白名单：按第 5 步跑 `npm pack --dry-run`，确认 `bin/context-pocket.js`、
      `mcp-server.js`、`lib/version.js`、`SKILL.md`、`README*.md`、`LICENSE` 都在包里。
    - 发布：`npm publish`（非 scope 包默认 public）。**只发当前 tag 对应的那一份代码**，
      别在 `[Unreleased]` 已经堆了新改动的工作区里敲。
-   - 验收：`npm view context-pocket version` 等于本次版本号；再找个干净目录
-     `npm install -g context-pocket`，`context-pocket --version` 能答、`context-pocket-mcp` 能起。
+   - 验收：`npm view context-pocket-quan version` 等于本次版本号；再找个干净目录
+     `npm install -g context-pocket-quan`，`context-pocket-quan --version` 能答、`context-pocket-quan-mcp` 能起。
    - 收尾：把 README.md / README.zh-CN.md 第 69 行「尚未发布」换成 registry 安装命令，
      并删掉 `tests/unit.js` 里那条 `not-published notices` 断言——它会刻意报红提醒你同步文档。
 9. 在社区/Discord 发公告（如果有）

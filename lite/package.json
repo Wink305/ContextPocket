@@ -1,6 +1,6 @@
 {
   "name": "context-pocket-xi",
-  "version": "3.1",
+  "version": "3.2",
   "description": "The lightweight sibling of context-pocket: same pocket format, 11 commands, 11 MCP tools, zero caches, zero dependencies. Records AI coding conversation turns into a project-local ContextPocket/ folder of plain Markdown.",
   "keywords": [
     "context",
@@ -32,9 +32,7 @@
   },
   "bin": {
     "context-pocket-xi": "bin/context-pocket-lite.js",
-    "context-pocket-xi-mcp": "mcp-server-lite.js",
-    "context-pocket-lite": "bin/context-pocket-lite.js",
-    "context-pocket-lite-mcp": "mcp-server-lite.js"
+    "context-pocket-xi-mcp": "mcp-server-lite.js"
   },
   "main": "lib/core.js",
   "engines": {

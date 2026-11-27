@@ -5,7 +5,7 @@ description: >
   can restore full understanding. Auto-records requirements, code changes, decisions, pitfalls,
   and preferences — activates on its own, with no commands for the user to type or remember.
   Supports cross-agent handoff, model switches, and long-running projects.
-version: 3.1
+version: 3.2
 format: v1
 tags: [dev-tools, context, memory, productivity, agent-handoff]
 ---
@@ -90,16 +90,16 @@ If multiple modes are available, **prefer MCP > CLI > Pure Skill** in that order
 | Check for commits that went unrecorded | `sync` (`--auto` to write) | "补了 N 个" |
 | Import an earlier session | `import` | "导入了 N 轮" |
 | Merge another machine/agent's pocket | `merge --from <other>/ContextPocket` (MCP: `context_pocket_merge`); `merge report --apply <id>` for safe review items | counts + report path; source is read-only, conflicts go to `merge-<date>.md`; apply replays requirement/preference/state and **missing** code-map descriptions only |
-| Distill older turns | `distill` | report written; **agent then judges + merges by hand** |
+| Distill older turns | `distill` (`--knowledge` builds K candidates; `--apply --activate` only after review) | report written; **agent then judges + merges by hand** |
 | Export a snapshot for a teammate | agent writes the snapshot file itself (no tool) | the file path |
 | Archive and start over | `archive --keep-last N`, then rebuild | **confirm with the user first** |
 | Explain how this skill works | answer inline from this table + `docs/FAQ.md` — **never** reply "see README.md" |
 
-> Bare names above are the CLI subcommand (`context-pocket <name>`) and the MCP tool (`context_pocket_<name>`) for the same capability. Prefer MCP > CLI > pure-skill, per Execution modes.
+> Bare names above are the CLI subcommand (`context-pocket-quan <name>`) and the MCP tool (`context_pocket_<name>`) for the same capability. Prefer MCP > CLI > pure-skill, per Execution modes.
 
 ### The graph layer
 
-`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs ↔ tags ↔ requirements — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing text-match order; `--as-of <T>` filters the graph slice to facts valid at that T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close old fact intervals. Every edge names its source.
+`recall --with-context` and `graph` read a **derived** link graph — turns ↔ files ↔ ADRs ↔ tags ↔ requirements (plus knowledge notes, when `knowledge.md` exists) — from the pocket sources. `search <kw> --expand 2` and `why <file> --expand 2` add up to two hops of sourced graph context without changing text-match order; `--as-of <T>` filters the graph slice to facts valid at that T-id. Explicit `Corrects T<n>` and ADR `Supersedes` links close old fact intervals. Every edge names its source.
 
 **Reach for it when the question is about relationships** — "what happened around this turn?", "which decisions touched this file?", "is that decision still current?". `graph` answers shape questions ("how are these files and decisions connected?"); `--with-context` answers one turn's surroundings.
 

@@ -26,9 +26,11 @@ const { whenDate } = require('./recap');
 const { tokenize } = require('./indexer');
 const { bm25Score } = require('./rank');
 const { writeAtomic } = require('./io');
+const { readKnowledgeBase, knowledgeSignature, KNOWLEDGE_DIR } = require('./workspace-knowledge');
 
 // 文档集合/打分规则变了就升版本，旧缓存整体作废
-const INDEX_VERSION = 1;
+// v2：新增 K（知识）文档；文档集合变了，旧缓存作废。
+const INDEX_VERSION = 2;
 const INDEX_FILE = 'search-index.json';
 const MAX_TEXT = 4000;
 
@@ -272,6 +274,34 @@ function buildIndex(root, manifest, signature, old) {
   const postings = {};
   const df = {};
   let totalLength = 0;
+  const kb = readKnowledgeBase(root);
+  for (const note of kb.notes) {
+    const key = 'kb:' + note.id;
+    const body = Object.values(note.sections || {}).flat().join('\n');
+    docs[key] = makeDoc({
+      key,
+      type: 'K',
+      pocket: 'kb',
+      pocketPath: KNOWLEDGE_DIR,
+      id: note.id,
+      label: note.title,
+      topic: note.topic,
+      kind: note.kind,
+      status: note.status,
+      confidence: note.confidence,
+      updated: note.updated || null,
+      when: note.updated || null,
+      archived: note.status === 'archived',
+      sources: note.sources,
+      tags: note.tags,
+    }, [
+      [note.title, 3],
+      [note.topic, 2],
+      [(note.tags || []).join(' '), 2],
+      [(note.sources || []).join(' '), 2],
+      [body, 1],
+    ]);
+  }
   for (const [key, doc] of Object.entries(docs)) {
     totalLength += doc.length;
     for (const term of Object.keys(doc.tf)) {
@@ -290,6 +320,7 @@ function buildIndex(root, manifest, signature, old) {
     pockets,
     totalDocs,
     avgLength: totalDocs > 0 ? totalLength / totalDocs : 0,
+    knowledgeSignature: knowledgeSignature(root),
     docs,
     postings,
     df,
@@ -341,11 +372,12 @@ function indexWorkspace(root, options = {}) {
   const started = Date.now();
   const manifest = readManifest(root);
   const signature = JSON.stringify(currentSignature(root, manifest));
+  const knowledgeSig = JSON.stringify(knowledgeSignature(root) || null);
   const old = options.rebuild ? null : loadIndex(root);
 
   let built;
   let unchanged = false;
-  if (old && old.signature === signature) {
+  if (old && old.signature === signature && JSON.stringify(old.knowledgeSignature || null) === knowledgeSig) {
     remember(root, signature, old);
     built = {
       index: old,
@@ -384,12 +416,16 @@ function ensureFreshIndex(root, options = {}) {
   try {
     const manifest = readManifest(root);
     const signature = JSON.stringify(currentSignature(root, manifest));
+    const knowledgeSig = JSON.stringify(knowledgeSignature(root) || null);
     const key = path.resolve(root);
     const cached = memo.get(key);
-    if (!options.rebuild && cached && cached.signature === signature) return cached.index;
+    if (!options.rebuild && cached && cached.signature === signature
+      && JSON.stringify((cached.index && cached.index.knowledgeSignature) || null) === knowledgeSig) {
+      return cached.index;
+    }
 
     const old = options.rebuild ? null : loadIndex(root);
-    if (old && old.signature === signature) {
+    if (old && old.signature === signature && JSON.stringify(old.knowledgeSignature || null) === knowledgeSig) {
       remember(root, signature, old);
       return old;
     }
@@ -477,6 +513,10 @@ function queryIndex(index, keyword, options = {}) {
       status: doc.status,
       when: doc.when || null,
       archived: !!doc.archived,
+      topic: doc.topic || null,
+      kind: doc.kind || null,
+      confidence: doc.confidence || null,
+      sources: doc.sources || null,
       score: Math.round(score * 1000) / 1000,
       phrase,
       highlights,

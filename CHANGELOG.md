@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [3.2] - 2026-11-27
+
+### ContextPocket 3.2：记忆沉淀 + 旧名移除
+
+- **家族版本线**：quan / xi / yuan / hai 的 `package.json`、`FALLBACK_VERSION` 与 `edition.json` 同步到 3.2；数据格式仍为 v2，换版不需要迁移口袋。
+- **旧名移除**：`context-pocket` / `context-pocket-mcp` 与 `context-pocket-lite` / `context-pocket-lite-mcp` 不再注册，只保留 `context-pocket-quan*` / `context-pocket-xi*`；测试与文档同步。
+- **xi 不变**：仍 5 个核心文件 / 11 命令 / 零缓存，不接入记忆沉淀层。
+
+### 记忆沉淀：K 知识节点（quan + yuan）
+
+- **沉淀绑定节点**：新增可选知识层 —— quan 用 `ContextPocket/knowledge.md`，yuan 用工作区 `knowledge/index.md` + `knowledge/K-*.md`。每条 K 记录都通过 `Sources` 指回 T / ADR / R / file / tag / pref；图里物化为 `derived-from` 强边（另有 `covers` / `supersedes` / `contradicts` / `duplicate-of`）。Markdown 始终是内容与 Sources 的真相源，索引与图只是派生缓存。
+- **K 契约**：`Topic / Kind / Status / Confidence / Sources / Tags / Updated`，可选 `Supersedes / SupersededBy / Conflicts`。状态只有 `draft / active / stale / superseded / archived`；`disputed` 是 confidence，不是状态。无 Sources 只能 draft，active 必须有可解析来源与 Updated。
+- **quan（轻量）**：扩展既有 `distill`，不新增顶层命令。`distill --knowledge` 产出 K 候选；`--apply` 写入 `knowledge.md`（默认 draft），`--activate` 才升 active，`--kinds` / `--min-sources` 过滤。图缓存升到 `graph/4`，源签名加入 `knowledge.md`，K 节点 id 为 `k:K1`；搜索索引升到 v8，`search --type K`；`verify` 校验 K 格式、来源存在性与 Topic 重复；`handoff` 增加 active K 摘要。
+- **yuan（完整）**：扩展既有 `workspace`，仍为 10 命令 / 10 MCP 工具。新增 `workspace knowledge build|apply|list|view|verify`；`build` 从跨口袋证据（同 ADR 标题、同需求文本、同偏好 key+value）与 T-block 的显式小节生成 add / update / duplicate / conflict 提案，`apply` 默认只写 add / update 且保持 draft（`--activate` 才升 active），duplicate / conflict 永远留人工。工作区索引升到 v2 并收录 K 文档；工作区图升到 v3，新增 `knowledge` 段与 `kb:K-0001` 节点；`context build/explain` 在 Related 增加 `### Knowledge`（优先 active，可用 `--no-knowledge` 关闭）；`workspace status` / `audit` 报告 K 健康。
+- **边界**：不引入 LLM / 向量库 / format v3 / 新顶层命令；不自动删除、不自动合并冲突、不自动 draft→active；默认 plan-first；时间只用显式 Updated / 来源 WHEN。xi 完全不变（5 文件 / 11 命令 / 零缓存）。
 
 ## [3.1] - 2026-11-24
 

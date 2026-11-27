@@ -14,7 +14,7 @@ context-pocket bootstrap
 context-pocket status --json
 ```
 
-预期：`ok: true`、核心文件齐全、`latestT: 0`。任何命令的完整参数用 `context-pocket <命令> --help` 查，下文只写本剧用得到的部分。
+预期：`ok: true`、核心文件齐全、`latestT: 0`。任何命令的完整参数用 `context-pocket-quan <命令> --help` 查，下文只写本剧用得到的部分。
 
 ---
 

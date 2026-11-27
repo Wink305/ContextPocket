@@ -24,6 +24,7 @@ const {
   resolveAsOfDate,
 } = require('./workspace-graph');
 const { estimateTokens } = require('./budget');
+const { listKnowledge, inspectKnowledge } = require('./workspace-knowledge');
 
 function bullets(lines) {
   const oneLine = (line) => String(line).replace(/\s*\n\s*/g, ' ').trim();
@@ -152,7 +153,7 @@ function formatGraphPath(item) {
   }).join(' ; ');
 }
 
-function buildRelated(root, query, mapEnabled, graphOptions = {}, status = null) {
+function buildRelated(root, query, mapEnabled, graphOptions = {}, status = null, knowledgeEnabled = true) {
   const lines = ['## 2 · Related', ''];
   let hasContent = false;
   let searchCount = 0;
@@ -162,7 +163,39 @@ function buildRelated(root, query, mapEnabled, graphOptions = {}, status = null)
   let graphPresent = false;
   let graphCrossEdges = 0;
   let graphDerivedEdges = 0;
+  let knowledgeCount = 0;
+  let knowledgePresent = false;
   let search = null;
+
+  if (knowledgeEnabled) {
+    const knowledgeHealth = inspectKnowledge(root);
+    knowledgePresent = !!knowledgeHealth.present;
+    if (knowledgeHealth.present && knowledgeHealth.notes > 0) {
+      let notes = [];
+      if (query) {
+        const hits = searchWorkspaceIndexed(root, query, { types: 'K', limit: 5 });
+        notes = hits.results || [];
+      }
+      if (notes.length === 0) {
+        const listed = listKnowledge(root, { status: 'active', limit: 5 });
+        notes = listed.results || [];
+      }
+      if (notes.length > 0) {
+        lines.push('### Knowledge');
+        for (const note of notes) {
+          const sourceCount = typeof note.sources === 'number'
+            ? note.sources
+            : (Array.isArray(note.sources) ? note.sources.length : 0);
+          const meta = [note.topic, note.kind, note.status, note.confidence].filter(Boolean).join(' · ');
+          lines.push('- ' + note.id + (note.title || note.label ? ' · ' + (note.title || note.label) : '')
+            + (meta ? ' (' + meta + ')' : '') + (sourceCount > 0 ? ' · ' + sourceCount + ' source(s)' : ''));
+        }
+        lines.push('');
+        knowledgeCount = notes.length;
+        hasContent = true;
+      }
+    }
+  }
 
   if (query) {
     search = searchWorkspaceIndexed(root, query, { limit: 10 });
@@ -270,6 +303,8 @@ function buildRelated(root, query, mapEnabled, graphOptions = {}, status = null)
     graphPresent,
     graphCrossEdges,
     graphDerivedEdges,
+    knowledgeCount,
+    knowledgePresent,
   };
 }
 
@@ -309,12 +344,13 @@ function buildContext(root, options = {}) {
   const query = options.query ? String(options.query).trim() : '';
   const mapEnabled = options.includeRepoMap !== false
     && (!manifest.context || manifest.context.includeRepoMap !== false);
+  const knowledgeEnabled = options.knowledge !== false;
   const graphOptions = graphOptionsFor(root, options);
 
   const status = statusWorkspace(root);
   const fixed = buildFixed(status);
   const facts = buildFacts(status);
-  const related = buildRelated(root, query, mapEnabled, graphOptions, status);
+  const related = buildRelated(root, query, mapEnabled, graphOptions, status, knowledgeEnabled);
   const assembled = assemble(fixed, facts, related, maxTokens);
   const content = assembled.content.replace(/\n*$/, '\n')
     + budgetFooter(assembled.estimated, maxTokens, assembled.trimmed, assembled.overBudget);
@@ -331,6 +367,11 @@ function buildContext(root, options = {}) {
       pockets: manifest.pockets.map((p) => ({ name: p.name, path: p.path })),
       query: query || null,
       repoMap: related.repoMapPresent,
+      knowledge: {
+        enabled: knowledgeEnabled,
+        present: related.knowledgePresent,
+        notes: related.knowledgeCount,
+      },
       graph: {
         enabled: graphOptions.expand > 0,
         asOf: graphOptions.asOf || null,
@@ -361,9 +402,12 @@ function renderExplain(result) {
       + result.sections.facts.pockets.length + ' pocket(s)',
     '- 2 · Related: ~' + result.sections.related.tokens + ' token(s) · '
       + (result.query ? result.sections.related.searchHits + ' search hit(s)' : 'no query')
-      + ' · repo map ' + (result.sections.related.repoMap.present
-        ? result.sections.related.repoMap.files + ' file(s)'
-        : 'not available')
+      + (result.sections.related.repoMap.present
+        ? ' · repo map ' + result.sections.related.repoMap.files + ' file(s)'
+        : ' · repo map not available')
+      + (result.sections.related.knowledge.enabled
+        ? ' · knowledge ' + result.sections.related.knowledge.notes + ' note(s)'
+        : '')
       + (result.sections.related.graph.enabled
         ? ' · graph ' + result.sections.related.graph.neighbors + ' neighbor(s) · '
           + result.sections.related.graph.crossPocketEdges + ' cross edge(s)'
@@ -407,12 +451,13 @@ function buildExplain(root, options = {}) {
   const query = options.query ? String(options.query).trim() : '';
   const mapEnabled = options.includeRepoMap !== false
     && (!manifest.context || manifest.context.includeRepoMap !== false);
+  const knowledgeEnabled = options.knowledge !== false;
   const graphOptions = graphOptionsFor(root, options);
 
   const status = statusWorkspace(root);
   const fixed = buildFixed(status);
   const facts = buildFacts(status);
-  const related = buildRelated(root, query, mapEnabled, graphOptions, status);
+  const related = buildRelated(root, query, mapEnabled, graphOptions, status, knowledgeEnabled);
   const chosen = assemble(fixed, facts, related, maxTokens);
 
   let redLines = 0;
@@ -458,6 +503,11 @@ function buildExplain(root, options = {}) {
           enabled: mapEnabled,
           present: related.repoMapPresent,
           files: related.repoMapFiles,
+        },
+        knowledge: {
+          enabled: knowledgeEnabled,
+          present: related.knowledgePresent,
+          notes: related.knowledgeCount,
         },
         graph: {
           enabled: graphOptions.expand > 0,

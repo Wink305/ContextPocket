@@ -15,6 +15,7 @@ const { readManifest, resolvePocket, parsePocketAll } = require('./workspace');
 const { verifyWorkspace, pendingMergeReviews } = require('./diagnostics');
 const { inspectIndex } = require('./workspace-index');
 const { inspectWorkspaceGraph } = require('./workspace-graph');
+const { inspectKnowledge } = require('./workspace-knowledge');
 const { whenDate } = require('./recap');
 
 function positiveInt(value) {
@@ -163,6 +164,14 @@ function render(result) {
       ? 'fresh · ' + graph.nodes + ' node(s) · ' + graph.crossPocketEdges + ' cross-pocket edge(s)'
       : 'stale (run "context build --expand 1" to rebuild)')
     : 'missing (run "context build --expand 1")'));
+  const knowledge = result.health.knowledge;
+  lines.push('- knowledge: ' + (knowledge.present
+    ? knowledge.notes + ' note(s) · ' + knowledge.active + ' active'
+      + (knowledge.draft ? ' · ' + knowledge.draft + ' draft' : '')
+      + (knowledge.disputed ? ' · ' + knowledge.disputed + ' disputed' : '')
+      + (knowledge.indexDrift ? ' · ' + knowledge.indexDrift + ' index drift' : '')
+      + (knowledge.issues ? ' · ' + knowledge.issues + ' issue(s)' : '')
+    : 'missing (run "workspace knowledge build")'));
   lines.push('- pending merge reviews: ' + result.totals.pendingReviews);
 
   for (const warning of result.health.warnings) lines.push('- ⚠️ ' + warning);
@@ -233,6 +242,7 @@ function auditWorkspace(root, options = {}) {
   const verify = verifyWorkspace(root, { deep: true });
   const index = inspectIndex(root);
   const graph = inspectWorkspaceGraph(root);
+  const knowledge = inspectKnowledge(root);
 
   let entries = manifest.pockets;
   if (options.pockets) {
@@ -260,6 +270,9 @@ function auditWorkspace(root, options = {}) {
     closed: sum('closed'),
     pendingReviews: sum('reviews'),
     crossPocketEdges: graph.present ? graph.crossPocketEdges : 0,
+    knowledgeNotes: knowledge.present ? knowledge.notes : 0,
+    knowledgeActive: knowledge.present ? knowledge.active : 0,
+    knowledgeDisputed: knowledge.present ? knowledge.disputed : 0,
   };
 
   const result = {
@@ -275,6 +288,7 @@ function auditWorkspace(root, options = {}) {
       repoMap: verify.checks.repoMap,
       index,
       graph,
+      knowledge,
       pendingReviews: totals.pendingReviews,
     },
     totals,

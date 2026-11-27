@@ -276,6 +276,10 @@ const TOOLS = [
           type: 'string',
           description: 'Time window — only turns whose WHEN is on or before this day (YYYY-MM-DD; CLI equivalent: --to)',
         },
+        types: {
+          type: 'string',
+          description: 'Comma-separated type filter: T, FIX, ADR, R, pref, K (CLI equivalent: --type)',
+        },
         expand: {
           type: 'integer',
           minimum: 1,
@@ -833,6 +837,30 @@ const TOOLS = [
         recentKeep: {
           type: 'number',
           description: 'How many recent T-blocks in log.md count as "new" and are skipped (default: recent_keep from config.md)',
+        },
+        knowledge: {
+          type: 'boolean',
+          description: 'Also extract knowledge (K) candidates for ContextPocket/knowledge.md',
+          default: false,
+        },
+        apply: {
+          type: 'boolean',
+          description: 'Write knowledge candidates to knowledge.md (default: report only)',
+          default: false,
+        },
+        activate: {
+          type: 'boolean',
+          description: 'Promote validated drafts to active when applying (never automatic)',
+          default: false,
+        },
+        kinds: {
+          type: 'string',
+          description: 'Comma-separated K kinds: concept, decision, how-to, pitfall, reference',
+        },
+        minSources: {
+          type: 'number',
+          description: 'Only keep K candidates with at least this many sources (default 1)',
+          default: 1,
         },
       },
     },
@@ -1532,6 +1560,7 @@ function toolSearch(args) {
     untilT: typeof args.untilT === 'number' && args.untilT > 0 ? args.untilT : null,
     fromDate: typeof args.fromDate === 'string' && args.fromDate ? args.fromDate : null,
     toDate: typeof args.toDate === 'string' && args.toDate ? args.toDate : null,
+    types: typeof args.types === 'string' && args.types ? args.types : null,
     rank: rankMode === 'bm25' ? 'bm25' : undefined,
   });
   const resultNodeIds = searchNodeIds(results);
@@ -1765,7 +1794,8 @@ function toolGraph(args) {
   }
 
   const KNOWN_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
-    'tagged', 'opened-in', 'completed-in', 'implements'];
+    'tagged', 'opened-in', 'completed-in', 'implements',
+    'derived-from', 'covers', 'contradicts', 'duplicate-of'];
   if (typeFilter && !KNOWN_TYPES.includes(typeFilter)) {
     return {
       content: [{ type: 'text', text: `❌ Error: unknown edge type "${typeFilter}". Known types: ${KNOWN_TYPES.join(', ')}.` }],
@@ -2516,8 +2546,28 @@ function toolDistill(args) {
   const pocketDir = getPocketDir();
   const dryRun = !!args.dryRun;
   const recentKeep = intOption(args.recentKeep, undefined);
+  const knowledge = !!args.knowledge || !!args.apply;
+  const apply = !!args.apply && !dryRun;
+  const activate = !!args.activate;
+  if (activate && !apply) {
+    return {
+      content: [{ type: 'text', text: '❌ Error: activate requires apply.' }],
+      isError: true,
+    };
+  }
+  const kinds = typeof args.kinds === 'string' && args.kinds
+    ? args.kinds.split(',').map((item) => item.trim()).filter(Boolean)
+    : [];
 
-  const result = distill(pocketDir, { dryRun, recentKeep });
+  const result = distill(pocketDir, {
+    dryRun,
+    recentKeep,
+    knowledge,
+    apply,
+    activate,
+    kinds,
+    minSources: intOption(args.minSources, 1),
+  });
 
   const lines = [];
 
@@ -2534,15 +2584,26 @@ function toolDistill(args) {
   lines.push(`- Candidate pitfalls   (→ state.md):      ${result.candidates.pitfalls.length}`);
   lines.push(`- Candidate preferences(→ preferences.md):${result.candidates.preferences.length}`);
   lines.push(`- Open ❓ in archive   (→ confirm):       ${result.candidates.uncertain.length}`);
+  if (result.knowledge) {
+    lines.push(`- Knowledge candidates (→ knowledge.md):  ${result.knowledge.candidates.length}`);
+  }
 
   if (dryRun) {
     lines.push('');
-    lines.push('*(dry-run: no report file written — rerun without dryRun to save)*');
+    lines.push('*(dry-run: no report or knowledge file written — rerun without dryRun to save)*');
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 
   lines.push('');
   lines.push(`✅ **Digest report generated: ${path.basename(result.outFile)}**`);
+  if (result.knowledge && result.knowledge.promotion && result.knowledge.promotion.applied) {
+    const promotion = result.knowledge.promotion;
+    lines.push('');
+    lines.push(`✅ **Knowledge written:** +${promotion.added} / ~${promotion.updated} / active ${promotion.activated} → knowledge.md`);
+    if (promotion.missingSources.length > 0) {
+      lines.push(`- ⚠️ ${promotion.missingSources.length} source(s) not found; those candidates stayed draft.`);
+    }
+  }
   lines.push('');
   lines.push('Next: review the report, merge still-valid items into the living docs');
   lines.push('(decisions.md / state.md / preferences.md) with their T references,');

@@ -61,7 +61,7 @@ test('shared core: the sync script stays wired to the same manifest', () => {
   assert.ok(script.includes('manifest.targets'), 'sync-core.js 必须按 manifest 同步，不能写死版本目录');
 });
 
-test('3.1 family: package names, version lines and installability are declared', () => {
+test('3.2 family: package names, version lines and installability are declared', () => {
   const editions = [
     ['package.json', 'context-pocket-quan', 'stable'],
     ['lite/package.json', 'context-pocket-xi', 'stable'],
@@ -72,7 +72,7 @@ test('3.1 family: package names, version lines and installability are declared',
   for (const [rel, name, state] of editions) {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
     assert.strictEqual(pkg.name, name, rel + ' 的包名必须是 ' + name);
-    assert.strictEqual(pkg.version, '3.1', rel + ' 必须跟 3.1 家族版本线');
+    assert.strictEqual(pkg.version, '3.2', rel + ' 必须跟 3.2 家族版本线');
     if (state === 'stable') {
       assert.ok(pkg.bin && pkg.bin[name], rel + ' 必须暴露 ' + name + ' 命令');
       assert.ok(Object.keys(pkg.bin).length >= 2, rel + ' 必须同时暴露 CLI 与 MCP 入口');
@@ -97,7 +97,7 @@ test('3.1 family: package names, version lines and installability are declared',
       encoding: 'utf8', env: process.env,
     }));
     assert.strictEqual(info.edition, edition, bin + ' 的 version --json 必须带 edition=' + edition);
-    assert.strictEqual(info.display, '3.1-' + edition, bin + ' 的展示版本漂开');
+    assert.strictEqual(info.display, '3.2-' + edition, bin + ' 的展示版本漂开');
   }
 });
 

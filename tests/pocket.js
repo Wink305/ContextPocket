@@ -2855,7 +2855,7 @@ test('graph cache: delete + rebuild reproduces the file byte for byte', () => {
   assert.strictEqual(lines.length, 1 + w1.nodes + w1.edges);
 });
 
-test('graph cache: graph/1 and graph/2 caches are rejected and rebuilt as graph/3', () => {
+test('graph cache: graph/1 and graph/2 caches are rejected and rebuilt as the current schema', () => {
   const { pocketDir } = makeLinkedPocket('graph-schema-upgrade');
   const written = links.writeGraphCache(pocketDir);
   const current = fs.readFileSync(written.path, 'utf-8');
@@ -2863,7 +2863,7 @@ test('graph cache: graph/1 and graph/2 caches are rejected and rebuilt as graph/
   // 两代旧 schema 都要走同一条「corrupt → 重建」路径：
   // graph/1 缺时间字段，graph/2 缺 tag/requirement 派生，谁都不能当 fresh 用
   for (const oldSchema of ['graph/1', 'graph/2']) {
-    const legacy = current.replace('"schema":"graph/3"', `"schema":"${oldSchema}"`);
+    const legacy = current.replace(`"schema":"${links.GRAPH_SCHEMA}"`, `"schema":"${oldSchema}"`);
     assert.notStrictEqual(legacy, current, '替换必须真的发生，否则测试在裸测 fresh 缓存');
     fs.writeFileSync(written.path, legacy, 'utf-8');
 
@@ -2873,7 +2873,7 @@ test('graph cache: graph/1 and graph/2 caches are rejected and rebuilt as graph/
     assert.strictEqual(rebuilt.rebuilt, true);
     assert.strictEqual(rebuilt.previousStatus, 'corrupt');
     const parsed = links.parseGraphText(fs.readFileSync(written.path, 'utf-8'));
-    assert.strictEqual(parsed.meta.schema, 'graph/3');
+    assert.strictEqual(parsed.meta.schema, links.GRAPH_SCHEMA);
     assert.ok(parsed.edges.every((edge) =>
       Object.prototype.hasOwnProperty.call(edge, 'recordedAt') &&
       Object.prototype.hasOwnProperty.call(edge, 'validFrom') &&

@@ -1029,6 +1029,7 @@ function cmdSearch(options, positional) {
   const untilT = intOption(options.until, 0) > 0 ? intOption(options.until, 0) : null;
   const fromDate = textOption(options, 'from') || null;
   const toDate = textOption(options, 'to') || null;
+  const types = textOption(options, 'type') || null;
 
   // 优先走倒排索引（历史增长后依然即时）。缓存缺失 / 坏 JSON / INDEX_VERSION 对不上 / 签名过期
   // 都是当场重建然后继续走索引，只有连重建都做不成（只读盘、索引路径被别的东西占住）才真的
@@ -1042,6 +1043,7 @@ function cmdSearch(options, positional) {
     untilT,
     fromDate,
     toDate,
+    types,
     rank: rankMode === 'bm25' ? 'bm25' : undefined,
   });
   const graphContext = graphOptions.depth > 0
@@ -1061,6 +1063,7 @@ function cmdSearch(options, positional) {
       untilT,
       fromDate,
       toDate,
+      ...(types ? { types } : {}),
       count: results.length,
       total,
       offset,
@@ -1259,7 +1262,8 @@ function cmdCheckConflicts(options) {
 
 // graph 认的边类型；--type 给别的值是用户拼错了，明确报错而不是静默过滤成空
 const GRAPH_EDGE_TYPES = ['modifies', 'mentions', 'references', 'decided-in', 'supersedes', 'last-changed',
-  'tagged', 'opened-in', 'completed-in', 'implements'];
+  'tagged', 'opened-in', 'completed-in', 'implements',
+  'derived-from', 'covers', 'contradicts', 'duplicate-of'];
 
 function cmdGraph(options, sub) {
   const pocketDir = ensurePocket(options);
@@ -2341,7 +2345,27 @@ function cmdDistill(options) {
     ? undefined
     : intOption(options['recent-keep'], undefined);
 
-  const result = distill(pocketDir, { dryRun, recentKeep });
+  const knowledge = !!options.knowledge || !!options.apply;
+  const apply = !!options.apply && !dryRun;
+  const activate = !!options.activate;
+  if (activate && !apply) {
+    failJson(options, 'distill: --activate requires --apply');
+    console.error(colorize('\n  ❌ Error:', 'red') + ' --activate requires --apply\n');
+    process.exit(1);
+  }
+  const kindsRaw = textOption(options, 'kinds');
+  const kinds = kindsRaw ? kindsRaw.split(',').map((item) => item.trim()).filter(Boolean) : [];
+  const minSources = intOption(options['min-sources'], 1);
+
+  const result = distill(pocketDir, {
+    dryRun,
+    recentKeep,
+    knowledge,
+    apply,
+    activate,
+    kinds,
+    minSources,
+  });
 
   if (options.json) {
     // 报"生效的那个数"而不是"旗标给没给"：没给 --recent-keep 时用的是 config.recent_keep，
@@ -2364,10 +2388,13 @@ function cmdDistill(options) {
   console.log(`     Candidate pitfalls   (→ state.md):      ${result.candidates.pitfalls.length}`);
   console.log(`     Candidate preferences(→ preferences.md):${result.candidates.preferences.length}`);
   console.log(`     Open ❓ in archive   (→ confirm):       ${result.candidates.uncertain.length}`);
+  if (result.knowledge) {
+    console.log(`     Knowledge candidates (→ knowledge.md):  ${result.knowledge.candidates.length}`);
+  }
 
   if (dryRun) {
     console.log('');
-    console.log(colorize('  (dry-run: no report file written — rerun without --dry-run to save)', 'dim'));
+    console.log(colorize('  (dry-run: no report or knowledge file written — rerun without --dry-run)', 'dim'));
     console.log('');
     return;
   }
@@ -2375,6 +2402,16 @@ function cmdDistill(options) {
   console.log('');
   console.log(colorize('  ✅ Digest report generated', 'green'));
   console.log(`     File: ContextPocket/${path.basename(result.outFile)}`);
+  if (result.knowledge && result.knowledge.promotion && result.knowledge.promotion.applied) {
+    const p = result.knowledge.promotion;
+    console.log(colorize('  ✅ Knowledge written', 'green')
+      + `: +${p.added} / ~${p.updated} / active ${p.activated} → ContextPocket/knowledge.md`);
+    if (p.missingSources.length > 0) {
+      console.log(colorize(`     ⚠️  ${p.missingSources.length} source(s) not found; those candidates stayed draft.`, 'yellow'));
+    }
+  } else if (result.knowledge) {
+    console.log(colorize('  ℹ️  Knowledge candidates are report-only. Re-run with --apply to write knowledge.md.', 'dim'));
+  }
   console.log('');
   console.log('  Next: review the report, merge still-valid items into the living docs');
   console.log('  (decisions.md / state.md / preferences.md) with their T references,');

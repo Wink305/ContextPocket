@@ -26,8 +26,9 @@ const {
   expandByDate,
 } = require('./graph-core');
 const { writeAtomic } = require('./io');
+const { readKnowledgeBase, knowledgeSignature } = require('./workspace-knowledge');
 
-const WORKSPACE_GRAPH_VERSION = 2;
+const WORKSPACE_GRAPH_VERSION = 3;
 const WORKSPACE_GRAPH_FILE = 'workspace-graph.json';
 
 // 工作区图比 quan 的单口袋图多一个 preferences.md：偏好节点参与 duplicate-pref。
@@ -83,6 +84,10 @@ function pocketSignature(pocketDir) {
 }
 
 function sameSignature(a, b) {
+  return JSON.stringify(a || null) === JSON.stringify(b || null);
+}
+
+function sameKnowledgeSignature(a, b) {
   return JSON.stringify(a || null) === JSON.stringify(b || null);
 }
 
@@ -312,26 +317,182 @@ function inspectWorkspaceGraph(root) {
   const cache = readWorkspaceGraph(root);
   const file = workspaceGraphPath(root);
   if (!cache) {
-    return { present: false, fresh: false, path: file, nodes: 0, edges: 0, crossPocketEdges: 0 };
+    return {
+      present: false, fresh: false, path: file,
+      nodes: 0, edges: 0, crossPocketEdges: 0,
+      knowledgeNodes: 0, knowledgeEdges: 0, staleKnowledge: true,
+    };
   }
   let stale = [];
+  let staleKnowledge = true;
   try {
     const manifest = readManifest(root);
     stale = stalePockets(root, manifest, cache);
+    staleKnowledge = !sameKnowledgeSignature(
+      cache.knowledge && cache.knowledge.signature,
+      knowledgeSignature(root)
+    );
   } catch (e) {
     stale = ['(manifest unavailable)'];
   }
   return {
     present: true,
-    fresh: stale.length === 0,
+    fresh: stale.length === 0 && !staleKnowledge,
     path: file,
     nodes: cache.nodes.length,
     edges: cache.edges.length,
     crossPocketEdges: (cache.stats && cache.stats.crossPocketEdges) || 0,
     danglingCrossRefs: (cache.stats && cache.stats.danglingCrossRefs) || 0,
+    knowledgeNodes: (cache.knowledge && cache.knowledge.nodes) || 0,
+    knowledgeEdges: (cache.knowledge && cache.knowledge.edges) || 0,
+    staleKnowledge,
     builtAt: cache.generatedAt || null,
     stalePockets: stale,
   };
+}
+
+function knowledgeSourceNodeId(ref) {
+  const value = String(ref || '').trim();
+  const turn = /^([a-z][a-z0-9_-]*):(T\d+)$/.exec(value);
+  if (turn) return turn[1] + ':' + turn[2];
+  const adr = /^([a-z][a-z0-9_-]*):ADR-(\d+)$/.exec(value);
+  if (adr) return adr[1] + ':adr:ADR-' + adr[2];
+  const req = /^([a-z][a-z0-9_-]*):R(\d+)$/.exec(value);
+  if (req) return req[1] + ':req:R' + req[2];
+  if (/^[a-z][a-z0-9_-]*:(file|tag|pref):/.test(value)) return value;
+  return null;
+}
+
+function knowledgeRefTurn(ref) {
+  const match = /:T(\d+)$/.exec(String(ref || ''));
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * knowledge/ → K 节点与 derived-from 边。纯派生，不写缓存。
+ * 节点 id 统一 kb:K-0001；来源必须已经限定到口袋。
+ */
+function buildKnowledgeGraph(root) {
+  const kb = readKnowledgeBase(root);
+  const nodes = [];
+  const edges = [];
+  if (!kb.present || kb.notes.length === 0) return { nodes, edges };
+
+  const topics = new Map();
+  for (const note of kb.notes) {
+    const id = 'kb:' + note.id;
+    const sourceIds = [...new Set(note.sources.map(knowledgeSourceNodeId).filter(Boolean))];
+    const turns = note.sources.map(knowledgeRefTurn).filter((value) => value !== null);
+    const maxT = turns.length > 0 ? Math.max(...turns) : null;
+    nodes.push({
+      id,
+      pocket: 'kb',
+      type: 'K',
+      rawId: note.id,
+      label: note.title,
+      topic: note.topic,
+      kKind: note.kind,
+      status: note.status,
+      confidence: note.confidence,
+      date: note.updated || null,
+      sourceCount: sourceIds.length,
+      archived: note.status === 'archived',
+      recordedAt: maxT,
+      validFrom: maxT,
+      validTo: null,
+    });
+    for (const target of sourceIds) {
+      edges.push({
+        from: id,
+        to: target,
+        type: 'derived-from',
+        evidence: 'strong',
+        basis: 'knowledge-index',
+        scope: 'cross',
+        date: note.updated || null,
+        source: 'knowledge/index.md',
+        tId: knowledgeRefTurn(note.sources.find((ref) => knowledgeSourceNodeId(ref) === target) || ''),
+        recordedAt: maxT,
+        validFrom: maxT,
+        validTo: null,
+      });
+      if (target.includes(':tag:') || target.includes(':file:')) {
+        edges.push({
+          from: id,
+          to: target,
+          type: 'covers',
+          evidence: 'strong',
+          basis: 'knowledge-index',
+          scope: 'cross',
+          date: note.updated || null,
+          source: 'knowledge/index.md',
+          tId: null,
+          recordedAt: maxT,
+          validFrom: maxT,
+          validTo: null,
+        });
+      }
+    }
+    for (const target of note.supersedes) {
+      edges.push({
+        from: id,
+        to: 'kb:' + target,
+        type: 'supersedes',
+        evidence: 'strong',
+        basis: 'knowledge-index',
+        scope: 'cross',
+        date: note.updated || null,
+        source: 'knowledge/index.md',
+        tId: null,
+        recordedAt: maxT,
+        validFrom: maxT,
+        validTo: null,
+      });
+    }
+    for (const target of note.conflicts) {
+      edges.push({
+        from: id,
+        to: 'kb:' + target,
+        type: 'contradicts',
+        evidence: 'weak',
+        basis: 'knowledge-index',
+        scope: 'cross',
+        date: note.updated || null,
+        source: 'knowledge/index.md',
+        tId: null,
+        recordedAt: maxT,
+        validFrom: maxT,
+        validTo: null,
+      });
+    }
+    const key = note.topic;
+    if (key) {
+      if (!topics.has(key)) topics.set(key, []);
+      topics.get(key).push(id);
+    }
+  }
+  for (const ids of topics.values()) {
+    const sorted = ids.slice().sort();
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        edges.push({
+          from: sorted[i],
+          to: sorted[j],
+          type: 'duplicate-of',
+          evidence: 'weak',
+          basis: 'knowledge-topic',
+          scope: 'cross',
+          date: null,
+          source: 'knowledge/index.md',
+          tId: null,
+          recordedAt: null,
+          validFrom: null,
+          validTo: null,
+        });
+      }
+    }
+  }
+  return { nodes, edges };
 }
 
 /**
@@ -348,8 +509,10 @@ function ensureWorkspaceGraph(root, options = {}) {
   const stale = cache
     ? stalePockets(root, manifest, cache)
     : manifest.pockets.map((entry) => entry.name);
+  const knowledgeSig = knowledgeSignature(root);
+  const knowledgeStale = !cache || !sameKnowledgeSignature(cache.knowledge && cache.knowledge.signature, knowledgeSig);
 
-  if (cache && stale.length === 0) {
+  if (cache && stale.length === 0 && !knowledgeStale) {
     return {
       graph: { nodes: cache.nodes, edges: cache.edges, stats: cache.stats },
       cacheStatus: 'fresh',
@@ -427,10 +590,14 @@ function ensureWorkspaceGraph(root, options = {}) {
     intraEdges.push(...built.edges);
   }
 
+  const knowledge = buildKnowledgeGraph(root);
+  nodes.push(...knowledge.nodes);
+
   nodes.sort((a, b) => a.id.localeCompare(b.id));
   const nodeIds = new Set(nodes.map((node) => node.id));
+  const knowledgeEdges = knowledge.edges.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to));
   const cross = crossEdgesFrom(pockets, nodeIds);
-  const edges = intraEdges.concat(cross.edges);
+  const edges = intraEdges.concat(knowledgeEdges, cross.edges);
   edges.sort((a, b) => a.from.localeCompare(b.from)
     || a.to.localeCompare(b.to)
     || String(a.type).localeCompare(String(b.type)));
@@ -441,6 +608,12 @@ function ensureWorkspaceGraph(root, options = {}) {
     generatedAt: new Date().toISOString(),
     workspace: manifest.name,
     pockets,
+    knowledge: {
+      signature: knowledgeSig,
+      builtAt: new Date().toISOString(),
+      nodes: knowledge.nodes.length,
+      edges: knowledgeEdges.length,
+    },
     nodes,
     edges,
     stats,
@@ -717,6 +890,7 @@ function seedIdsFromSearch(rows) {
     if (row.type === 'T' || row.type === 'FIX') ids.push(row.pocket + ':' + row.id);
     else if (row.type === 'ADR') ids.push(row.pocket + ':adr:' + row.id);
     else if (row.type === 'R') ids.push(row.pocket + ':req:' + row.id);
+    else if (row.type === 'K') ids.push('kb:' + row.id);
   }
   return ids;
 }

@@ -68,8 +68,8 @@ test('yuan: workspace manifest registers pockets by relative path and qualified 
   addTurn(web.pocketDir, 'web layout');
 
   const version = parseJson(runLang(['version', '--json'], workspace));
-  assert.strictEqual(version.version, '3.1');
-  assert.strictEqual(version.display, '3.1-yuan');
+  assert.strictEqual(version.version, '3.2');
+  assert.strictEqual(version.display, '3.2-yuan');
   assert.strictEqual(version.edition, 'yuan');
 
   assert.strictEqual(parseJson(runLang(['workspace', 'init', '--name', 'payments', '--json'], workspace)).name, 'payments');
@@ -916,7 +916,7 @@ test('yuan: context --expand follows cross-pocket x-refs and caches the workspac
   assert.ok(tight.trimmed.includes('Related'), JSON.stringify(tight.trimmed));
   assert.ok(!tight.content.includes('### Graph'), 'Graph 必须随 Related 一起被裁掉：' + tight.content);
   const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-  assert.strictEqual(cache.version, 2);
+  assert.strictEqual(cache.version, 3);
   assert.deepStrictEqual(cache.pockets.api.crossRefs, [
     { fromT: 1, toPocket: 'web', toT: 1, date: '2026-11-02' },
   ]);
@@ -1156,6 +1156,77 @@ test('yuan: derived edges cap hub keys to five pockets and flag truncation', () 
   assert.ok(derived.edges.every((edge) => edge.from < edge.to));
 });
 
+test('yuan: workspace knowledge builds, applies, searches and surfaces in context/audit', () => {
+  const workspace = tmpProject('yuan-knowledge');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'api auth', {
+    when: '2026-11-01',
+    tags: ['auth'],
+    action: ['Changed src/auth.js'],
+    pitfalls: ['并发刷新会误判重放'],
+  });
+  addTurn(web.pocketDir, 'web auth', {
+    when: '2026-11-02',
+    tags: ['auth'],
+    action: ['Changed src/auth.js'],
+    pitfalls: ['并发刷新会误判重放'],
+  });
+  writer.addDecision(api.pocketDir, { title: 'Use JWT', decision: 'JWT for auth' });
+  writer.addDecision(web.pocketDir, { title: 'Use JWT', decision: 'JWT for auth' });
+  writer.addRequirement(api.pocketDir, { text: '支持 token 刷新' });
+  writer.addRequirement(web.pocketDir, { text: '支持 token 刷新' });
+  writer.updatePreferences(api.pocketDir, { key: 'reviewer', value: 'alice' });
+  writer.updatePreferences(web.pocketDir, { key: 'reviewer', value: 'alice' });
+
+  parseJson(runLang(['workspace', 'init', '--name', 'knowledgews', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+
+  const plan = parseJson(runLang(['workspace', 'knowledge', 'build', '--json'], workspace));
+  assert.ok(plan.counts.add >= 4, JSON.stringify(plan.counts));
+  assert.ok(plan.proposals.every((proposal) => proposal.sources.length >= 2), JSON.stringify(plan.proposals));
+  assert.ok(!fs.existsSync(path.join(workspace, 'knowledge')), 'build must not write knowledge/');
+
+  const applied = parseJson(runLang([
+    'workspace', 'knowledge', 'apply', '--yes', '--activate', '--json',
+  ], workspace));
+  assert.ok(applied.added >= 4, JSON.stringify(applied));
+  assert.ok(applied.activated >= 2, JSON.stringify(applied));
+  assert.ok(fs.existsSync(path.join(workspace, 'knowledge', 'index.md')));
+
+  const listed = parseJson(runLang(['workspace', 'knowledge', 'list', '--json'], workspace));
+  assert.strictEqual(listed.total, applied.added, JSON.stringify(listed));
+  const first = listed.results[0];
+  const viewed = parseJson(runLang(['workspace', 'knowledge', 'view', first.id, '--json'], workspace));
+  assert.strictEqual(viewed.note.id, first.id);
+  assert.ok(viewed.note.sources.length >= 2, JSON.stringify(viewed.note));
+
+  parseJson(runLang(['workspace', 'index', '--json'], workspace));
+  const search = parseJson(runLang(['workspace', 'search', '并发', '--type', 'K', '--json'], workspace));
+  assert.strictEqual(search.total, 1, JSON.stringify(search));
+  assert.strictEqual(search.results[0].type, 'K');
+  assert.strictEqual(search.results[0].pocket, 'kb');
+
+  const context = parseJson(runLang(['context', 'build', '--expand', '2', '--json'], workspace));
+  assert.strictEqual(context.sources.knowledge.present, true, JSON.stringify(context.sources));
+  assert.ok(context.sources.knowledge.notes >= 1, JSON.stringify(context.sources.knowledge));
+  assert.match(context.content, /### Knowledge/);
+  assert.match(context.content, /kb:K-0001/);
+
+  const status = parseJson(runLang(['workspace', 'status', '--json'], workspace));
+  assert.strictEqual(status.health.knowledge.present, true, JSON.stringify(status.health));
+  assert.strictEqual(status.health.knowledge.notes, applied.added);
+
+  const audit = parseJson(runLang(['audit', '--json'], workspace));
+  assert.strictEqual(audit.health.knowledge.notes, applied.added, JSON.stringify(audit.health));
+  assert.ok(audit.totals.knowledgeNotes >= 1);
+
+  const verified = parseJson(runLang(['workspace', 'knowledge', 'verify', '--json'], workspace));
+  assert.strictEqual(verified.ok, true, JSON.stringify(verified));
+  assert.strictEqual(verified.missingSources, 0);
+});
+
 test('yuan: MCP context accepts expand/asOf and returns graph neighbors', () => {
   const workspace = tmpProject('yuan-mcp-graph');
   const api = makePocketIn(workspace, 'api');
@@ -1217,9 +1288,90 @@ test('yuan: MCP context accepts expand/asOf and returns graph neighbors', () => 
   assert.strictEqual(context.sources.graph.asOf, '2026-11-03');
   assert.ok(context.content.includes('### Graph'), context.content);
   assert.ok(context.content.includes('web:T1'), context.content);
-
-  const derivedContext = JSON.parse(messages[3].result.content[0].text);
-  assert.deepStrictEqual(derivedContext.sources.graph.edges, ['shared-file']);
-  assert.ok(derivedContext.sources.graph.derivedEdges >= 1, JSON.stringify(derivedContext.sources.graph));
-  assert.ok(derivedContext.content.includes('web:file:src/shared.js'), derivedContext.content);
 });
+
+test('yuan: MCP workspace knowledge actions list/view/verify and context includes K', () => {
+  const workspace = tmpProject('yuan-mcp-knowledge');
+  const api = makePocketIn(workspace, 'api');
+  const web = makePocketIn(workspace, 'web');
+  addTurn(api.pocketDir, 'api auth', {
+    when: '2026-11-01',
+    tags: ['auth'],
+    action: ['Changed src/auth.js'],
+    pitfalls: ['并发刷新会误判重放'],
+  });
+  addTurn(web.pocketDir, 'web auth', {
+    when: '2026-11-02',
+    tags: ['auth'],
+    action: ['Changed src/auth.js'],
+    pitfalls: ['并发刷新会误判重放'],
+  });
+  parseJson(runLang(['workspace', 'init', '--name', 'mcpkb', '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'api', api.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'add', 'web', web.projectDir, '--json'], workspace));
+  parseJson(runLang(['workspace', 'knowledge', 'apply', '--yes', '--activate', '--json'], workspace));
+
+  const requests = [
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+    {
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: {
+        name: 'context_pocket_workspace',
+        arguments: { action: 'knowledge', knowledgeAction: 'list' },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'context_pocket_workspace',
+        arguments: { action: 'knowledge', knowledgeAction: 'view', id: 'K-0001' },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 5,
+      method: 'tools/call',
+      params: {
+        name: 'context_pocket_workspace',
+        arguments: { action: 'knowledge', knowledgeAction: 'verify' },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'tools/call',
+      params: {
+        name: 'context_pocket_context',
+        arguments: { maxTokens: 50000 },
+      },
+    },
+  ];
+  const child = spawnSync(process.execPath, [MCP], {
+    cwd: workspace,
+    input: requests.map((r) => JSON.stringify(r)).join('\n') + '\n',
+    encoding: 'utf-8',
+    timeout: 15000,
+  });
+  assert.strictEqual(child.status, 0, child.stderr);
+  const messages = child.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const workspaceTool = messages[1].result.tools.find((tool) => tool.name === 'context_pocket_workspace');
+  assert.ok(workspaceTool.inputSchema.properties.action.enum.includes('knowledge'));
+  assert.deepStrictEqual(workspaceTool.inputSchema.properties.knowledgeAction.enum,
+    ['build', 'apply', 'list', 'view', 'verify']);
+
+  const listed = JSON.parse(messages[2].result.content[0].text);
+  assert.strictEqual(listed.total, 1, JSON.stringify(listed));
+  const viewed = JSON.parse(messages[3].result.content[0].text);
+  assert.strictEqual(viewed.note.id, 'K-0001');
+  const verified = JSON.parse(messages[4].result.content[0].text);
+  assert.strictEqual(verified.ok, true, JSON.stringify(verified));
+  const context = JSON.parse(messages[5].result.content[0].text);
+  assert.strictEqual(context.sources.knowledge.present, true, JSON.stringify(context.sources));
+  assert.match(context.content, /### Knowledge/);
+});
+

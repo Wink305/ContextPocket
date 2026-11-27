@@ -5,7 +5,7 @@
 **[简体中文](README.zh-CN.md)** · [Documentation](docs/) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version: 3.1 family](https://img.shields.io/badge/version-3.1%20family-blueviolet.svg)](CHANGELOG.md)
+[![Version: 3.2 family](https://img.shields.io/badge/version-3.2%20family-blueviolet.svg)](CHANGELOG.md)
 [![Pocket format: v2](https://img.shields.io/badge/format-v2-blue.svg)](docs/format-spec.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -47,7 +47,7 @@ No server. No database. No vendor lock-in.
 
 ## Choose your edition
 
-3.1 is a family of four independent packages. They share the **same** `ContextPocket/` folder and **format v2** data, so moving between them needs no pocket migration.
+3.2 is a family of four independent packages. They share the **same** `ContextPocket/` folder and **format v2** data, so moving between them needs no pocket migration.
 
 | Edition | Package / command | Role | Best for | Footprint |
 |---|---|---|---|---|
@@ -62,17 +62,17 @@ No server. No database. No vendor lock-in.
 - you work across several repositories or want lifecycle tools → **yuan**;
 - you need team review and shared writers → wait for **hai**.
 
-**Legacy names:** `context-pocket` / `context-pocket-mcp` still point at **quan**, and `context-pocket-lite` / `context-pocket-lite-mcp` still point at **xi**. Both aliases survive 3.0 and 3.1 and are removed in 3.2.
+**Legacy names removed in 3.2:** `context-pocket` / `context-pocket-mcp` no longer exist; use `context-pocket-quan` / `context-pocket-quan-mcp`. The lite aliases `context-pocket-lite` / `context-pocket-lite-mcp` are gone too; use `context-pocket-xi` / `context-pocket-xi-mcp`.
 
 ### Download
 
-`main` tracks the 3.1 family. Each archive contains its own `package.json`, README and license; **no npm registry release is involved** — install from a GitHub Release archive or a git clone.
+`main` tracks the 3.2 family. Each archive contains its own `package.json`, README and license; **no npm registry release is involved** — install from a GitHub Release archive or a git clone.
 
 | Edition | Display version | Release / archive |
 |---|---|---|
-| **quan** | `3.1-quan` | [ContextPocket-3.1-quan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-quan) · `ContextPocket-3.1-quan.zip` |
-| **xi** | `3.1-xi` | [ContextPocket-3.1-xi](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-xi) · `ContextPocket-3.1-xi.zip` |
-| **yuan** | `3.1-yuan` | [ContextPocket-3.1-yuan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.1-yuan) · `ContextPocket-3.1-yuan.zip` |
+| **quan** | `3.2-quan` | [ContextPocket-3.2-Quan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.2-Quan) · `ContextPocket-3.2-Quan.zip` |
+| **xi** | `3.2-xi` | [ContextPocket-3.2-Xi](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.2-Xi) · `ContextPocket-3.2-Xi.zip` |
+| **yuan** | `3.2-yuan` | [ContextPocket-3.2-Yuan](https://github.com/Wink305/ContextPocket/releases/tag/ContextPocket-3.2-Yuan) · `ContextPocket-3.2-Yuan.zip` |
 | **hai** | Planned | — |
 
 Previous stable releases: [`2.13`](https://github.com/Wink305/ContextPocket/releases/tag/2.13) · [`2.13-lite`](https://github.com/Wink305/ContextPocket/releases/tag/2.13-lite).
@@ -189,7 +189,8 @@ More: [lite/README.md](lite/README.md).
 
 - 10 core files, 29 commands / MCP tools.
 - Sourced multi-hop graph: `search <kw> --expand 2`, `why <file> --expand 2`, and `--as-of <T>` historical slices.
-- Search index, graph cache, handoff budgets, merge reviews, hub registry, isolation, and the Git safety net.
+- Knowledge notes: `distill --knowledge` builds K candidates from explicit Pitfalls / Uncertain / Decisions plus tag or file anchors; `--apply` writes `knowledge.md` as drafts, `--activate` promotes after review. `search --type K` finds them; `graph` shows `k:K1` with `derived-from` edges.
+- Search index, graph cache (`graph/4`), handoff budgets, merge reviews, hub registry, isolation, and the Git safety net.
 - `--edition-mode solo|agent` changes the interaction style, not the data.
 
 More: [SKILL.md](SKILL.md) · [SKILL-advanced.md](SKILL-advanced.md) · [SKILL-reference.md](SKILL-reference.md).
@@ -202,6 +203,7 @@ More: [SKILL.md](SKILL.md) · [SKILL-advanced.md](SKILL-advanced.md) · [SKILL-r
 - `context build` / `explain` assemble a budgeted view from red lines, facts and related material; every fact names its pocket (`api:T5`, `api:R3`, `[api] src/login.js`).
 - `context build --expand 1|2` adds cross-pocket graph neighbors from explicit `pocket:Tn` references (`Path: api:T5 → x-ref → web:T9`); `--as-of <date|pocket:Tn>` slices the graph by WHEN date. The derived graph lives in `.contextpocket/workspace-graph.json` and rebuilds only changed pockets.
 - `--graph-edges duplicate|shared-file|tag|near|all` opts into derived cross-pocket edges (same ADR/req/preference, shared path, same tag, or temporally near turns); all are weak, bounded and off by default.
+- Knowledge base: `workspace knowledge build|apply|list|view|verify` writes `knowledge/K-*.md` from cross-pocket evidence; plans by default, writes drafts unless `--activate`, and leaves duplicates / conflicts for humans. `context build` includes active K notes in Related (`--no-knowledge` disables), and `workspace status` / `audit` report K health.
 - Lifecycle: `recap`, `audit`, `decay` (`--apply` archives the reported prefix), `forget`, `consolidate` (per pocket and cross-pocket), `merge`, `capture` (local file or local `gh pr view` / `gh run view`).
 - `--edition-mode focus|audit|migrate` provides budget presets; explicit flags always win.
 - Stable API: 10 commands / 10 MCP tools, `edition.json` frozen. Still not published to npm; use the release archive or a git clone.
@@ -349,10 +351,10 @@ See [SECURITY.md](SECURITY.md) for the supported versions and vulnerability repo
 
 | From | To | Action |
 |---|---|---|
-| `2.13` | `3.1-quan` | Same pocket format; switch command names. |
-| `2.13-lite` | `3.1-xi` | Same lightweight model; command names change. |
-| `context-pocket` | `context-pocket-quan` | Legacy alias still works through 3.1. |
-| `context-pocket-lite` | `context-pocket-xi` | Legacy alias still works through 3.1. |
+| `2.13` | `3.2-quan` | Same pocket format; switch command names. |
+| `2.13-lite` | `3.2-xi` | Same lightweight model; command names change. |
+| `context-pocket` | `context-pocket-quan` | Alias removed in 3.2; install and call the quan name. |
+| `context-pocket-lite` | `context-pocket-xi` | Alias removed in 3.2; install and call the xi name. |
 | v1 pocket | v2 pocket | Run `migrate --to latest`; `verify` warns until you do. |
 
 All editions read and write format v2. Switching editions does not copy, convert or lock the pocket.

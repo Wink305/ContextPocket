@@ -2,18 +2,24 @@
 
 > 专业攻坚版，稳定。当前提供 workspace / merge / capture / repo map / context / recap / audit / decay / forget / consolidate 十个命令，API 已冻结。Agent 可执行说明见 [SKILL.md](SKILL.md)。
 
-## 当前可用（3.1 stable）
+## 当前可用（3.2 stable）
 
 ```bash
 context-pocket-yuan workspace init --name payments
 context-pocket-yuan workspace add api ./services/api
 context-pocket-yuan workspace add web ./apps/web
-context-pocket-yuan workspace status                 # 口袋 + 索引 / repo map / 图 健康
+context-pocket-yuan workspace status                 # 口袋 + 索引 / repo map / 图 / knowledge 健康
 context-pocket-yuan workspace search "token refresh" --type T --pocket api
 context-pocket-yuan workspace index --rebuild
 context-pocket-yuan workspace recall api:T12
 context-pocket-yuan workspace verify --deep
 context-pocket-yuan workspace repair
+context-pocket-yuan workspace knowledge build        # 从未决证据出 K 提案，不写文件
+context-pocket-yuan workspace knowledge apply --yes  # 写入 knowledge/（默认 draft）
+context-pocket-yuan workspace knowledge apply --yes --activate  # 复核后升 active
+context-pocket-yuan workspace knowledge list
+context-pocket-yuan workspace knowledge view K-0001
+context-pocket-yuan workspace knowledge verify
 context-pocket-yuan merge web --into api          # 默认 dry-run
 context-pocket-yuan merge web --into api --apply  # 真正合并
 context-pocket-yuan capture pr.md --pocket api    # 默认只出计划
@@ -36,7 +42,8 @@ context-pocket-yuan consolidate                    # 口袋内 + 跨口袋重复
 context-pocket-yuan consolidate --apply            # 只删口袋内完全重复的偏好行
 ```
 
-- `workspace`：`contextpocket.workspace.json` 管多个口袋；跨口袋 id 必须写成 `api:T12`。`status` 直接给出索引 present/fresh、repo map 文件数与工作区图节点 / 跨口袋边数，不用先跑 `audit`；`verify --deep` 检查清单/跨口袋引用/repo map 漂移/未处理 merge 复核；`repair` 默认只出计划，`--apply` 只重建 repo map。
+- `workspace`：`contextpocket.workspace.json` 管多个口袋；跨口袋 id 必须写成 `api:T12`。`status` 直接给出索引 present/fresh、repo map 文件数、工作区图节点 / 跨口袋边数与 knowledge 笔记健康，不用先跑 `audit`；`verify --deep` 检查清单/跨口袋引用/repo map 漂移/未处理 merge 复核；`repair` 默认只出计划，`--apply` 只重建 repo map。
+- `workspace knowledge`：工作区知识库（`knowledge/index.md` + `knowledge/K-*.md`）。`build` 从 T-block 的显式 Pitfalls / Uncertain / Decisions 与跨口袋相同 ADR 标题 / 需求文本 / 偏好 key+value 生成 add / update / duplicate / conflict 提案；`apply --yes` 只写 add / update，默认 draft，`--activate` 才升 active，duplicate / conflict 永远留人工。每条 K 的 `Sources` 必须能解析回工作区节点（`pocket:Tn`、`pocket:ADR-n`、`pocket:Rn`、`pocket:file:...`、`pocket:tag:...`、`pocket:pref:...`）；无 Sources 只能 draft。`list` / `view` / `verify` 只读。索引（v2）与工作区图（v3）都收录 K，`context` 的 Related 优先带 active K，`--no-knowledge` 可关闭。
 - `workspace search`：默认走工作区本地 BM25 索引（`.contextpocket/search-index.json`），可用 `--pocket` / `--type` 过滤，`--no-index` 强制现场扫描；索引缺失或源文件签名变化时自动增量重建。
 - `workspace index [--rebuild]`：显式构建/刷新索引；索引是派生缓存，删掉可随时重建。
 - 工作区时间图：跨口袋显式引用 `web:T1` 会变成一条 `x-ref` 边，缓存在 `.contextpocket/workspace-graph.json`。只有 `context build/explain --expand 1|2` 会构建或刷新它；按口袋签名增量重建，`--as-of` 用 WHEN 日期做时间切片（也接受 `pocket:Tn`）。`status` / `audit` 只读检查新鲜度，不主动建图。
@@ -66,6 +73,7 @@ context-pocket-yuan consolidate --apply            # 只删口袋内完全重复
 - 深度 verify / repair / merge 复核：跨口袋引用、编号冲突与合并结果审计
 - 工作区时间图：显式 `pocket:Tn` 引用变成可遍历的 `x-ref` 边，按 WHEN 日期切片，按口袋增量重建；默认不建图
 - 跨口袋派生边：duplicate / shared-file / same-tag / temporal-near，`--graph-edges` 显式开启、全部 weak、有界去重
+- 知识沉淀：K 笔记绑定来源节点（`derived-from`），默认只出提案、只写 draft；重复与冲突永远人工处理
 - workspace 审计视图：健康、活动窗口与未决事项一页汇总
 - 记忆衰减：冷轮次前缀、关联冷需求 / ❓ / ADR 与 forget 建议；`--apply` 直接归档同一份前缀
 - consolidate / recap：口袋内 + 跨口袋重复检测，长周期记忆回顾
@@ -81,8 +89,8 @@ context-pocket-yuan consolidate --apply            # 只删口袋内完全重复
 
 | 项目 | 值 |
 |------|----|
-| 版本线 | 3.1 家族 |
-| 展示版本 | `3.1-yuan`（stable） |
+| 版本线 | 3.2 家族 |
+| 展示版本 | `3.2-yuan`（stable） |
 | API | 10 命令 / 10 MCP 工具，`edition.json` 已冻结 |
 | 可安装 | 是（`npm link` 后使用 `context-pocket-yuan`；尚未发布到 npm） |
 | 跟踪计划 | [.trae/documents/contextpocket-3.0-four-editions.md](../.trae/documents/contextpocket-3.0-four-editions.md) |

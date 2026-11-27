@@ -1162,3 +1162,28 @@ test('mcp: hub merge resolves a registered name and dry-runs without writing', a
   assert.strictEqual(missing.isError, true, JSON.stringify(missing));
   assert.match(missing.content.map((c) => c.text).join('\n'), /project is required/);
 });
+
+test('mcp: distill knowledge writes K and search/graph see it', () => {
+  const { projectDir, pocketDir } = makePocket('mcp-knowledge');
+  const writer = require(path.join(ROOT, 'lib', 'writer'));
+  writer.appendLogBlock(pocketDir, {
+    gist: 'auth work',
+    when: '2026-11-01',
+    tags: ['auth'],
+    user: ['do auth'],
+    action: ['Changed src/auth.js — token'],
+    pitfalls: ['并发刷新会误判重放'],
+  });
+
+  return mcpBatch(projectDir, [
+    { name: 'context_pocket_distill', args: { knowledge: true, apply: true, activate: true, recentKeep: 0 } },
+    { name: 'context_pocket_search', args: { keyword: '并发', types: 'K' } },
+    { name: 'context_pocket_graph', args: { action: 'view' } },
+  ]).then((texts) => {
+    assert.ok(fs.existsSync(path.join(pocketDir, 'knowledge.md')), texts.context_pocket_distill);
+    assert.match(texts.context_pocket_distill, /Knowledge written/);
+    assert.match(texts.context_pocket_search, /K1/);
+    assert.match(texts.context_pocket_search, /并发刷新会误判重放/);
+    assert.match(texts.context_pocket_graph, /k:K1/);
+  });
+});

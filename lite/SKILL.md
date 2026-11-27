@@ -6,7 +6,7 @@ description: >
   and everyday conversation memory: 11 commands / 11 MCP tools, zero caches, zero dependencies.
   Same pocket format as the full package — a Lite pocket can be handed to the full
   package at any time for archive / migrate / repair / index / hub.
-version: 3.1
+version: 3.2
 format: v2
 tags: [dev-tools, context, memory, productivity, agent-handoff, lite]
 ---
@@ -120,4 +120,4 @@ No `assets/` directory ever exists in a Lite pocket. `handoff.md` is the only op
 
 ## Upgrade path
 
-A Lite pocket **is** a full-package pocket. When a project needs archives, search index, conflict gate, requirement/ADR tracking or multi-machine repair: install `context-pocket`, point it at the same directory, and run `context-pocket migrate --to latest` if the readme says an older format. Nothing to convert by hand.
+A Lite pocket **is** a full-package pocket. When a project needs archives, search index, conflict gate, requirement/ADR tracking or multi-machine repair: install `context-pocket-quan`, point it at the same directory, and run `context-pocket-quan migrate --to latest` if the readme says an older format. Nothing to convert by hand.

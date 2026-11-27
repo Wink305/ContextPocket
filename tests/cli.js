@@ -895,6 +895,50 @@ test('cli: distill --json reports the window it actually applied', () => {
   assert.ok(fromFlag.scannedBlocks <= fromConfig.scannedBlocks, '窗口变大，扫到的旧块不会变多');
 });
 
+test('cli: distill --knowledge --apply writes K notes and search/graph/handoff see them', () => {
+  const { pocketDir } = makePocket('cli-knowledge');
+  const writer = require(path.join(ROOT, 'lib', 'writer'));
+  writer.appendLogBlock(pocketDir, {
+    gist: 'auth work',
+    when: '2026-11-01',
+    tags: ['auth'],
+    user: ['do auth'],
+    action: ['Changed src/auth.js — token'],
+    pitfalls: ['并发刷新会误判重放'],
+  });
+
+  const dry = parseJsonLine(runCli(['distill', '--knowledge', '--dry-run', '--recent-keep', '0', '--json'], pocketDir));
+  assert.strictEqual(dry.knowledge.candidates.length, 1, JSON.stringify(dry.knowledge));
+  assert.ok(!fs.existsSync(path.join(pocketDir, 'knowledge.md')), 'dry-run must not write knowledge.md');
+
+  const applied = parseJsonLine(runCli([
+    'distill', '--knowledge', '--apply', '--activate', '--recent-keep', '0', '--json',
+  ], pocketDir));
+  assert.strictEqual(applied.knowledge.promotion.added, 1, JSON.stringify(applied.knowledge.promotion));
+  assert.strictEqual(applied.knowledge.promotion.activated, 1);
+  const knowledge = fs.readFileSync(path.join(pocketDir, 'knowledge.md'), 'utf-8');
+  assert.match(knowledge, /## K1 · 并发刷新会误判重放/);
+  assert.match(knowledge, /- Status: active/);
+  assert.match(knowledge, /- Sources: T1, tag:auth/);
+
+  const searched = parseJsonLine(runCli(['search', '并发', '--type', 'K', '--json'], pocketDir));
+  assert.strictEqual(searched.count, 1, JSON.stringify(searched));
+  assert.strictEqual(searched.results[0].type, 'K');
+  assert.strictEqual(searched.results[0].id, 'K1');
+
+  const graph = parseJsonLine(runCli(['graph', '--json'], pocketDir));
+  assert.ok(graph.nodes.some((node) => node.type === 'K' && node.id === 'k:K1'), JSON.stringify(graph.nodes));
+  assert.ok(graph.edges.some((edge) => edge.type === 'derived-from' && edge.from === 'k:K1' && edge.to === 'T1'),
+    JSON.stringify(graph.edges));
+
+  const handoff = runCli(['handoff'], pocketDir);
+  assert.strictEqual(handoff.code, 0);
+  assert.match(fs.readFileSync(path.join(pocketDir, 'handoff.md'), 'utf-8'), /### Knowledge \(active only\)/);
+
+  const verify = runCli(['verify', '--json'], pocketDir);
+  assert.strictEqual(verify.code, 0, verify.stdout);
+});
+
 // 子进程 + stdin 管道：交互命令的测试专用
 function runCliWithInput(args, pocketDir, input) {
   const argv = [...args, '--dir', pocketDir];

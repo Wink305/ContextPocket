@@ -43,6 +43,7 @@ const {
   MAX_PLAUSIBLE_ID,
 } = require('./parser');
 const { termStats, bm25Score } = require('./rank');
+const { parseKnowledgeText } = require('./knowledge-core');
 
 // v3：T 文档不再重复存整段 text（内容由 gist/tags/sections 承载），
 // 检索语义也统一到"分词 AND + 同一份命中整形"，旧缓存必须整体作废重建
@@ -53,7 +54,8 @@ const { termStats, bm25Score } = require('./rank');
 //     T 文档直接带本块 when，FIX 文档带它更正的那轮（targetId）的 when。
 //     文档结构变了，旧缓存作废。
 // v7：文档带上 length、索引带上 avgLength（可选 BM25 排序用）；结构变了，旧缓存作废。
-const INDEX_VERSION = 7;
+// v8：knowledge.md 的 K 文档进入索引；文档集合与源签名都变了，旧缓存作废。
+const INDEX_VERSION = 8;
 const MAX_DOC_TEXT = 4000; // 非 T 文档存进索引的最大字符数（用于命中后校验/高亮）
 const CJK_RUN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]+/g;
 const CJK_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
@@ -65,6 +67,7 @@ const SOURCE_FILES = [
   'decisions.md',
   'requirements.md',
   'preferences.md',
+  'knowledge.md',
 ];
 
 // ============================================================
@@ -250,6 +253,28 @@ function collectDocs(pocketDir) {
     docs.set('pref:' + i, { type: 'pref', idx: i, text: line });
   });
 
+  // 知识沉淀：每个 K 条目是一篇独立文档，保留来源与状态供检索展示。
+  const knowledgeText = readFileSafe(path.join(pocketDir, 'knowledge.md'));
+  if (knowledgeText) {
+    const parsed = parseKnowledgeText(knowledgeText);
+    for (const note of parsed.notes) {
+      const body = Object.values(note.sections || {}).flat().join('\n');
+      docs.set('k:' + note.id, {
+        type: 'K',
+        kId: note.id,
+        topic: note.topic,
+        kind: note.kind,
+        status: note.status,
+        confidence: note.confidence,
+        title: note.title,
+        sources: note.sources,
+        tags: note.tags,
+        updated: note.updated,
+        text: [note.title, note.topic, note.sources.join(' '), body].filter(Boolean).join('\n').slice(0, MAX_DOC_TEXT),
+      });
+    }
+  }
+
   return { docs, latestT: maxT(docs) };
 }
 
@@ -369,6 +394,14 @@ function docFields(doc) {
       ];
     case 'R':
       return [[doc.text, 2]];
+    case 'K':
+      return [
+        [doc.title, 3],
+        [doc.topic, 2],
+        [(doc.tags || []).join(' '), 2],
+        [(doc.sources || []).join(' '), 2],
+        [doc.text, 1],
+      ];
     default:
       return [[doc.text, 1]];
   }
@@ -858,6 +891,10 @@ function fieldOf(doc, text) {
       if (text === doc.gist) return 'gist';
       if ((doc.tags || []).join(' ') === text) return 'tags';
       return 'fix';
+    case 'K':
+      if (text === doc.title) return 'title';
+      if (text === doc.topic) return 'topic';
+      return 'content';
     default:
       return 'content';
   }
@@ -878,6 +915,18 @@ function formatDocHit(doc, highlights, matchCount) {
       return { ...base, adrId: doc.adrId, title: doc.title, createdAt: doc.createdAt };
     case 'R':
       return { ...base, rId: doc.rId, text: doc.text, status: doc.status, uncertain: doc.uncertain, openedAt: doc.openedAt || null };
+    case 'K':
+      return {
+        ...base,
+        id: doc.kId,
+        title: doc.title,
+        topic: doc.topic,
+        kind: doc.kind,
+        status: doc.status,
+        confidence: doc.confidence,
+        updated: doc.updated || null,
+        sources: doc.sources || [],
+      };
     default:
       return { ...base, line: doc.text };
   }

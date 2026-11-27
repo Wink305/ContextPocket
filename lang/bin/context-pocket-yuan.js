@@ -32,6 +32,14 @@ const { forgetWorkspace } = require('../lib/forget');
 const { consolidateWorkspace } = require('../lib/consolidate');
 const { mergeWorkspace } = require('../lib/merge-workspace');
 const { indexWorkspace, searchWorkspaceIndexed } = require('../lib/workspace-index');
+const {
+  buildKnowledge,
+  applyKnowledge,
+  listKnowledge,
+  viewKnowledge,
+  verifyKnowledge,
+} = require('../lib/workspace-knowledge');
+const { renderKnowledgeNote } = require('../lib/knowledge-core');
 const { auditWorkspace } = require('../lib/audit');
 const { decayWorkspace } = require('../lib/decay');
 const { captureWorkspace } = require('../lib/capture');
@@ -152,6 +160,106 @@ function printVersion(options) {
   process.stdout.write('    version: ' + VERSION.version + ' (source: ' + VERSION.source + ')\n\n');
 }
 
+function handleWorkspaceKnowledge(root, options) {
+  const sub = (options.positional || [])[0] || 'list';
+
+  if (sub === 'build') {
+    const result = buildKnowledge(root);
+    if (options.json) {
+      emitJson({ ok: true, action: 'build', ...result, proposals: result.proposals.slice(0, 50) });
+      return;
+    }
+    process.stdout.write('\n  Knowledge build · ' + result.counts.add + ' add · '
+      + result.counts.update + ' update · ' + result.counts.duplicate + ' duplicate · '
+      + result.counts.conflict + ' conflict\n');
+    for (const proposal of result.proposals.slice(0, 20)) {
+      process.stdout.write('    [' + proposal.proposal + '] ' + proposal.topic + ' · '
+        + proposal.title + ' (' + proposal.kind + ')\n');
+    }
+    if (result.proposals.length > 20) {
+      process.stdout.write('    … ' + (result.proposals.length - 20) + ' more (use --json)\n');
+    }
+    process.stdout.write('\n');
+    return;
+  }
+
+  if (sub === 'apply') {
+    if (!options.yes) {
+      const plan = buildKnowledge(root);
+      if (options.json) {
+        emitJson({ ok: true, action: 'apply', applied: false, counts: plan.counts, proposals: plan.proposals.slice(0, 50) });
+        return;
+      }
+      process.stdout.write('\n  Knowledge apply (plan)\n');
+      process.stdout.write('    ' + plan.counts.add + ' add · ' + plan.counts.update + ' update · '
+        + plan.counts.duplicate + ' duplicate · ' + plan.counts.conflict + ' conflict\n');
+      process.stdout.write('    pass --yes to write knowledge/ (draft by default; add --activate to promote)\n\n');
+      return;
+    }
+    const result = applyKnowledge(root, { activate: !!options.activate });
+    if (options.json) { emitJson({ ok: true, action: 'apply', ...result, notes: undefined }); return; }
+    process.stdout.write('\n  Knowledge apply' + (result.applied ? '' : ' (no changes)') + '\n');
+    process.stdout.write('    +' + result.added + ' added · ~' + result.updated + ' updated · '
+      + result.activated + ' active · ' + result.skipped + ' skipped\n');
+    if (result.conflicts > 0 || result.duplicates > 0) {
+      process.stdout.write('    conflicts ' + result.conflicts + ' · duplicates ' + result.duplicates
+        + ' — kept for human review\n');
+    }
+    if (result.missingSources.length > 0) {
+      process.stdout.write('    ⚠️  missing sources: ' + [...new Set(result.missingSources)].join(', ') + '\n');
+    }
+    process.stdout.write('\n');
+    return;
+  }
+
+  if (sub === 'list') {
+    const result = listKnowledge(root, {
+      status: options.status,
+      kind: options.kind,
+      topic: options.topic,
+      limit: options.limit === undefined ? 20 : parseInt(options.limit, 10),
+    });
+    if (options.json) { emitJson({ ok: true, action: 'list', ...result }); return; }
+    process.stdout.write('\n  Knowledge · ' + result.total + ' note(s)\n');
+    for (const note of result.results) {
+      process.stdout.write('    ' + note.id + '  ' + note.status.padEnd(10) + note.kind.padEnd(10)
+        + note.topic.padEnd(24) + note.title + '\n');
+    }
+    if (result.total > result.results.length) {
+      process.stdout.write('    … ' + (result.total - result.results.length) + ' more\n');
+    }
+    process.stdout.write('\n');
+    return;
+  }
+
+  if (sub === 'view') {
+    const id = (options.positional || [])[1] || options.id;
+    if (!id) throw new Error('usage: workspace knowledge view <K-id>');
+    const note = viewKnowledge(root, id);
+    if (!note) throw new Error('knowledge note not found: ' + id);
+    if (options.json) { emitJson({ ok: true, action: 'view', note }); return; }
+    process.stdout.write('\n' + renderKnowledgeNote(note) + '\n');
+    return;
+  }
+
+  if (sub === 'verify') {
+    const result = verifyKnowledge(root);
+    if (options.json) { emitJson(result, result.ok ? 0 : 1); return; }
+    process.stdout.write('\n  Knowledge verify: ' + (result.ok ? 'ok' : 'failed') + ' · '
+      + result.notes + ' note(s)\n');
+    for (const issue of result.issues.slice(0, 30)) {
+      process.stdout.write('    ' + (issue.severity === 'error' ? '❌' : '⚠️') + ' '
+        + (issue.message || issue.problem || issue.code) + '\n');
+    }
+    if (result.issues.length > 30) process.stdout.write('    … ' + (result.issues.length - 30) + ' more\n');
+    process.stdout.write('\n');
+    if (!result.ok) process.exitCode = 1;
+    return;
+  }
+
+  throw new Error('unknown workspace knowledge action: ' + sub);
+}
+
 function cmdWorkspace(options) {
   const action = options.action || 'list';
 
@@ -208,8 +316,7 @@ function cmdWorkspace(options) {
     return;
   }
 
-  if (action === 'status') {
-    const result = statusWorkspace(root, { health: true });
+  if (action === 'status') {    const result = statusWorkspace(root, { health: true });
     if (options.json) { emitJson(Object.assign({ ok: true }, result)); return; }
     process.stdout.write('\n  Workspace ' + result.name + '\n');
     for (const pocket of result.pockets) {
@@ -235,6 +342,15 @@ function cmdWorkspace(options) {
       ? (graph.fresh ? 'fresh' : 'stale') + ' · ' + graph.nodes + ' node(s) · '
         + graph.crossPocketEdges + ' cross-pocket edge(s)'
       : 'missing') + (graph.present ? '' : ' (run "context build --expand 1")') + '\n');
+    const knowledge = result.health.knowledge;
+    if (knowledge) {
+      process.stdout.write('      knowledge: ' + (knowledge.present
+        ? knowledge.notes + ' note(s) · ' + knowledge.active + ' active'
+          + (knowledge.draft ? ' · ' + knowledge.draft + ' draft' : '')
+          + (knowledge.disputed ? ' · ' + knowledge.disputed + ' disputed' : '')
+          + (knowledge.indexDrift ? ' · index drift' : '')
+        : 'missing') + (knowledge.present ? '' : ' (run "workspace knowledge build")') + '\n');
+    }
     process.stdout.write('\n');
     return;
   }
@@ -316,6 +432,11 @@ function cmdWorkspace(options) {
     return;
   }
 
+  if (action === 'knowledge') {
+    handleWorkspaceKnowledge(root, options);
+    return;
+  }
+
   throw new Error('unknown workspace action: ' + action);
 }
 
@@ -366,6 +487,7 @@ function cmdContext(options) {
     includeRepoMap: options['no-repo-map']
       ? false
       : (mode.profile.includeRepoMap !== undefined ? mode.profile.includeRepoMap : true),
+    knowledge: options['no-knowledge'] ? false : true,
     expand: options.expand,
     asOf: options['as-of'],
     graphEdges: options['graph-edges'],

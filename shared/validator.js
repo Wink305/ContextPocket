@@ -16,6 +16,8 @@ const {
 const { fileExists, readConfig, getProjectRoot, minNumber, readFileSafe } = require('./core');
 const { parseAll, parseLogText, mergeLogs, plausibleIds, parseCodeMapEntries, extractPaths, MAX_PLAUSIBLE_ID } = require('./parser');
 const { scanText } = require('./secrets');
+const { parseKnowledgeText, validateKnowledgeDocument } = require('./knowledge-core');
+const { extractFilesFromBlock } = require('./files');
 
 /**
  * 运行所有校验
@@ -76,16 +78,19 @@ function verify(pocketDir, opts = {}) {
   // log-archive.md 全程只解析一次：附件检查与 17-19 的合并视图共用这份结果
   const archivedLog = parseLogText(readFileSafe(path.join(pocketDir, 'log-archive.md')));
 
-  // 15. 附件存在性：`### Attachments` 里写着的文件真的在磁盘上吗
+  // 15. 知识沉淀：K 格式、来源、重复 Topic、supersedes/conflicts 目标
+  results.push(...checkKnowledge(pocketDir, data, archivedLog));
+
+  // 16. 附件存在性：`### Attachments` 里写着的文件真的在磁盘上吗
   results.push(...checkAttachmentExistence(pocketDir, data.log, archivedLog));
 
-  // 16. Log cognition drift + 代码比记录新（仅在显式启用时跑，路径扫描开销较大）
+  // 17. Log cognition drift + 代码比记录新（仅在显式启用时跑，路径扫描开销较大）
   if (opts.drift) {
     results.push(...checkLogCognitionDrift(pocketDir, data, { lastN: opts.lastN }));
     results.push(...checkCodeNewerThanLog(pocketDir, data));
   }
 
-  // 17-19. 跨轮矛盾检测（三类，全部 WARNING —— 矛盾是"可疑"，不是"确定坏了"，
+  // 18-20. 跨轮矛盾检测（三类，全部 WARNING —— 矛盾是"可疑"，不是"确定坏了"，
   // 绝不拦 pre-commit；判据与修法见各 check 的注释）
   const logAll = mergeLogs(data.log, archivedLog);
   results.push(...checkActionCodeMapDrift(pocketDir, logAll));
@@ -1647,6 +1652,110 @@ function clipText(s, n = 80) {
   return t.length > n ? t.slice(0, n - 1) + '…' : t;
 }
 
+// ============================================================
+// 知识沉淀：K 格式与来源
+// ============================================================
+
+function normalizeKnowledgeRef(ref) {
+  const value = String(ref || '').trim();
+  const adr = /^adr:(ADR-\d+)$/i.exec(value);
+  if (adr) return adr[1];
+  const req = /^req:(R\d+)$/i.exec(value);
+  if (req) return req[1];
+  return value;
+}
+
+function knowledgeRefs(data, archivedLog) {
+  const refs = new Set();
+  const blocks = (data.log.blocks || []).concat((archivedLog && archivedLog.blocks) || []);
+  for (const block of blocks) {
+    refs.add('T' + block.id);
+    for (const tag of block.tags || []) refs.add('tag:' + String(tag).trim());
+    for (const file of extractFilesFromBlock(block) || []) {
+      refs.add('file:' + String(file).replace(/\\/g, '/'));
+    }
+  }
+  for (const adr of data.decisions.adrs) refs.add('ADR-' + adr.id);
+  for (const req of data.requirements.items) {
+    refs.add('R' + req.id);
+    for (const tag of req.tags || []) refs.add('tag:' + String(tag).trim());
+    for (const file of req.impl || []) refs.add('file:' + String(file).replace(/\\/g, '/'));
+  }
+  return refs;
+}
+
+/**
+ * knowledge.md 存在时校验 K；文件不存在是完全正常的（知识库可选）。
+ * @param {string} pocketDir
+ * @param {object} data parseAll 结果
+ * @param {object} archivedLog parseLogText(log-archive.md)
+ * @returns {object[]}
+ */
+function checkKnowledge(pocketDir, data, archivedLog) {
+  const text = readFileSafe(path.join(pocketDir, 'knowledge.md'));
+  if (!text) return [];
+  const results = [];
+  const parsed = parseKnowledgeText(text);
+  for (const issue of parsed.issues) {
+    results.push({
+      severity: SEVERITY.ERROR,
+      category: 'knowledge-format',
+      message: `knowledge.md: ${issue.problem}${issue.id ? ' (' + issue.id + ')' : ''}`,
+      fix: 'Fix the K heading or the `# Knowledge · K<n>` header.',
+    });
+  }
+
+  for (const issue of validateKnowledgeDocument(parsed.notes, { scope: 'pocket' })) {
+    const category = issue.code === 'k-duplicate-topic' ? 'knowledge-duplicate'
+      : (issue.code.includes('source') || issue.code === 'k-sources' ? 'knowledge-source' : 'knowledge-format');
+    results.push({
+      severity: issue.severity === 'warning' ? SEVERITY.WARNING : SEVERITY.ERROR,
+      category,
+      message: 'knowledge.md: ' + issue.message,
+      fix: category === 'knowledge-source'
+        ? 'Add or fix Sources, or set Status: draft until the evidence exists.'
+        : 'Fix the K metadata/body, or split the duplicate topic.',
+    });
+  }
+
+  const refs = knowledgeRefs(data, archivedLog);
+  const ids = new Set(parsed.notes.map((note) => note.id));
+  for (const note of parsed.notes) {
+    for (const source of note.sources) {
+      const ref = normalizeKnowledgeRef(source);
+      if (!refs.has(ref)) {
+        results.push({
+          severity: SEVERITY.ERROR,
+          category: 'knowledge-source',
+          message: `${note.id} references missing source "${source}"`,
+          fix: 'Point Sources at an existing T / ADR / R / file / tag, or remove the source and keep the K as draft.',
+        });
+      }
+    }
+    for (const target of note.supersedes) {
+      if (!ids.has(target)) {
+        results.push({
+          severity: SEVERITY.ERROR,
+          category: 'knowledge-format',
+          message: `${note.id} supersedes missing ${target}`,
+          fix: 'Create the target K first, or remove the Supersedes entry.',
+        });
+      }
+    }
+    for (const target of note.conflicts) {
+      if (!ids.has(target)) {
+        results.push({
+          severity: SEVERITY.ERROR,
+          category: 'knowledge-format',
+          message: `${note.id} conflicts with missing ${target}`,
+          fix: 'Create the target K first, or remove the Conflicts entry.',
+        });
+      }
+    }
+  }
+  return results;
+}
+
 module.exports = {
   verify,
   checkLogCognitionDrift,
@@ -1655,4 +1764,5 @@ module.exports = {
   attachmentRefs,
   isCheckableAttachmentRef,
   checkAttachmentExistence,
+  checkKnowledge,
 };

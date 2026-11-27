@@ -1,7 +1,7 @@
 {
   "edition": "hai",
   "package": "context-pocket-hai",
-  "family": "3.1",
+  "family": "3.2",
   "status": "planned",
   "dataFormat": "v2",
   "plannedCommands": 45,
